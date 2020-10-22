@@ -1,0 +1,7 @@
+apiVersion: ci.qe.pingcap.com/v1
+kind: Machine
+metadata:
+  name: machine-sample
+spec:
+  # Add fields here
+  foo: bar

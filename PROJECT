@@ -1,0 +1,7 @@
+domain: qe.pingcap.com
+repo: github.com/PingCAP-QE/Naglfar
+resources:
+- group: ci
+  kind: Machine
+  version: v1
+version: "2"
