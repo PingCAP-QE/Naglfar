@@ -18,7 +18,10 @@ package controllers
 
 import (
 	"context"
+	"strconv"
+	"time"
 
+	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -51,7 +54,10 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log.Info("got machine", "content", machine)
+	log.Info("machine reconcile", "content", machine)
+
+	// ssh := MakeSSHConfig(&machine.Spec)
+	// stdout, stderr, done, err := ssh.Run("ls -al")
 
 	return ctrl.Result{}, nil
 }
@@ -60,4 +66,15 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&naglfarv1.Machine{}).
 		Complete(r)
+}
+
+func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
+	timeout, _ := time.ParseDuration(spec.Timeout)
+	return &easyssh.MakeConfig{
+		User:     spec.Username,
+		Password: spec.Password,
+		Server:   spec.Host,
+		Port:     strconv.Itoa(spec.Port),
+		Timeout:  timeout,
+	}
 }

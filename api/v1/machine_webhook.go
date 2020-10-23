@@ -17,6 +17,9 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"time"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -46,6 +49,10 @@ func (r *Machine) Default() {
 		r.Spec.Port = 22
 	}
 
+	if r.Spec.Timeout == "" {
+		r.Spec.Timeout = "1m"
+	}
+
 	if r.Spec.Reserve == nil {
 		r.Spec.Reserve = new(ReserveResources)
 	}
@@ -69,8 +76,24 @@ var _ webhook.Validator = &Machine{}
 func (r *Machine) ValidateCreate() error {
 	machinelog.Info("validate create", "name", r.Name)
 
+	if r.Spec.Port <= 0 {
+		return fmt.Errorf("invalid port %d", r.Spec.Port)
+	}
+
+	if reserve := r.Spec.Reserve; reserve != nil {
+		if reserve.Cores <= 0 {
+			return fmt.Errorf("invalid cores %f", reserve.Cores)
+		}
+
+		if reserve.Memory <= 0 {
+			return fmt.Errorf("invalid memory %d", reserve.Memory)
+		}
+	}
+
+	_, err := time.ParseDuration(r.Spec.Timeout)
+
 	// TODO(user): fill in your validation logic upon object creation.
-	return nil
+	return err
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type

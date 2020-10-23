@@ -20,21 +20,40 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	Disconnected MachineStat = "disconnected"
+	Connecting               = "connecting"
+	Connected                = "connected"
+	Disconnecting
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type ReserveResources struct {
-	// +kubebuilder:validation:Minimum=0
-
 	// default 1
 	// +optional
-	Cores int32 `json:"cores"`
+	Cores float32 `json:"cores"`
 
 	// +kubebuilder:validation:Minimum=0
 
 	// default 1 << 30
 	// +optional
 	Memory int64 `json:"memory"`
+}
+
+type StorageDevice struct {
+	Kind string `json:"kind"`
+	Size int64  `json:"size"`
+	Path string `json:"path"`
+}
+
+type MachineStat string
+
+type TotalResources struct {
+	Cores          float32          `json:"cores"`
+	Memory         int64            `json:"memory"`
+	StorageDevices []*StorageDevice `json:"devices"`
 }
 
 // MachineSpec defines the desired state of Machine
@@ -51,7 +70,11 @@ type MachineSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// default 22
 	// +optional
-	Port int32 `json:"port"`
+	Port int `json:"port"`
+
+	// default 10s
+	// +optional
+	Timeout string `json:"timeout"`
 
 	// +optional
 	Reserve *ReserveResources `json:"reserve"`
@@ -61,7 +84,10 @@ type MachineSpec struct {
 type MachineStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Ready *bool `json:"ready"`
+
+	Status MachineStat `json:"status"`
+
+	Total *TotalResources `json:"total"`
 }
 
 // +kubebuilder:object:root=true
