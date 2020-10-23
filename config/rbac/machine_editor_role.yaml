@@ -5,7 +5,7 @@ metadata:
   name: machine-editor-role
 rules:
 - apiGroups:
-  - ci.qe.pingcap.com
+  - resource.naglfar
   resources:
   - machines
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ci.qe.pingcap.com
+  - resource.naglfar
   resources:
   - machines/status
   verbs:

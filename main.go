@@ -26,8 +26,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	civ1 "github.com/PingCAP-QE/Naglfar/api/v1"
-	"github.com/PingCAP-QE/Naglfar/controllers"
+	resourcev1 "github.com/PingCAP-QE/Naglfar/apis/resource/v1"
+	"github.com/PingCAP-QE/Naglfar/controllers/resource"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -39,7 +39,7 @@ var (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = civ1.AddToScheme(scheme)
+	_ = resourcev1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -59,7 +59,7 @@ func main() {
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "b9b8c63b.qe.pingcap.com",
+		LeaderElectionID:   "b9b8c63b.naglfar",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

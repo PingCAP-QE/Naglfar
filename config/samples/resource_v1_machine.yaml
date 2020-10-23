@@ -1,4 +1,4 @@
-apiVersion: ci.qe.pingcap.com/v1
+apiVersion: resource.naglfar/v1
 kind: Machine
 metadata:
   name: machine-sample

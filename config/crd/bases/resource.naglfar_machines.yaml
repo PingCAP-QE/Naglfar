@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.5
   creationTimestamp: null
-  name: machines.ci.qe.pingcap.com
+  name: machines.resource.naglfar
 spec:
-  group: ci.qe.pingcap.com
+  group: resource.naglfar
   names:
     kind: Machine
     listKind: MachineList
@@ -34,45 +34,13 @@ spec:
         spec:
           description: MachineSpec defines the desired state of Machine
           properties:
-            host:
+            foo:
+              description: Foo is an example field of Machine. Edit Machine_types.go
+                to remove/update
               type: string
-            password:
-              type: string
-            port:
-              description: default 22
-              format: int32
-              minimum: 0
-              type: integer
-            reserve:
-              properties:
-                cores:
-                  description: default 1
-                  format: int32
-                  minimum: 0
-                  type: integer
-                memory:
-                  description: default 1 << 30
-                  format: int64
-                  minimum: 0
-                  type: integer
-              type: object
-            username:
-              type: string
-          required:
-          - host
-          - password
-          - username
           type: object
         status:
           description: MachineStatus defines the observed state of Machine
-          properties:
-            ready:
-              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                of cluster Important: Run "make" to regenerate code after modifying
-                this file'
-              type: boolean
-          required:
-          - ready
           type: object
       type: object
   version: v1
