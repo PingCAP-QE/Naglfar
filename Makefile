@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= naglfar:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -27,16 +27,18 @@ run: generate fmt vet manifests
 
 # Install CRDs into a cluster
 install: manifests
-	kubectl kustomize config/crd | kubectl apply -f -
+	kustomize build config/crd | kubectl apply -f -
 
 # Uninstall CRDs from a cluster
 uninstall: manifests
-	kubectl kustomize config/crd | kubectl delete -f -
+	kustomize build config/crd | kubectl delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kubectl kustomize edit set image controller=${IMG}
-	kubectl kustomize config/default | kubectl apply -f -
+	kustomize build config/default | kubectl apply -f -
+
+destroy: manifests
+	kustomize build config/default | kubectl delete -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -78,3 +80,6 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+log:
+	kubectl logs deployment/naglfar-controller-manager -n naglfar-system -c manager
