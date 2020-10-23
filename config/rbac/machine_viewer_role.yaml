@@ -5,7 +5,7 @@ metadata:
   name: machine-viewer-role
 rules:
 - apiGroups:
-  - resource.naglfar
+  - naglfar.pingcap.com
   resources:
   - machines
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - resource.naglfar
+  - naglfar.pingcap.com
   resources:
   - machines/status
   verbs:

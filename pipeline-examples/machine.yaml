@@ -1,4 +1,4 @@
-apiVersion: resource.naglfar/v1
+apiVersion: naglfar.pingcap.com/v1
 kind: Machine
 metadata:
   name: 172.16.0.1

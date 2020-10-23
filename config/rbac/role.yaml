@@ -7,7 +7,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - resource.naglfar
+  - naglfar.pingcap.com
   resources:
   - machines
   verbs:
@@ -19,7 +19,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - resource.naglfar
+  - naglfar.pingcap.com
   resources:
   - machines/status
   verbs:

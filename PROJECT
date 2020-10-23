@@ -1,8 +1,7 @@
-domain: naglfar
-multigroup: true
+domain: pingcap.com
 repo: github.com/PingCAP-QE/Naglfar
 resources:
-- group: resource
+- group: naglfar
   kind: Machine
   version: v1
 version: "2"

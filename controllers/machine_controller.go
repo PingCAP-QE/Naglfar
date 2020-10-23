@@ -24,7 +24,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	resourcev1 "github.com/PingCAP-QE/Naglfar/apis/resource/v1"
+	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 )
 
 // MachineReconciler reconciles a Machine object
@@ -34,20 +34,30 @@ type MachineReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=resource.naglfar,resources=machines,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=resource.naglfar,resources=machines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines/status,verbs=get;update;patch
 
 func (r *MachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("machine", req.NamespacedName)
+	ctx := context.Background()
+	log := r.Log.WithValues("machine", req.NamespacedName)
 
-	// your logic here
+	var machine naglfarv1.Machine
+
+	if err := r.Get(ctx, req.NamespacedName, &machine); err != nil {
+		log.Error(err, "unable to fetch Machine")
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	log.Info("got machine", "content", machine)
 
 	return ctrl.Result{}, nil
 }
 
 func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&resourcev1.Machine{}).
+		For(&naglfarv1.Machine{}).
 		Complete(r)
 }
