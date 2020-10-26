@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -40,7 +41,7 @@ type MachineReconciler struct {
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines/status,verbs=get;update;patch
 
-func (r *MachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("machine", req.NamespacedName)
 
@@ -56,8 +57,29 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	log.Info("machine reconcile", "content", machine)
 
-	// ssh := MakeSSHConfig(&machine.Spec)
-	// stdout, stderr, done, err := ssh.Run("ls -al")
+	ssh := MakeSSHConfig(&machine.Spec)
+	stdout, stderr, done, err := ssh.Run("ls -al")
+
+	if err != nil {
+		return
+	}
+
+	if !done {
+		result = ctrl.Result{
+			Requeue:      true,
+			RequeueAfter: ssh.Timeout,
+		}
+	}
+
+	if stderr != "" {
+		err = fmt.Errorf(stderr)
+		log.Error(err, "command returns an error")
+		return
+	}
+
+	if stdout != "" {
+		log.Info(stdout)
+	}
 
 	return ctrl.Result{}, nil
 }
