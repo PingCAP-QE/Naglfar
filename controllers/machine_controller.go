@@ -18,12 +18,14 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
+	"github.com/ngaut/log"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,43 +47,35 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	ctx := context.Background()
 	log := r.Log.WithValues("machine", req.NamespacedName)
 
-	var machine naglfarv1.Machine
+	machine := new(naglfarv1.Machine)
 
-	if err := r.Get(ctx, req.NamespacedName, &machine); err != nil {
+	if err = r.Get(ctx, req.NamespacedName, machine); err != nil {
 		log.Error(err, "unable to fetch Machine")
+
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		err = client.IgnoreNotFound(err)
+		return
 	}
 
 	log.Info("machine reconcile", "content", machine)
 
-	ssh := MakeSSHConfig(&machine.Spec)
-	stdout, stderr, done, err := ssh.Run("ls -al")
-
-	if err != nil {
-		return
-	}
-
-	if !done {
-		result = ctrl.Result{
-			Requeue:      true,
-			RequeueAfter: ssh.Timeout,
+	if machine.Status.Info == nil {
+		machine.Status.Info, err = fetchMachineInfo(machine)
+		if err != nil {
+			return
 		}
+
+		if err = r.Status().Update(ctx, machine); err != nil {
+			log.Error(err, "unable to update Machine")
+			return
+		}
+
+		log.Info("machine updated", "content", machine)
 	}
 
-	if stderr != "" {
-		err = fmt.Errorf(stderr)
-		log.Error(err, "command returns an error")
-		return
-	}
-
-	if stdout != "" {
-		log.Info(stdout)
-	}
-
-	return ctrl.Result{}, nil
+	return
 }
 
 func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -99,4 +93,40 @@ func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
 		Port:     strconv.Itoa(spec.Port),
 		Timeout:  timeout,
 	}
+}
+
+func fetchMachineInfo(machine *naglfarv1.Machine) (*naglfarv1.MachineInfo, error) {
+	osStatScript, err := ScriptBox.FindString("os-stat.sh")
+
+	if err != nil {
+		return nil, err
+	}
+
+	ssh := MakeSSHConfig(&machine.Spec)
+
+	stdout, stderr, done, err := ssh.Run(osStatScript)
+
+	if err != nil {
+		log.Error(err, "error in executing os-stat")
+		return nil, err
+	}
+
+	if !done {
+		err = fmt.Errorf("script os-stat.sh not complete")
+		return nil, err
+	}
+
+	if stderr != "" {
+		err = fmt.Errorf(stderr)
+		log.Error(err, "command returns an error")
+		return nil, err
+	}
+
+	info := new(naglfarv1.MachineInfo)
+
+	if err = json.Unmarshal([]byte(stdout), info); err != nil {
+		log.Error(err, "fail to unmarshal os-stat result: \"%s\"", stdout)
+	}
+
+	return info, nil
 }

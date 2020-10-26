@@ -37,13 +37,17 @@ type ReserveResources struct {
 }
 
 type StorageDevice struct {
-	Kind string `json:"kind"`
-	Size int64  `json:"size"`
-	Path string `json:"path"`
+	Device     string `json:"device"`
+	Filesystem string `json:"filesystem"`
+	Total      int64  `json:"total"`
+	Used       int64  `json:"used"`
+	MountPoint string `json:"mountPoint"`
 }
 
-type TotalResources struct {
-	Cores          int32            `json:"cores"`
+type MachineInfo struct {
+	Hostname       string           `json:"hostname"`
+	Architecture   string           `json:"architecture"`
+	Threads        int32            `json:"threads"`
 	Memory         int64            `json:"memory"`
 	StorageDevices []*StorageDevice `json:"devices"`
 }
@@ -78,7 +82,7 @@ type MachineStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// +optional
-	Total *TotalResources `json:"total,omitempty"`
+	Info *MachineInfo `json:"info,omitempty"`
 
 	// +optional
 	TestResources []corev1.ObjectReference `json:"testResources,omitempty"`
