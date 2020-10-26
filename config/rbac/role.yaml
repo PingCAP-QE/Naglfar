@@ -26,3 +26,23 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testresources
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testresources/status
+  verbs:
+  - get
+  - patch
+  - update

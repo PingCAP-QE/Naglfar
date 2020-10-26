@@ -78,6 +78,14 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Machine")
 		os.Exit(1)
 	}
+	if err = (&controllers.TestResourceReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("TestResource"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TestResource")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -78,6 +79,9 @@ type MachineStatus struct {
 
 	// +optional
 	Total *TotalResources `json:"total,omitempty"`
+
+	// +optional
+	TestResources []corev1.ObjectReference `json:"testResources,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -4,4 +4,7 @@ resources:
 - group: naglfar
   kind: Machine
   version: v1
+- group: naglfar
+  kind: TestResource
+  version: v1
 version: "2"
