@@ -29,6 +29,26 @@ rules:
 - apiGroups:
   - naglfar.pingcap.com
   resources:
+  - testresourcerequests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testresourcerequests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
   - testresources
   verbs:
   - create

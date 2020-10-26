@@ -7,4 +7,7 @@ resources:
 - group: naglfar
   kind: TestResource
   version: v1
+- group: naglfar
+  kind: TestResourceRequest
+  version: v1
 version: "2"

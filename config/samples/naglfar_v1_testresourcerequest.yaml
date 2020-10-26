@@ -1,0 +1,18 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestResourceRequest
+metadata:
+  name: testresourcerequest-sample
+spec:
+  items:
+    - name: n1
+      spec:
+        memory: 512000000
+        cpuPercent: 100
+    - name: n2
+      spec:
+        memory: 1024000000
+        cpuPercent: 200
+        disks:
+          - kind: nvme
+            size: 1000000000
+
