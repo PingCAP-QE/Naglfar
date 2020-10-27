@@ -74,7 +74,7 @@ type TestResourceStatus struct {
 	HostMachine string `json:"hostMachine"`
 
 	// +optional
-	DiskStat []*DiskStatus `json:"diskStat"`
+	DiskStat []*DiskStatus `json:"diskStat,omitempty"`
 
 	// +optional
 	Username string `json:"username"`

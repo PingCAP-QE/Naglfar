@@ -61,15 +61,21 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	var resources naglfarv1.TestResourceList
-	var resourceMap map[string]*naglfarv1.TestResource
+	var (
+		resources   naglfarv1.TestResourceList
+		resourceMap = make(map[string]*naglfarv1.TestResource)
+		readyCount  = 0
+	)
 	if err := r.List(ctx, &resources, client.InNamespace(req.Namespace), client.MatchingFields{resourceOwnerKey: req.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
 	for idx, item := range resources.Items {
 		resourceMap[item.Name] = &resources.Items[idx]
+		if item.Status.Initialized {
+			readyCount++
+		}
 	}
-	readyCount := 0
+	// if all resources are ready, set the resource request's state to be ready
 	if readyCount == len(resourceRequest.Spec.Items) {
 		log.Info("all resources are in ready state")
 		resourceRequest.Status.State = naglfarv1.TestResourceRequestReady
@@ -79,6 +85,7 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		}
 		return ctrl.Result{}, nil
 	}
+	// otherwise, wait all resources to be ready
 	constructTestResource := func(resourceRequest *naglfarv1.TestResourceRequest, idx int) (*naglfarv1.TestResource, error) {
 		name := fmt.Sprintf("%s-%s", resourceRequest.Name, resourceRequest.Spec.Items[idx].Name)
 		tr := &naglfarv1.TestResource{
@@ -111,26 +118,26 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			log.V(1).Info("create a TestResource", "testResource", tr)
 		}
 	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: time.Second}, nil
 }
 
 func (r *TestResourceRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	//if err := mgr.GetFieldIndexer().IndexField(&naglfarv1.TestResource{}, resourceOwnerKey, func(rawObject runtime.Object) []string {
-	//	resource := rawObject.(*naglfarv1.TestResource)
-	//	owner := metav1.GetControllerOf(resource)
-	//	if owner == nil {
-	//		return nil
-	//	}
-	//	// make sure it's a TestResourceRequest
-	//	if owner.APIVersion != apiGVStr || owner.Kind != "TestResourceRequest" {
-	//		return nil
-	//	}
-	//	return []string{owner.Name}
-	//}); err != nil {
-	//	return err
-	//}
+	if err := mgr.GetFieldIndexer().IndexField(&naglfarv1.TestResource{}, resourceOwnerKey, func(rawObject runtime.Object) []string {
+		resource := rawObject.(*naglfarv1.TestResource)
+		owner := metav1.GetControllerOf(resource)
+		if owner == nil {
+			return nil
+		}
+		// make sure it's a TestResourceRequest
+		if owner.APIVersion != apiGVStr || owner.Kind != "TestResourceRequest" {
+			return nil
+		}
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&naglfarv1.TestResourceRequest{}).
-		//Owns(&naglfarv1.TestResource{}).
+		Owns(&naglfarv1.TestResource{}).
 		Complete(r)
 }
