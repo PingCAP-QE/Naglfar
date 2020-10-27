@@ -29,6 +29,26 @@ rules:
 - apiGroups:
   - naglfar.pingcap.com
   resources:
+  - testclustertopologies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testclustertopologies/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
   - testresourcerequests
   verbs:
   - create
@@ -62,6 +82,26 @@ rules:
   - naglfar.pingcap.com
   resources:
   - testresources/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testworkloads
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testworkloads/status
   verbs:
   - get
   - patch

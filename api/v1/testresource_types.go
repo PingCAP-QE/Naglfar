@@ -25,18 +25,21 @@ const (
 	OtherKind          = "other"
 )
 
+// +kubebuilder:validation:Enum=nvme;other
 type DiskKind string
 
 type DiskSpec struct {
-	Kind DiskKind `json:"kind"`
-	Size int64    `json:"size"`
+	Name      string   `json:"name"`
+	Kind      DiskKind `json:"kind"`
+	Size      int64    `json:"size"`
+	MountPath string   `json:"mountPath"`
 }
 
 type DiskStatus struct {
-	Kind       DiskKind `json:"kind"`
-	Size       int64    `json:"size"`
-	Path       string   `json:"path"`
-	MountPoint string   `json:"mountPoint"`
+	Kind      DiskKind `json:"kind"`
+	Size      int64    `json:"size"`
+	Path      string   `json:"path"`
+	MountPath string   `json:"mountPath"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!

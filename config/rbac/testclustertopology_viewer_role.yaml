@@ -1,0 +1,20 @@
+# permissions to do viewer testclustertopologies.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: testclustertopology-viewer-role
+rules:
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testclustertopologies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testclustertopologies/status
+  verbs:
+  - get
