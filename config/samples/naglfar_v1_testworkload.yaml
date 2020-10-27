@@ -1,0 +1,7 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestWorkload
+metadata:
+  name: testworkload-sample
+spec:
+  # Add fields here
+  foo: bar

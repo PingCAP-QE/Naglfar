@@ -1,0 +1,7 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestWorkflow
+metadata:
+  name: testworkflow-sample
+spec:
+  # Add fields here
+  foo: bar

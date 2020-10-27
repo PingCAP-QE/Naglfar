@@ -1,0 +1,20 @@
+# permissions to do viewer testresourcerequests.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: testresourcerequest-viewer-role
+rules:
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testresourcerequests
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testresourcerequests/status
+  verbs:
+  - get

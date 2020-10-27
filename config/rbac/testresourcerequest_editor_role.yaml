@@ -1,0 +1,26 @@
+# permissions to do edit testresourcerequests.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: testresourcerequest-editor-role
+rules:
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testresourcerequests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testresourcerequests/status
+  verbs:
+  - get
+  - patch
+  - update

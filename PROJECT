@@ -7,4 +7,16 @@ resources:
 - group: naglfar
   kind: TestResource
   version: v1
+- group: naglfar
+  kind: TestResourceRequest
+  version: v1
+- group: naglfar
+  kind: TestClusterTopology
+  version: v1
+- group: naglfar
+  kind: TestWorkload
+  version: v1
+- group: naglfar
+  kind: TestWorkflow
+  version: v1
 version: "2"

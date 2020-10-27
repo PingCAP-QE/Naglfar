@@ -6,18 +6,18 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.5
   creationTimestamp: null
-  name: testresources.naglfar.pingcap.com
+  name: testworkloads.naglfar.pingcap.com
 spec:
   group: naglfar.pingcap.com
   names:
-    kind: TestResource
-    listKind: TestResourceList
-    plural: testresources
-    singular: testresource
+    kind: TestWorkload
+    listKind: TestWorkloadList
+    plural: testworkloads
+    singular: testworkload
   scope: Namespaced
   validation:
     openAPIV3Schema:
-      description: TestResource is the Schema for the testresources API
+      description: TestWorkload is the Schema for the testworkloads API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -32,75 +32,65 @@ spec:
         metadata:
           type: object
         spec:
-          description: TestResourceSpec defines the desired state of TestResource
+          description: TestWorkloadSpec defines the desired state of TestWorkload
           properties:
-            cpuPercent:
-              format: int32
-              type: integer
-            disks:
+            clusterTopologies:
+              description: ClusterTopologiesRefs references
               items:
                 properties:
-                  kind:
-                    enum:
-                    - nvme
-                    - other
-                    type: string
-                  mountPath:
+                  aliasName:
                     type: string
                   name:
                     type: string
-                  size:
-                    format: int64
-                    type: integer
                 required:
-                - kind
-                - mountPath
+                - aliasName
                 - name
-                - size
                 type: object
               type: array
-            memory:
-              format: int64
-              type: integer
-          required:
-          - cpuPercent
-          - memory
-          type: object
-        status:
-          description: TestResourceStatus defines the observed state of TestResource
-          properties:
-            diskStat:
+            teardownTestClusterTopology:
+              items:
+                type: string
+              type: array
+            workloads:
+              description: Workloads specifies workload templates
               items:
                 properties:
-                  kind:
-                    enum:
-                    - nvme
-                    - other
+                  dockerContainer:
+                    properties:
+                      command:
+                        items:
+                          type: string
+                        type: array
+                      image:
+                        type: string
+                      name:
+                        type: string
+                      resourceRequest:
+                        properties:
+                          name:
+                            type: string
+                          node:
+                            type: string
+                        required:
+                        - name
+                        - node
+                        type: object
+                    required:
+                    - image
+                    - name
+                    - resourceRequest
+                    type: object
+                  name:
                     type: string
-                  mountPath:
-                    type: string
-                  path:
-                    type: string
-                  size:
-                    format: int64
-                    type: integer
                 required:
-                - kind
-                - mountPath
-                - path
-                - size
+                - name
                 type: object
               type: array
-            hostMachine:
-              type: string
-            initialized:
-              type: boolean
-            password:
-              type: string
-            sshPort:
-              type: integer
-            username:
-              type: string
+          required:
+          - workloads
+          type: object
+        status:
+          description: TestWorkloadStatus defines the observed state of TestWorkload
           type: object
       type: object
   version: v1
