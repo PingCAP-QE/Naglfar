@@ -23,9 +23,21 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type ResourceRequestItemSpec struct {
+	// +optional
+	Resource TestResourceSpec `json:"resource,omitempty"`
+
+	// If sets, it means a exclusive resource(won't let other resource exist at the same time with this new requirement) is required
+	// +optional
+	TestMachineResource *string `json:"testMachineResource,omitempty"`
+}
+
 type ResourceRequestItem struct {
-	Name string           `json:"name"`
-	Spec TestResourceSpec `json:"spec"`
+	// Specifies the name of a node.
+	// For example, we can use n1, n2, n3 to refer to different resources
+	Name string `json:"name"`
+
+	Spec ResourceRequestItemSpec `json:"spec"`
 }
 
 // TestResourceRequestSpec defines the desired state of TestResourceRequest
