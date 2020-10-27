@@ -67,6 +67,48 @@ spec:
         status:
           description: MachineStatus defines the observed state of Machine
           properties:
+            info:
+              properties:
+                architecture:
+                  type: string
+                devices:
+                  items:
+                    properties:
+                      device:
+                        type: string
+                      filesystem:
+                        type: string
+                      mountPoint:
+                        type: string
+                      total:
+                        format: int64
+                        type: integer
+                      used:
+                        format: int64
+                        type: integer
+                    required:
+                    - device
+                    - filesystem
+                    - mountPoint
+                    - total
+                    - used
+                    type: object
+                  type: array
+                hostname:
+                  type: string
+                memory:
+                  format: int64
+                  type: integer
+                threads:
+                  format: int32
+                  type: integer
+              required:
+              - architecture
+              - devices
+              - hostname
+              - memory
+              - threads
+              type: object
             testResources:
               items:
                 description: ObjectReference contains enough information to let you
@@ -106,35 +148,6 @@ spec:
                     type: string
                 type: object
               type: array
-            total:
-              properties:
-                cores:
-                  format: int32
-                  type: integer
-                devices:
-                  items:
-                    properties:
-                      kind:
-                        type: string
-                      path:
-                        type: string
-                      size:
-                        format: int64
-                        type: integer
-                    required:
-                    - kind
-                    - path
-                    - size
-                    type: object
-                  type: array
-                memory:
-                  format: int64
-                  type: integer
-              required:
-              - cores
-              - devices
-              - memory
-              type: object
           type: object
       type: object
   version: v1
