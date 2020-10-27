@@ -67,7 +67,7 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 			return
 		}
 
-		if err = r.Status().Update(ctx, machine); err != nil {
+		if err = r.Update(ctx, machine); err != nil {
 			log.Error(err, "unable to update Machine")
 			return
 		}
