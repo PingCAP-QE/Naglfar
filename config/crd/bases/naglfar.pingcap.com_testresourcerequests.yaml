@@ -43,48 +43,42 @@ spec:
                       use n1, n2, n3 to refer to different resources
                     type: string
                   spec:
+                    description: TestResourceSpec defines the desired state of TestResource
                     properties:
-                      resource:
-                        description: TestResourceSpec defines the desired state of
-                          TestResource
-                        properties:
-                          cpuPercent:
-                            format: int32
-                            type: integer
-                          disks:
-                            items:
-                              properties:
-                                kind:
-                                  enum:
-                                  - nvme
-                                  - other
-                                  type: string
-                                mountPath:
-                                  type: string
-                                name:
-                                  type: string
-                                size:
-                                  format: int64
-                                  type: integer
-                              required:
-                              - kind
-                              - mountPath
-                              - name
-                              - size
-                              type: object
-                            type: array
-                          memory:
-                            format: int64
-                            type: integer
-                        required:
-                        - cpuPercent
-                        - memory
-                        type: object
+                      cpuPercent:
+                        format: int32
+                        type: integer
+                      disks:
+                        items:
+                          properties:
+                            kind:
+                              enum:
+                              - nvme
+                              - other
+                              type: string
+                            mountPath:
+                              type: string
+                            name:
+                              type: string
+                            size:
+                              format: int64
+                              type: integer
+                          required:
+                          - kind
+                          - mountPath
+                          - name
+                          - size
+                          type: object
+                        type: array
+                      memory:
+                        format: int64
+                        type: integer
                       testMachineResource:
-                        description: If sets, it means a exclusive resource(won't
-                          let other resource exist at the same time with this new
-                          requirement) is required
+                        description: If sets, it means the static machine is required
                         type: string
+                    required:
+                    - cpuPercent
+                    - memory
                     type: object
                 required:
                 - name

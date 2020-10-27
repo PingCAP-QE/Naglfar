@@ -20,24 +20,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	TestResourceRequestPending TestResourceRequestState = "Pending"
+	TestResourceRequestReady   TestResourceRequestState = "Ready"
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-type ResourceRequestItemSpec struct {
-	// +optional
-	Resource TestResourceSpec `json:"resource,omitempty"`
-
-	// If sets, it means a exclusive resource(won't let other resource exist at the same time with this new requirement) is required
-	// +optional
-	TestMachineResource *string `json:"testMachineResource,omitempty"`
-}
 
 type ResourceRequestItem struct {
 	// Specifies the name of a node.
 	// For example, we can use n1, n2, n3 to refer to different resources
-	Name string `json:"name"`
-
-	Spec ResourceRequestItemSpec `json:"spec"`
+	Name string           `json:"name"`
+	Spec TestResourceSpec `json:"spec"`
 }
 
 // TestResourceRequestSpec defines the desired state of TestResourceRequest
@@ -49,14 +44,16 @@ type TestResourceRequestSpec struct {
 	Items []*ResourceRequestItem `json:"items,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Pending;Ready
+type TestResourceRequestState string
+
 // TestResourceRequestStatus defines the observed state of TestResourceRequest
 type TestResourceRequestStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// +kubebuilder:validation:Enum=Pending;Ready
 	// default Pending
-	State string `json:"state"`
+	State TestResourceRequestState `json:"state"`
 }
 
 // +kubebuilder:object:root=true
