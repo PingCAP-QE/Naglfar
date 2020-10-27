@@ -1,0 +1,26 @@
+# permissions to do edit testclustertopologies.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: testclustertopology-editor-role
+rules:
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testclustertopologies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testclustertopologies/status
+  verbs:
+  - get
+  - patch
+  - update
