@@ -1,0 +1,26 @@
+# permissions to do edit testworkflows.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: testworkflow-editor-role
+rules:
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testworkflows
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testworkflows/status
+  verbs:
+  - get
+  - patch
+  - update

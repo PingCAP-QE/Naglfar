@@ -61,6 +61,9 @@ type TestWorkloadSpec struct {
 
 	// Workloads specifies workload templates
 	Workloads []TestWorkloadItem `json:"workloads"`
+
+	// +optional
+	TeardownTestClusterTopology []string `json:"teardownTestClusterTopology,omitempty"`
 }
 
 // TestWorkloadStatus defines the observed state of TestWorkload

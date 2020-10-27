@@ -89,6 +89,26 @@ rules:
 - apiGroups:
   - naglfar.pingcap.com
   resources:
+  - testworkflows
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - testworkflows/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
   - testworkloads
   verbs:
   - create

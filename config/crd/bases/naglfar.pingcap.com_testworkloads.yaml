@@ -47,6 +47,10 @@ spec:
                 - name
                 type: object
               type: array
+            teardownTestClusterTopology:
+              items:
+                type: string
+              type: array
             workloads:
               description: Workloads specifies workload templates
               items:

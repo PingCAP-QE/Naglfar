@@ -16,4 +16,7 @@ resources:
 - group: naglfar
   kind: TestWorkload
   version: v1
+- group: naglfar
+  kind: TestWorkflow
+  version: v1
 version: "2"
