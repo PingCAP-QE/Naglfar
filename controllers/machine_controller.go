@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
@@ -85,7 +84,7 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
-	timeout, _ := time.ParseDuration(spec.Timeout)
+	timeout, _ := spec.Timeout.Parse()
 	return &easyssh.MakeConfig{
 		User:     spec.Username,
 		Password: spec.Password,
@@ -122,10 +121,36 @@ func fetchMachineInfo(machine *naglfarv1.Machine) (*naglfarv1.MachineInfo, error
 		return nil, err
 	}
 
-	info := new(naglfarv1.MachineInfo)
+	rawInfo := new(naglfarv1.MachineInfo)
 
-	if err = json.Unmarshal([]byte(stdout), info); err != nil {
-		log.Error(err, "fail to unmarshal os-stat result: \"%s\"", stdout)
+	if err = json.Unmarshal([]byte(stdout), rawInfo); err != nil {
+		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", stdout))
+	}
+
+	return makeMachineInfo(rawInfo)
+}
+
+func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, error) {
+	info := rawInfo.DeepCopy()
+	memory, err := info.Memory.ToSize()
+	if err != nil {
+		return nil, err
+	}
+
+	info.Memory = naglfarv1.Size(float64(memory))
+
+	for _, device := range info.StorageDevices {
+		totalSize, err := device.Total.ToSize()
+		if err != nil {
+			return nil, err
+		}
+		device.Total = naglfarv1.Size(float64(totalSize))
+
+		usedSize, err := device.Used.ToSize()
+		if err != nil {
+			return nil, err
+		}
+		device.Used = naglfarv1.Size(float64(usedSize))
 	}
 
 	return info, nil

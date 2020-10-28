@@ -51,10 +51,8 @@ spec:
                   format: int32
                   type: integer
                 memory:
-                  description: default 1 << 30
-                  format: int64
-                  minimum: 0
-                  type: integer
+                  description: default 1 GiB
+                  type: string
               type: object
             timeout:
               description: default 10s
@@ -83,11 +81,9 @@ spec:
                       mountPoint:
                         type: string
                       total:
-                        format: int64
-                        type: integer
+                        type: string
                       used:
-                        format: int64
-                        type: integer
+                        type: string
                     required:
                     - device
                     - filesystem
@@ -99,8 +95,7 @@ spec:
                 hostname:
                   type: string
                 memory:
-                  format: int64
-                  type: integer
+                  type: string
                 threads:
                   format: int32
                   type: integer

@@ -29,26 +29,24 @@ type ReserveResources struct {
 	// +optional
 	CPUPercent int32 `json:"cpuPercent"`
 
-	// +kubebuilder:validation:Minimum=0
-
-	// default 1 << 30
+	// default 1 GiB
 	// +optional
-	Memory int64 `json:"memory"`
+	Memory BytesSize `json:"memory"`
 }
 
 type StorageDevice struct {
-	Device     string `json:"device"`
-	Filesystem string `json:"filesystem"`
-	Total      int64  `json:"total"`
-	Used       int64  `json:"used"`
-	MountPoint string `json:"mountPoint"`
+	Device     string    `json:"device"`
+	Filesystem string    `json:"filesystem"`
+	Total      BytesSize `json:"total"`
+	Used       BytesSize `json:"used"`
+	MountPoint string    `json:"mountPoint"`
 }
 
 type MachineInfo struct {
 	Hostname       string           `json:"hostname"`
 	Architecture   string           `json:"architecture"`
 	Threads        int32            `json:"threads"`
-	Memory         int64            `json:"memory"`
+	Memory         BytesSize        `json:"memory"`
 	StorageDevices []*StorageDevice `json:"devices"`
 }
 
@@ -70,7 +68,7 @@ type MachineSpec struct {
 
 	// default 10s
 	// +optional
-	Timeout string `json:"timeout"`
+	Timeout Duration `json:"timeout"`
 
 	// +optional
 	Reserve *ReserveResources `json:"reserve"`

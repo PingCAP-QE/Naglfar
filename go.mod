@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/appleboy/easyssh-proxy v1.3.7
+	github.com/docker/go-units v0.4.0
 	github.com/go-logr/logr v0.1.0
 	github.com/gobuffalo/packr v1.30.1
 	github.com/ngaut/log v0.0.0-20180314031856-b8e36e7ba5ac
