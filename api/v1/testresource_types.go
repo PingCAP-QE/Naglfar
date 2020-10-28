@@ -56,6 +56,10 @@ type TestResourceSpec struct {
 
 	// +optional
 	Disks []*DiskSpec `json:"disks"`
+
+	// If sets, it means the static machine is required
+	// +optional
+	TestMachineResource string `json:"testMachineResource,omitempty"`
 }
 
 // TestResourceStatus defines the observed state of TestResource
@@ -70,7 +74,7 @@ type TestResourceStatus struct {
 	HostMachine string `json:"hostMachine"`
 
 	// +optional
-	DiskStat []*DiskStatus `json:"diskStat"`
+	DiskStat []*DiskStatus `json:"diskStat,omitempty"`
 
 	// +optional
 	Username string `json:"username"`
