@@ -61,6 +61,9 @@ spec:
             memory:
               format: int64
               type: integer
+            testMachineResource:
+              description: If sets, it means the static machine is required
+              type: string
           required:
           - cpuPercent
           - memory

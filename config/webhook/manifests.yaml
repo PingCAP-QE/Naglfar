@@ -24,6 +24,24 @@ webhooks:
     - UPDATE
     resources:
     - machines
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-naglfar-pingcap-com-v1-testresourcerequest
+  failurePolicy: Fail
+  name: mtestresourcerequest.kb.io
+  rules:
+  - apiGroups:
+    - naglfar.pingcap.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - testresourcerequests
 
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
@@ -50,3 +68,21 @@ webhooks:
     - UPDATE
     resources:
     - machines
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-naglfar-pingcap-com-v1-testresourcerequest
+  failurePolicy: Fail
+  name: vtestresourcerequest.kb.io
+  rules:
+  - apiGroups:
+    - naglfar.pingcap.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - testresourcerequests

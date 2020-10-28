@@ -118,6 +118,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "TestWorkflow")
 		os.Exit(1)
 	}
+	if err = (&naglfarv1.TestResourceRequest{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "TestResourceRequest")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
