@@ -57,6 +57,7 @@ type TestResourceRequestStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // TestResourceRequest is the Schema for the testresourcerequests API
 type TestResourceRequest struct {

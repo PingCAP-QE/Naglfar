@@ -71,7 +71,7 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	}
 	for idx, item := range resources.Items {
 		resourceMap[item.Name] = &resources.Items[idx]
-		if item.Status.Initialized {
+		if len(item.Status.HostMachine) != 0 {
 			readyCount++
 		}
 	}
@@ -84,6 +84,12 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
+	} else {
+		resourceRequest.Status.State = naglfarv1.TestResourceRequestPending
+		if err := r.Status().Update(ctx, &resourceRequest); err != nil {
+			log.Error(err, "unable to update TestResourceRequest status")
+			return ctrl.Result{}, err
+		}
 	}
 	// otherwise, wait all resources to be ready
 	constructTestResource := func(resourceRequest *naglfarv1.TestResourceRequest, idx int) (*naglfarv1.TestResource, error) {
