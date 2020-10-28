@@ -91,6 +91,7 @@ type MachineStatus struct {
 // +kubebuilder:object:root=true
 
 // Machine is the Schema for the machines API
+// +kubebuilder:subresource:status
 type Machine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
