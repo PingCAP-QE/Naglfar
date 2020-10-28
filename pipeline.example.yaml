@@ -1,3 +1,16 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: Machine
+metadata:
+  name: 172.16.0.1
+  labels:
+    type: physical
+spec:
+  username: root
+  password: root
+  host: 172.16.0.1
+
+---
+
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -23,11 +36,11 @@ spec:
         testMachineResource: 172.16.0.1
     - name: n2
       spec:
-        memory: 1000
-        cpuPercent: 100
+        memory: 1073741824
+        cpuPercent: 600
+        machineSelector: physical
         disks:
-          - name: disk1
+          - name: data1
             kind: nvme
-            size: 10000000
-            mountPath: "/disks1"
+
 
