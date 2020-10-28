@@ -8,5 +8,4 @@ spec:
   username: root
   password: root
   host: 172.16.0.1
-status:
-  ready: true
+

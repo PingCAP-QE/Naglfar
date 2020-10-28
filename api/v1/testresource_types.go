@@ -29,10 +29,16 @@ const (
 type DiskKind string
 
 type DiskSpec struct {
-	Name      string   `json:"name"`
-	Kind      DiskKind `json:"kind"`
-	Size      int64    `json:"size"`
-	MountPath string   `json:"mountPath"`
+	Name string `json:"name"`
+
+	// +optional
+	MountPath string `json:"mountPath"`
+
+	// +optional
+	Kind DiskKind `json:"kind"`
+
+	// +optional
+	Size int64 `json:"size"`
 }
 
 type DiskStatus struct {
@@ -53,6 +59,9 @@ type TestResourceSpec struct {
 	Memory int64 `json:"memory"`
 
 	CPUPercent int32 `json:"cpuPercent"`
+
+	// +optional
+	MachineSelector string `json:"machineSelector"`
 
 	// +optional
 	Disks []*DiskSpec `json:"disks"`

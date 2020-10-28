@@ -53,12 +53,11 @@ spec:
                     format: int64
                     type: integer
                 required:
-                - kind
-                - mountPath
                 - name
-                - size
                 type: object
               type: array
+            machineSelector:
+              type: string
             memory:
               format: int64
               type: integer
