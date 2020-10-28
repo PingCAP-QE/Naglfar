@@ -59,7 +59,7 @@ type TestResourceSpec struct {
 
 	// If sets, it means the static machine is required
 	// +optional
-	TestMachineResource *string `json:"testMachineResource,omitempty"`
+	TestMachineResource string `json:"testMachineResource,omitempty"`
 }
 
 // TestResourceStatus defines the observed state of TestResource
