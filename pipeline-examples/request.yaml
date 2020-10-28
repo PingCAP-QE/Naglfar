@@ -16,7 +16,8 @@ spec:
         memory: 1GB
         cpuPercent: 200
         disks:
-          - name: disk1
+          disk1:
+            name: 
             kind: nvme
             size: 500GB
             mountPath: /disks1
@@ -26,7 +27,8 @@ spec:
         memory: 10GB
         cpuPercent: 400
         disks:
-          - name: disk1
+          disk1:
+            name: 
             kind: nvme
             size: 1TB
             mountPath: /disks1

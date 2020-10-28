@@ -18,11 +18,16 @@ package v1
 
 import (
 	"fmt"
+	"path"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+)
+
+const (
+	mountPrefix = "/mnt"
 )
 
 // log is for logging in this package.
@@ -45,6 +50,15 @@ func (r *TestResource) Default() {
 	testresourcelog.Info("default", "name", r.Name)
 
 	// TODO(user): fill in your defaulting logic.
+	if r.Status.State == "" {
+		r.Status.State = ResourcePending
+	}
+
+	for name, disk := range r.Spec.Disks {
+		if disk.MountPath == "" {
+			disk.MountPath = path.Join(mountPrefix, name)
+		}
+	}
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.

@@ -108,7 +108,7 @@ spec:
                         format: int32
                         type: integer
                       disks:
-                        items:
+                        additionalProperties:
                           properties:
                             kind:
                               enum:
@@ -116,15 +116,12 @@ spec:
                               - other
                               type: string
                             mountPath:
-                              type: string
-                            name:
+                              description: default /mnt/<name>
                               type: string
                             size:
                               type: string
-                          required:
-                          - name
                           type: object
-                        type: array
+                        type: object
                       machineSelector:
                         type: string
                       memory:

@@ -8,6 +8,6 @@ spec:
   cpuPercent: 600
   machineSelector: physical
   disks:
-    - name: data1
+    data1: 
       kind: nvme
 

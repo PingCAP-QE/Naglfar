@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -24,6 +25,14 @@ type Duration string
 
 func (r Duration) Parse() (time.Duration, error) {
 	return time.ParseDuration(string(r))
+}
+
+func (r Duration) Unwrap() time.Duration {
+	d, err := r.Parse()
+	if err != nil {
+		panic(fmt.Sprintf("Duration(%s) is invalid", r))
+	}
+	return d
 }
 
 func HumanDuration(d time.Duration) Duration {

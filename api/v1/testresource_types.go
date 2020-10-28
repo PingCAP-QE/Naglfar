@@ -17,20 +17,22 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	NVMEKind  DiskKind = "nvme"
-	OtherKind          = "other"
+	ResourcePending       ResourceState = "pending"
+	ResourceFail                        = "fail"
+	ResourceUninitialized               = "uninitialized"
+	ResourceReady                       = "ready"
 )
 
-// +kubebuilder:validation:Enum=nvme;other
-type DiskKind string
+// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready
+type ResourceState string
 
 type DiskSpec struct {
-	Name string `json:"name"`
-
+	// default /mnt/<name>
 	// +optional
 	MountPath string `json:"mountPath"`
 
@@ -44,7 +46,7 @@ type DiskSpec struct {
 type DiskStatus struct {
 	Kind      DiskKind  `json:"kind"`
 	Size      BytesSize `json:"size"`
-	Path      string    `json:"path"`
+	Device    string    `json:"device"`
 	MountPath string    `json:"mountPath"`
 }
 
@@ -64,7 +66,7 @@ type TestResourceSpec struct {
 	MachineSelector string `json:"machineSelector"`
 
 	// +optional
-	Disks []*DiskSpec `json:"disks"`
+	Disks map[string]DiskSpec `json:"disks"`
 
 	// If sets, it means the static machine is required
 	// +optional
@@ -76,28 +78,21 @@ type TestResourceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// default pending
 	// +optional
-	Initialized bool `json:"initialized"`
+	State ResourceState `json:"state"`
 
 	// +optional
-	HostMachine string `json:"hostMachine"`
+	HostMachine *corev1.ObjectReference `json:"hostMachine,omitempty"`
 
 	// +optional
-	DiskStat []*DiskStatus `json:"diskStat,omitempty"`
-
-	// +optional
-	Username string `json:"username"`
-
-	// +optional
-	Password string `json:"password"`
-
-	// +optional
-	SSHPort int `json:"sshPort"`
+	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
 // TestResource is the Schema for the testresources API
+// +kubebuilder:subresource:status
 type TestResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

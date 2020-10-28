@@ -71,7 +71,7 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	}
 	for idx, item := range resources.Items {
 		resourceMap[item.Name] = &resources.Items[idx]
-		if len(item.Status.HostMachine) != 0 {
+		if item.Status.HostMachine != nil {
 			readyCount++
 		}
 	}

@@ -16,7 +16,11 @@ limitations under the License.
 
 package v1
 
-import "github.com/docker/go-units"
+import (
+	"fmt"
+
+	"github.com/docker/go-units"
+)
 
 type BytesSize string
 
@@ -24,8 +28,20 @@ func (b BytesSize) ToSize() (int64, error) {
 	return units.RAMInBytes(string(b))
 }
 
+func (b BytesSize) Unwrap() int64 {
+	size, err := b.ToSize()
+	if err != nil {
+		panic(fmt.Sprintf("BytesSize(%s) is invalid", b))
+	}
+	return size
+}
+
 func (b BytesSize) Zero() BytesSize {
 	return Size(0)
+}
+
+func (b BytesSize) Sub(other BytesSize) BytesSize {
+	return Size(float64(b.Unwrap() - other.Unwrap()))
 }
 
 func Size(size float64) BytesSize {

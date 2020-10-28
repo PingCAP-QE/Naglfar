@@ -17,12 +17,23 @@ limitations under the License.
 package v1
 
 import (
+	"path"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+const (
+	NVMEKind  DiskKind = "nvme"
+	OtherKind          = "other"
+)
+
+// +kubebuilder:validation:Enum=nvme;other
+type DiskKind string
 
 type ReserveResources struct {
 	// default 100
@@ -35,7 +46,6 @@ type ReserveResources struct {
 }
 
 type StorageDevice struct {
-	Device     string    `json:"device"`
 	Filesystem string    `json:"filesystem"`
 	Total      BytesSize `json:"total"`
 	Used       BytesSize `json:"used"`
@@ -43,11 +53,22 @@ type StorageDevice struct {
 }
 
 type MachineInfo struct {
-	Hostname       string           `json:"hostname"`
-	Architecture   string           `json:"architecture"`
-	Threads        int32            `json:"threads"`
-	Memory         BytesSize        `json:"memory"`
-	StorageDevices []*StorageDevice `json:"devices"`
+	Hostname       string                   `json:"hostname"`
+	Architecture   string                   `json:"architecture"`
+	Threads        int32                    `json:"threads"`
+	Memory         BytesSize                `json:"memory"`
+	StorageDevices map[string]StorageDevice `json:"devices,omitempty"`
+}
+
+type DiskResource struct {
+	Size BytesSize `json:"size"`
+	Kind DiskKind  `json:"kind"`
+}
+
+type AvailableResource struct {
+	Memory     BytesSize               `json:"memory"`
+	CPUPercent int32                   `json:"cpuPercent"`
+	Disks      map[string]DiskResource `json:"disks,omitempty"`
 }
 
 // MachineSpec defines the desired state of Machine
@@ -83,6 +104,9 @@ type MachineStatus struct {
 	Info *MachineInfo `json:"info,omitempty"`
 
 	// +optional
+	Available *AvailableResource `json:"available"`
+
+	// +optional
 	TestResources []corev1.ObjectReference `json:"testResources,omitempty"`
 }
 
@@ -105,6 +129,30 @@ type MachineList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Machine `json:"items"`
+}
+
+func (r *Machine) UpdateAvailable() {
+	if r.Status.Info != nil {
+		r.Status.Available = new(AvailableResource)
+		r.Status.Available.Memory = r.Status.Info.Memory.Sub(r.Spec.Reserve.Memory)
+		r.Status.Available.CPUPercent = r.Status.Info.Threads*100 - r.Spec.Reserve.CPUPercent
+		for device, disk := range r.Status.Info.StorageDevices {
+			if disk.Used.Unwrap() != 0 {
+				continue
+			}
+
+			diskResource := new(DiskResource)
+			diskResource.Size = disk.Total
+
+			if strings.HasPrefix(path.Base(device), "nvme") {
+				diskResource.Kind = NVMEKind
+			} else {
+				diskResource.Kind = OtherKind
+			}
+
+			r.Status.Available.Disks[device] = *diskResource
+		}
+	}
 }
 
 func init() {
