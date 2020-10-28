@@ -38,14 +38,14 @@ type DiskSpec struct {
 	Kind DiskKind `json:"kind"`
 
 	// +optional
-	Size int64 `json:"size"`
+	Size BytesSize `json:"size"`
 }
 
 type DiskStatus struct {
-	Kind      DiskKind `json:"kind"`
-	Size      int64    `json:"size"`
-	Path      string   `json:"path"`
-	MountPath string   `json:"mountPath"`
+	Kind      DiskKind  `json:"kind"`
+	Size      BytesSize `json:"size"`
+	Path      string    `json:"path"`
+	MountPath string    `json:"mountPath"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -56,7 +56,7 @@ type TestResourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Memory int64 `json:"memory"`
+	Memory BytesSize `json:"memory"`
 
 	CPUPercent int32 `json:"cpuPercent"`
 

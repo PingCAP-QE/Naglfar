@@ -13,21 +13,21 @@ spec:
   items:
     - name: n1
       spec:
-        memory: 1000
-        cpuPercent: 100
+        memory: 1GB
+        cpuPercent: 200
         disks:
           - name: disk1
             kind: nvme
-            size: 10000000
-            mountPath: "/disks1"
+            size: 500GB
+            mountPath: /disks1
         testMachineResource: 172.16.0.1
     - name: n2
       spec:
-        memory: 1000
-        cpuPercent: 100
+        memory: 10GB
+        cpuPercent: 400
         disks:
           - name: disk1
             kind: nvme
-            size: 10000000
-            mountPath: "/disks1"
+            size: 1TB
+            mountPath: /disks1
 

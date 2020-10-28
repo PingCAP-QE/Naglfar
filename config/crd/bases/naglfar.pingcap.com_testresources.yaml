@@ -50,8 +50,7 @@ spec:
                   name:
                     type: string
                   size:
-                    format: int64
-                    type: integer
+                    type: string
                 required:
                 - name
                 type: object
@@ -59,8 +58,7 @@ spec:
             machineSelector:
               type: string
             memory:
-              format: int64
-              type: integer
+              type: string
             testMachineResource:
               description: If sets, it means the static machine is required
               type: string
@@ -84,8 +82,7 @@ spec:
                   path:
                     type: string
                   size:
-                    format: int64
-                    type: integer
+                    type: string
                 required:
                 - kind
                 - mountPath

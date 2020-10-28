@@ -122,6 +122,10 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "TestResourceRequest")
 		os.Exit(1)
 	}
+	if err = (&naglfarv1.TestResource{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "TestResource")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

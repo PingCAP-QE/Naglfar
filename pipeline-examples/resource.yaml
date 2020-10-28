@@ -4,7 +4,7 @@ metadata:
   name: n1
   namespace: naglfar-system
 spec:
-  memory: 1073741824
+  memory: 2GB
   cpuPercent: 600
   machineSelector: physical
   disks:
