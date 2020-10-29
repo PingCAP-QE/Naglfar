@@ -237,11 +237,6 @@ func (in *MachineStatus) DeepCopyInto(out *MachineStatus) {
 		*out = new(MachineInfo)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Available != nil {
-		in, out := &in.Available, &out.Available
-		*out = new(AvailableResource)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.TestResources != nil {
 		in, out := &in.TestResources, &out.TestResources
 		*out = make([]corev1.ObjectReference, len(*in))

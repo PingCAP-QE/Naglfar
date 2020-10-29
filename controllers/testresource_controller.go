@@ -52,14 +52,12 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 	if err = r.Get(ctx, req.NamespacedName, resource); err != nil {
 		log.Error(err, "unable to fetch TestResource")
 
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
+		// maybe resource deleted
 		err = client.IgnoreNotFound(err)
 		return
 	}
 
-	log = r.Log.WithValues("state", resource.Status.State)
+	log.Info("resource reconcile", "content", resource)
 
 	switch resource.Status.State {
 	case naglfarv1.ResourcePending:
@@ -69,117 +67,177 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 	return
 }
 
-func (r *TestResourceReconciler) reconcileStatePending(ctx context.Context, log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	resourceOverflow := func(machine *naglfarv1.Machine) (overflow bool, err error) {
-		rest := machine.Status.Available.DeepCopy()
+func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, newResource *naglfarv1.TestResource) (overflow bool, requeue bool, err error) {
+	rest := machine.Available()
 
-		for _, refer := range machine.Status.TestResources {
-			resource := new(naglfarv1.TestResource)
+	if rest == nil {
+		requeue = true
+		return
+	}
 
-			name := types.NamespacedName{Namespace: refer.Namespace, Name: refer.Name}
+	ctx := context.Background()
 
-			log := r.Log.WithValues("testresource", name)
+	for _, refer := range machine.Status.TestResources {
+		resource := new(naglfarv1.TestResource)
 
-			if err = r.Get(ctx, name, resource); err != nil {
-				log.Error(err, "unable to fetch TestResource")
-				if apierrors.IsNotFound(err) {
-					// machine updated, ignored
-					err = nil
-					continue
-				}
+		name := types.NamespacedName{Namespace: refer.Namespace, Name: refer.Name}
 
-				return
-			}
+		log := r.Log.WithValues("testresource", name)
 
-			// TODO: save resource after machine saving
-
-			rest.CPUPercent = rest.CPUPercent - resource.Spec.CPUPercent
-			rest.Memory = rest.Memory.Sub(resource.Spec.Memory)
-
-			if len(resource.Status.DiskStat) != 0 {
-				for _, stat := range resource.Status.DiskStat {
-					if _, ok := rest.Disks[stat.Device]; !ok {
-						err = fmt.Errorf("device %s unavialable on machine %s", stat.Device, machine.Name)
-						return
-					}
-
-					delete(rest.Disks, stat.Device)
-				}
+		if err = r.Get(ctx, name, resource); err != nil {
+			log.Error(err, "unable to fetch TestResource")
+			if apierrors.IsNotFound(err) {
+				// ignore error, resource may deleted
 				continue
 			}
+			return
+		}
 
-			for name, disk := range resource.Spec.Disks {
-				for device, diskResource := range rest.Disks {
-					if disk.Kind == diskResource.Kind &&
-						disk.Size.Unwrap() <= diskResource.Size.Unwrap() {
-						resource.Status.DiskStat[name] = naglfarv1.DiskStatus{
-							Kind:      disk.Kind,
-							Size:      diskResource.Size,
-							Device:    device,
-							MountPath: disk.MountPath,
-						}
-					}
+		rest.CPUPercent -= resource.Spec.CPUPercent
+		rest.Memory = rest.Memory.Sub(resource.Spec.Memory)
+
+		if len(resource.Status.DiskStat) != 0 {
+			for _, stat := range resource.Status.DiskStat {
+				if _, ok := rest.Disks[stat.Device]; !ok {
+					log.Error(fmt.Errorf("device %s unavialable on machine %s", stat.Device, machine.Name), "data maybe outdated")
+					requeue = true
+					return
 				}
-			}
 
-			if len(resource.Spec.Disks) != len(resource.Status.DiskStat) {
-				overflow = true
-				return
+				delete(rest.Disks, stat.Device)
+			}
+			continue
+		}
+	}
+
+	for name, disk := range newResource.Spec.Disks {
+		for device, diskResource := range rest.Disks {
+			if disk.Kind == diskResource.Kind &&
+				disk.Size.Unwrap() <= diskResource.Size.Unwrap() {
+
+				delete(rest.Disks, name)
+				newResource.Status.DiskStat[name] = naglfarv1.DiskStatus{
+					Kind:      disk.Kind,
+					Size:      diskResource.Size,
+					Device:    device,
+					MountPath: disk.MountPath,
+				}
+
+				break
 			}
 		}
+	}
 
-		overflow = rest.Memory.Unwrap() <= 0 || rest.CPUPercent <= 0
+	overflow = len(newResource.Status.DiskStat) < len(newResource.Spec.Disks) ||
+		rest.Memory.Unwrap() < newResource.Spec.Memory.Unwrap() ||
+		rest.CPUPercent < newResource.Spec.CPUPercent
 
+	return
+}
+
+func (r *TestResourceReconciler) tryRequestResource(machine *naglfarv1.Machine, newResource *naglfarv1.TestResource) (overflow bool, requeue bool, err error) {
+	log := r.Log.WithValues("testresource", newResource.Name)
+
+	overflow, requeue, err = r.resourceOverflow(machine, newResource)
+
+	if overflow || requeue || err != nil {
 		return
 	}
 
-	tryRequestResource := func(machine *naglfarv1.Machine) (overflow bool, result ctrl.Result, err error) {
-		resourceRef, err := ref.GetReference(r.Scheme, resource)
-		if err != nil {
-			log.Error(err, "unable to make reference to resource", "resource", resource)
-			return
-		}
-
-		machine.Status.TestResources = append(machine.Status.TestResources, *resourceRef)
-
-		if overflow, err = resourceOverflow(machine); overflow || err != nil {
-			return
-		}
-
-		if err = r.Status().Update(ctx, machine); err != nil {
-			if apierrors.IsConflict(err) {
-				err = nil
-				result.Requeue = true
-			}
-			return
-		}
-
+	resourceRef, err := ref.GetReference(r.Scheme, newResource)
+	if err != nil {
+		log.Error(err, "unable to make reference to resource", "resource", newResource)
 		return
 	}
+
+	machine.Status.TestResources = append(machine.Status.TestResources, *resourceRef)
+
+	if err = r.Status().Update(context.TODO(), machine); err != nil {
+		if apierrors.IsConflict(err) {
+			err = nil
+			requeue = true
+		}
+		return
+	}
+
+	// TODO: may cause resource leak; fix it
+	machineRef, err := ref.GetReference(r.Scheme, machine)
+	if err != nil {
+		log.Error(err, "unable to make reference to machine", "machine", machine)
+		return
+	}
+
+	newResource.Status.HostMachine = machineRef
+
+	return
+}
+
+func (r *TestResourceReconciler) reconcileStatePending(ctx context.Context, log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	overflow := false
+
+	defer func() {
+		if resource.Status.State != naglfarv1.ResourcePending {
+
+			// TODO: event this error
+			_ = r.Status().Update(ctx, resource)
+		}
+	}()
 
 	if resource.Spec.TestMachineResource != "" {
-		overflow := false
 		machine := new(naglfarv1.Machine)
 		if err = r.Get(ctx, types.NamespacedName{Namespace: "default", Name: resource.Spec.TestMachineResource}, machine); err != nil {
 			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", resource.Spec.TestMachineResource))
-
-			// we'll ignore not-found errors, since they can't be fixed by an immediate
-			// requeue (we'll need to wait for a new notification), and we can get them
-			// on deleted requests.
-			err = client.IgnoreNotFound(err)
 			return
 		}
 
-		overflow, result, err = tryRequestResource(machine)
+		overflow, result.Requeue, err = r.tryRequestResource(machine, resource)
 
-		if overflow {
-			err = fmt.Errorf("resource of machine(%s) ran out of", machine.Name)
+		if result.Requeue {
+			return
+		}
+
+		if err == nil && overflow {
+			err = fmt.Errorf("no enough resource on machine(%s)", resource.Spec.TestMachineResource)
+		}
+
+		if err != nil {
+			resource.Status.State = naglfarv1.ResourceFail
+		} else {
+			resource.Status.State = naglfarv1.ResourceUninitialized
 		}
 
 		return
 	}
 
-	return ctrl.Result{}, nil
+	var machines naglfarv1.MachineList
+	if err = r.List(ctx, &machines, client.MatchingLabels{"type": resource.Spec.MachineSelector}); err != nil {
+		log.Error(err, "unable to list machines")
+		return
+	}
+
+	for _, machine := range machines.Items {
+		overflow, result.Requeue, err = r.tryRequestResource(&machine, resource)
+
+		if result.Requeue {
+			return
+		}
+
+		if err != nil {
+			resource.Status.State = naglfarv1.ResourceFail
+			return
+		}
+
+		if overflow {
+			continue
+		}
+
+		resource.Status.State = naglfarv1.ResourceUninitialized
+		return
+	}
+
+	resource.Status.State = naglfarv1.ResourceFail
+
+	return
 }
 
 func (r *TestResourceReconciler) SetupWithManager(mgr ctrl.Manager) error {

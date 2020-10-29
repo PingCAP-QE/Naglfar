@@ -66,8 +66,6 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 			return
 		}
 
-		machine.UpdateAvailable()
-
 		if err = r.Status().Update(ctx, machine); err != nil {
 			log.Error(err, "unable to update Machine")
 			return
@@ -141,7 +139,7 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 
 	info.Memory = naglfarv1.Size(float64(memory))
 
-	for _, device := range info.StorageDevices {
+	for path, device := range info.StorageDevices {
 		totalSize, err := device.Total.ToSize()
 		if err != nil {
 			return nil, err
@@ -153,6 +151,8 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 			return nil, err
 		}
 		device.Used = naglfarv1.Size(float64(usedSize))
+
+		info.StorageDevices[path] = device
 	}
 
 	return info, nil

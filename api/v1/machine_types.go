@@ -104,9 +104,6 @@ type MachineStatus struct {
 	Info *MachineInfo `json:"info,omitempty"`
 
 	// +optional
-	Available *AvailableResource `json:"available"`
-
-	// +optional
 	TestResources []corev1.ObjectReference `json:"testResources,omitempty"`
 }
 
@@ -131,28 +128,34 @@ type MachineList struct {
 	Items           []Machine `json:"items"`
 }
 
-func (r *Machine) UpdateAvailable() {
+func (r *Machine) Available() *AvailableResource {
 	if r.Status.Info != nil {
-		r.Status.Available = new(AvailableResource)
-		r.Status.Available.Memory = r.Status.Info.Memory.Sub(r.Spec.Reserve.Memory)
-		r.Status.Available.CPUPercent = r.Status.Info.Threads*100 - r.Spec.Reserve.CPUPercent
-		for device, disk := range r.Status.Info.StorageDevices {
-			if disk.Used.Unwrap() != 0 {
-				continue
-			}
-
-			diskResource := new(DiskResource)
-			diskResource.Size = disk.Total
-
-			if strings.HasPrefix(path.Base(device), "nvme") {
-				diskResource.Kind = NVMEKind
-			} else {
-				diskResource.Kind = OtherKind
-			}
-
-			r.Status.Available.Disks[device] = *diskResource
-		}
+		return nil
 	}
+
+	available := new(AvailableResource)
+	available.Memory = r.Status.Info.Memory.Sub(r.Spec.Reserve.Memory)
+	available.CPUPercent = r.Status.Info.Threads*100 - r.Spec.Reserve.CPUPercent
+	available.Disks = make(map[string]DiskResource)
+
+	for device, disk := range r.Status.Info.StorageDevices {
+		if disk.Used.Unwrap() != 0 {
+			continue
+		}
+
+		diskResource := DiskResource{}
+		diskResource.Size = disk.Total
+
+		if strings.HasPrefix(path.Base(device), "nvme") {
+			diskResource.Kind = NVMEKind
+		} else {
+			diskResource.Kind = OtherKind
+		}
+
+		available.Disks[device] = diskResource
+	}
+
+	return available
 }
 
 func init() {

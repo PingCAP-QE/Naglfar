@@ -47,7 +47,6 @@ var _ webhook.Defaulter = &TestResource{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *TestResource) Default() {
-	testresourcelog.Info("default", "name", r.Name)
 
 	// TODO(user): fill in your defaulting logic.
 	if r.Status.State == "" {
@@ -58,7 +57,16 @@ func (r *TestResource) Default() {
 		if disk.MountPath == "" {
 			disk.MountPath = path.Join(mountPrefix, name)
 		}
+
+		if disk.Size == "" {
+			disk.Size = disk.Size.Zero()
+		}
+
+		r.Spec.Disks[name] = disk
 	}
+
+	testresourcelog.Info("default", "status", r.Status)
+
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.

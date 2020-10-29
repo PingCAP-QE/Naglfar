@@ -67,32 +67,6 @@ spec:
         status:
           description: MachineStatus defines the observed state of Machine
           properties:
-            available:
-              properties:
-                cpuPercent:
-                  format: int32
-                  type: integer
-                disks:
-                  additionalProperties:
-                    properties:
-                      kind:
-                        enum:
-                        - nvme
-                        - other
-                        type: string
-                      size:
-                        type: string
-                    required:
-                    - kind
-                    - size
-                    type: object
-                  type: object
-                memory:
-                  type: string
-              required:
-              - cpuPercent
-              - memory
-              type: object
             info:
               properties:
                 architecture:
