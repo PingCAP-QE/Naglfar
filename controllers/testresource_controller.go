@@ -60,6 +60,10 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 	log.Info("resource reconcile", "content", resource)
 
 	switch resource.Status.State {
+	case "":
+		resource.Status.State = naglfarv1.ResourcePending
+		err = r.Status().Update(ctx, resource)
+		return
 	case naglfarv1.ResourcePending:
 		return r.reconcileStatePending(ctx, log, resource)
 	}
@@ -210,7 +214,12 @@ func (r *TestResourceReconciler) reconcileStatePending(ctx context.Context, log 
 	}
 
 	var machines naglfarv1.MachineList
-	if err = r.List(ctx, &machines, client.MatchingLabels{"type": resource.Spec.MachineSelector}); err != nil {
+	options := make([]client.ListOption, 0)
+	if resource.Spec.MachineSelector != "" {
+		options = append(options, client.MatchingLabels{"type": resource.Spec.MachineSelector})
+	}
+
+	if err = r.List(ctx, &machines, options...); err != nil {
 		log.Error(err, "unable to list machines")
 		return
 	}
