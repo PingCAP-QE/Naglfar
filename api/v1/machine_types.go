@@ -129,7 +129,7 @@ type MachineList struct {
 }
 
 func (r *Machine) Available() *AvailableResource {
-	if r.Status.Info != nil {
+	if r.Status.Info == nil {
 		return nil
 	}
 
