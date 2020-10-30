@@ -24,6 +24,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ref "k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,22 +35,24 @@ import (
 // TestResourceReconciler reconciles a TestResource object
 type TestResourceReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Ctx     context.Context
+	Log     logr.Logger
+	Eventer record.EventRecorder
+	Scheme  *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch
 
 func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
-	ctx := context.Background()
 	log := r.Log.WithValues("testresource", req.NamespacedName)
 
 	resource := new(naglfarv1.TestResource)
 
-	if err = r.Get(ctx, req.NamespacedName, resource); err != nil {
+	if err = r.Get(r.Ctx, req.NamespacedName, resource); err != nil {
 		log.Error(err, "unable to fetch TestResource")
 
 		// maybe resource deleted
@@ -62,10 +65,10 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 	switch resource.Status.State {
 	case "":
 		resource.Status.State = naglfarv1.ResourcePending
-		err = r.Status().Update(ctx, resource)
+		err = r.Status().Update(r.Ctx, resource)
 		return
 	case naglfarv1.ResourcePending:
-		return r.reconcileStatePending(ctx, log, resource)
+		return r.reconcileStatePending(log, resource)
 	}
 
 	return
@@ -79,8 +82,6 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 		return
 	}
 
-	ctx := context.Background()
-
 	for _, refer := range machine.Status.TestResources {
 		resource := new(naglfarv1.TestResource)
 
@@ -88,7 +89,7 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 
 		log := r.Log.WithValues("testresource", name)
 
-		if err = r.Get(ctx, name, resource); err != nil {
+		if err = r.Get(r.Ctx, name, resource); err != nil {
 			log.Error(err, "unable to fetch TestResource")
 			if apierrors.IsNotFound(err) {
 				// ignore error, resource may deleted
@@ -154,86 +155,79 @@ func (r *TestResourceReconciler) tryRequestResource(machine *naglfarv1.Machine, 
 		return
 	}
 
-	machine.Status.TestResources = append(machine.Status.TestResources, *resourceRef)
-
-	if err = r.Status().Update(context.TODO(), machine); err != nil {
-		if apierrors.IsConflict(err) {
-			err = nil
-			requeue = true
-		}
-		return
-	}
-
-	// TODO: may cause resource leak; fix it
 	machineRef, err := ref.GetReference(r.Scheme, machine)
 	if err != nil {
 		log.Error(err, "unable to make reference to machine", "machine", machine)
 		return
 	}
 
+	machine.Status.TestResources = append(machine.Status.TestResources, *resourceRef)
 	newResource.Status.HostMachine = machineRef
 
 	return
 }
 
-func (r *TestResourceReconciler) reconcileStatePending(ctx context.Context, log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	overflow := false
+func (r *TestResourceReconciler) updateResource(machine *naglfarv1.Machine, resource *naglfarv1.TestResource) (requeue bool) {
+	log := r.Log.WithValues("testresource", resource.Name)
+	if resource.Status.State != naglfarv1.ResourcePending {
+		if err := r.Status().Update(r.Ctx, resource); err != nil {
+			log.Info("fail to update, maybe conflict", "testresource", types.NamespacedName{Namespace: resource.Name, Name: resource.Name})
+			return true
+		}
+	}
+
+	if resource.Status.State == naglfarv1.ResourceUninitialized {
+		if err := r.Status().Update(r.Ctx, machine); err != nil {
+			log.Info("fail to update, maybe conflict", "machine", machine.Name)
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	machine := new(naglfarv1.Machine)
+	var machines []naglfarv1.Machine
 
 	defer func() {
-		if resource.Status.State != naglfarv1.ResourcePending {
-
-			// TODO: event this error
-			_ = r.Status().Update(ctx, resource)
+		if !result.Requeue {
+			result.Requeue = r.updateResource(machine, resource)
 		}
 	}()
 
 	if resource.Spec.TestMachineResource != "" {
-		machine := new(naglfarv1.Machine)
-		if err = r.Get(ctx, types.NamespacedName{Namespace: "default", Name: resource.Spec.TestMachineResource}, machine); err != nil {
+		if err = r.Get(r.Ctx, types.NamespacedName{Namespace: "default", Name: resource.Spec.TestMachineResource}, machine); err != nil {
 			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", resource.Spec.TestMachineResource))
 			return
 		}
 
+		machines = append(machines, *machine)
+	} else {
+		var machineList naglfarv1.MachineList
+		options := make([]client.ListOption, 0)
+		if resource.Spec.MachineSelector != "" {
+			options = append(options, client.MatchingLabels{"type": resource.Spec.MachineSelector})
+		}
+
+		if err = r.List(r.Ctx, &machineList, options...); err != nil {
+			log.Error(err, "unable to list machines")
+			return
+		}
+
+		machines = machineList.Items
+	}
+
+	for _, *machine = range machines {
+		var overflow bool
 		overflow, result.Requeue, err = r.tryRequestResource(machine, resource)
 
 		if result.Requeue {
 			return
 		}
 
-		if err == nil && overflow {
-			err = fmt.Errorf("no enough resource on machine(%s)", resource.Spec.TestMachineResource)
-		}
-
 		if err != nil {
-			resource.Status.State = naglfarv1.ResourceFail
-		} else {
-			resource.Status.State = naglfarv1.ResourceUninitialized
-		}
-
-		return
-	}
-
-	var machines naglfarv1.MachineList
-	options := make([]client.ListOption, 0)
-	if resource.Spec.MachineSelector != "" {
-		options = append(options, client.MatchingLabels{"type": resource.Spec.MachineSelector})
-	}
-
-	if err = r.List(ctx, &machines, options...); err != nil {
-		log.Error(err, "unable to list machines")
-		return
-	}
-
-	for _, machine := range machines.Items {
-		overflow, result.Requeue, err = r.tryRequestResource(&machine, resource)
-
-		if result.Requeue {
-			return
-		}
-
-		if err != nil {
-			resource.Status.State = naglfarv1.ResourceFail
-			return
+			break
 		}
 
 		if overflow {
