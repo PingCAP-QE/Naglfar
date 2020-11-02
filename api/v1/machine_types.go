@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -61,8 +62,9 @@ type MachineInfo struct {
 }
 
 type DiskResource struct {
-	Size BytesSize `json:"size"`
-	Kind DiskKind  `json:"kind"`
+	Size      BytesSize `json:"size"`
+	Kind      DiskKind  `json:"kind"`
+	MountPath string    `json:"mountPath"`
 }
 
 type AvailableResource struct {
@@ -85,7 +87,19 @@ type MachineSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// default 22
 	// +optional
-	Port int `json:"port"`
+	SSHPort int `json:"sshPort"`
+
+	// +kubebuilder:validation:Minimum=0
+	// default 2375 (unencrypted) or 2376(encrypted)
+	// +optional
+	DockerPort int `json:"dockerPort"`
+
+	// +optional
+	DockerVersion string `json:"dockerVersion,omitempty"`
+
+	// default false
+	// +optional
+	DockerTLS bool `json:"dockerTLS"`
 
 	// default 10s
 	// +optional
@@ -93,6 +107,9 @@ type MachineSpec struct {
 
 	// +optional
 	Reserve *ReserveResources `json:"reserve"`
+
+	// +optional
+	ExclusiveDisks []string `json:"exclusiveDisks,omitempty"`
 }
 
 // MachineStatus defines the observed state of Machine
@@ -138,24 +155,38 @@ func (r *Machine) Available() *AvailableResource {
 	available.CPUPercent = r.Status.Info.Threads*100 - r.Spec.Reserve.CPUPercent
 	available.Disks = make(map[string]DiskResource)
 
+	exclusiveSet := make(map[string]bool)
+
+	for _, device := range r.Spec.ExclusiveDisks {
+		exclusiveSet[device] = true
+	}
+
 	for device, disk := range r.Status.Info.StorageDevices {
-		if disk.Used.Unwrap() != 0 {
-			continue
+		if _, ok := exclusiveSet[device]; ok {
+			diskResource := DiskResource{
+				Size:      disk.Total.Sub(disk.Used),
+				MountPath: disk.MountPoint,
+			}
+
+			if strings.HasPrefix(path.Base(device), "nvme") {
+				diskResource.Kind = NVMEKind
+			} else {
+				diskResource.Kind = OtherKind
+			}
+
+			available.Disks[device] = diskResource
 		}
-
-		diskResource := DiskResource{}
-		diskResource.Size = disk.Total
-
-		if strings.HasPrefix(path.Base(device), "nvme") {
-			diskResource.Kind = NVMEKind
-		} else {
-			diskResource.Kind = OtherKind
-		}
-
-		available.Disks[device] = diskResource
 	}
 
 	return available
+}
+
+func (r *Machine) DockerURL() string {
+	scheme := "http"
+	if r.Spec.DockerTLS {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, r.Spec.Host, r.Spec.DockerPort)
 }
 
 func init() {

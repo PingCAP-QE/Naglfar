@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,9 +28,10 @@ const (
 	ResourceFail                        = "fail"
 	ResourceUninitialized               = "uninitialized"
 	ResourceReady                       = "ready"
+	ResourceFinish                      = "finish"
 )
 
-// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready
+// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish
 type ResourceState string
 
 type DiskSpec struct {
@@ -44,10 +47,21 @@ type DiskSpec struct {
 }
 
 type DiskStatus struct {
-	Kind      DiskKind  `json:"kind"`
-	Size      BytesSize `json:"size"`
-	Device    string    `json:"device"`
-	MountPath string    `json:"mountPath"`
+	Kind       DiskKind  `json:"kind"`
+	Size       BytesSize `json:"size"`
+	Device     string    `json:"device"`
+	OriginPath string    `json:"originPath"`
+	MountPath  string    `json:"mountPath"`
+}
+
+type ContainerStat struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	ExitCode   int    `json:"exitCode"`
+	Error      string `json:"error,omitempty"`
+	StartedAt  string `json:"startedAt,omitempty"`
+	FinishedAt string `json:"finishedAt,omitempty"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -63,14 +77,23 @@ type TestResourceSpec struct {
 	CPUPercent int32 `json:"cpuPercent"`
 
 	// +optional
-	MachineSelector string `json:"machineSelector"`
+	MachineSelector string `json:"machineSelector,omitempty"`
 
 	// +optional
-	Disks map[string]DiskSpec `json:"disks"`
+	Disks map[string]DiskSpec `json:"disks,omitempty"`
 
 	// If sets, it means the static machine is required
 	// +optional
 	TestMachineResource string `json:"testMachineResource,omitempty"`
+
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// +optional
+	Commands []string `json:"commands,omitempty"`
+
+	// +optional
+	WorkingDir string `json:"workingDir,omitempty"`
 }
 
 // TestResourceStatus defines the observed state of TestResource
@@ -87,6 +110,9 @@ type TestResourceStatus struct {
 
 	// +optional
 	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
+
+	// +optional
+	Container *ContainerStat `json:"container;omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -108,6 +134,10 @@ type TestResourceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TestResource `json:"items"`
+}
+
+func (r *TestResource) ContainerName() string {
+	return fmt.Sprintf("%s:%s/%s", r.Kind, r.Namespace, r.Name)
 }
 
 func init() {

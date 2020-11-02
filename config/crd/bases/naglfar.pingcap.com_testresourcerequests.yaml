@@ -47,6 +47,10 @@ spec:
                   spec:
                     description: TestResourceSpec defines the desired state of TestResource
                     properties:
+                      commands:
+                        items:
+                          type: string
+                        type: array
                       cpuPercent:
                         format: int32
                         type: integer
@@ -65,6 +69,8 @@ spec:
                               type: string
                           type: object
                         type: object
+                      image:
+                        type: string
                       machineSelector:
                         type: string
                       memory:

@@ -36,14 +36,19 @@ spec:
         spec:
           description: MachineSpec defines the desired state of Machine
           properties:
+            dockerPort:
+              description: default 2375 (unencrypted) or 2376(encrypted)
+              minimum: 0
+              type: integer
+            dockerTLS:
+              description: default false
+              type: boolean
+            dockerVersion:
+              type: string
             host:
               type: string
             password:
               type: string
-            port:
-              description: default 22
-              minimum: 0
-              type: integer
             reserve:
               properties:
                 cpuPercent:
@@ -54,6 +59,10 @@ spec:
                   description: default 1 GiB
                   type: string
               type: object
+            sshPort:
+              description: default 22
+              minimum: 0
+              type: integer
             timeout:
               description: default 10s
               type: string

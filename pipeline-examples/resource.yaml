@@ -7,6 +7,9 @@ spec:
   memory: 2GB
   cpuPercent: 600
   machineSelector: physical
+  image: alpine:latest
+  commands:
+    - echo 'Hello World!'
   disks:
     data1: 
       kind: nvme

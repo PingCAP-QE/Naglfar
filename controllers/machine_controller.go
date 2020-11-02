@@ -89,7 +89,7 @@ func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
 		User:     spec.Username,
 		Password: spec.Password,
 		Server:   spec.Host,
-		Port:     strconv.Itoa(spec.Port),
+		Port:     strconv.Itoa(spec.SSHPort),
 		Timeout:  timeout,
 	}
 }

@@ -19,7 +19,12 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	dockerTypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
+	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,9 +74,17 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return
 	case naglfarv1.ResourcePending:
 		return r.reconcileStatePending(log, resource)
+	case naglfarv1.ResourceUninitialized:
+		return r.reconcileStateUninitialized(log, resource)
+	case naglfarv1.ResourceFail:
+		return r.reconcileStateFail(log, resource)
+	case naglfarv1.ResourceReady:
+		return r.reconcileStateReady(log, resource)
+	case naglfarv1.ResourceFinish:
+		return r.reconcileStateFinish(log, resource)
+	default:
+		return
 	}
-
-	return
 }
 
 func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, newResource *naglfarv1.TestResource) (overflow bool, requeue bool, err error) {
@@ -122,10 +135,11 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 
 				delete(rest.Disks, name)
 				newResource.Status.DiskStat[name] = naglfarv1.DiskStatus{
-					Kind:      disk.Kind,
-					Size:      diskResource.Size,
-					Device:    device,
-					MountPath: disk.MountPath,
+					Kind:       disk.Kind,
+					Size:       diskResource.Size,
+					Device:     device,
+					OriginPath: diskResource.MountPath,
+					MountPath:  disk.MountPath,
 				}
 
 				break
@@ -167,7 +181,7 @@ func (r *TestResourceReconciler) tryRequestResource(machine *naglfarv1.Machine, 
 	return
 }
 
-func (r *TestResourceReconciler) updateResource(machine *naglfarv1.Machine, resource *naglfarv1.TestResource) (requeue bool) {
+func (r *TestResourceReconciler) updatePendingResource(machine *naglfarv1.Machine, resource *naglfarv1.TestResource) (requeue bool) {
 	log := r.Log.WithValues("testresource", resource.Name)
 	if resource.Status.State != naglfarv1.ResourcePending {
 		if err := r.Status().Update(r.Ctx, resource); err != nil {
@@ -192,7 +206,7 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 
 	defer func() {
 		if !result.Requeue {
-			result.Requeue = r.updateResource(machine, resource)
+			result.Requeue = r.updatePendingResource(machine, resource)
 		}
 	}()
 
@@ -240,6 +254,160 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 
 	resource.Status.State = naglfarv1.ResourceFail
 
+	return
+}
+
+func (r *TestResourceReconciler) checkHostMachine(log logr.Logger, targetResource *naglfarv1.TestResource) (machine *naglfarv1.Machine, err error) {
+	if targetResource.Status.HostMachine != nil {
+		host := targetResource.Status.HostMachine
+		hostname := types.NamespacedName{Namespace: host.Namespace, Name: host.Name}
+		machine = new(naglfarv1.Machine)
+		err = r.Get(r.Ctx, hostname, machine)
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", hostname))
+			return
+		}
+
+		if err != nil {
+			// machine not found
+			targetResource.Status.HostMachine = nil
+		} else {
+			for _, resourceRef := range machine.Status.TestResources {
+				if resourceRef.Kind == targetResource.Kind && resourceRef.Namespace == targetResource.Namespace && resourceRef.Name == targetResource.Name {
+					return
+				}
+			}
+
+			// resource not found
+			targetResource.Status.HostMachine = nil
+		}
+	}
+
+	if targetResource.Status.HostMachine == nil {
+		targetResource.Status.State = naglfarv1.ResourcePending
+		err = r.Status().Update(r.Ctx, targetResource)
+	}
+
+	return
+}
+
+func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
+	mounts := make([]mount.Mount, 0)
+	for _, disk := range resource.Status.DiskStat {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: disk.OriginPath,
+			Target: disk.MountPath,
+		})
+	}
+
+	config := &container.Config{
+		Image:      resource.Spec.Image,
+		WorkingDir: resource.Spec.WorkingDir,
+	}
+
+	hostConfig := &container.HostConfig{
+		Mounts: mounts,
+		Resources: container.Resources{
+			Memory:   resource.Spec.Memory.Unwrap(),
+			CPUQuota: int64(resource.Spec.CPUPercent) * 1000,
+		},
+	}
+
+	if len(resource.Spec.Commands) != 0 {
+		script := strings.Join(resource.Spec.Commands, ";")
+		config.Cmd = []string{"bash", "-c", script}
+	}
+
+	containerName := resource.ContainerName()
+
+	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
+	if err != nil {
+		r.Eventer.Event(resource, "Warning", "ContainerCreate", err.Error())
+		return
+	}
+
+	for _, warning := range resp.Warnings {
+		r.Eventer.Event(resource, "Warning", "ContainerCreate", warning)
+	}
+
+	return
+}
+
+func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	machine, err := r.checkHostMachine(log, resource)
+	if err != nil {
+		return
+	}
+
+	if resource.Spec.Image == "" {
+		return
+	}
+
+	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	if err != nil {
+		return
+	}
+
+	containerName := resource.ContainerName()
+	var stats dockerTypes.ContainerJSON
+	stats, err = dockerClient.ContainerInspect(r.Ctx, containerName)
+
+	if resource.Status.Container == nil && docker.IsErrContainerNotFound(err) {
+		err = r.createContainer(resource, dockerClient)
+		result.Requeue = true
+		return
+	}
+
+	if err != nil {
+		return
+	}
+
+	if resource.Status.Container == nil {
+		resource.Status.Container = &naglfarv1.ContainerStat{
+			ID:         stats.ID,
+			Name:       containerName,
+			Status:     stats.State.Status,
+			ExitCode:   stats.State.ExitCode,
+			Error:      stats.State.Error,
+			StartedAt:  stats.State.StartedAt,
+			FinishedAt: stats.State.FinishedAt,
+		}
+	}
+
+	if stats.State.Restarting || stats.State.StartedAt == "" {
+		result.Requeue = true
+		return
+	}
+
+	if stats.State.Running {
+		resource.Status.State = naglfarv1.ResourceReady
+	}
+
+	if stats.State.FinishedAt != "" {
+		resource.Status.State = naglfarv1.ResourceFinish
+	}
+
+	if stats.State.OOMKilled {
+		resource.Status.State = naglfarv1.ResourceFail
+	}
+
+	err = r.Status().Update(r.Ctx, resource)
+	return
+}
+
+// TODO: complete reconcileStateFail
+func (r *TestResourceReconciler) reconcileStateFail(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	return
+}
+
+// TODO: complete reconcileStateReady
+func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	return
+}
+
+// TODO: complete reconcileStateFinish
+func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	return
 }
 

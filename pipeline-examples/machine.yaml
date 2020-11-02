@@ -8,6 +8,12 @@ spec:
   username: root
   password: root
   host: 172.16.0.1
+  sshPort: 22
+  dockerPort: 2376
+  dockerTLS: true
   reserve:
     memory: 2GB
     cpuPercent: 200
+  exclusiveDisks:
+    - /dev/nvme0n1
+    - /dev/nvme2n1
