@@ -20,10 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
-	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/ssh"
 )
 
 // MachineReconciler reconciles a Machine object
@@ -84,26 +83,18 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
-	timeout, _ := time.ParseDuration(spec.Timeout)
-	return &easyssh.MakeConfig{
-		User:     spec.Username,
-		Password: spec.Password,
-		Server:   spec.Host,
-		Port:     strconv.Itoa(spec.Port),
-		Timeout:  timeout,
-	}
-}
-
 func fetchMachineInfo(machine *naglfarv1.Machine) (*naglfarv1.MachineInfo, error) {
 	osStatScript, err := ScriptBox.FindString("os-stat.sh")
 
 	if err != nil {
 		return nil, err
 	}
-
-	ssh := MakeSSHConfig(&machine.Spec)
-
+	timeout, err := time.ParseDuration(machine.Spec.Timeout)
+	if err != nil {
+		return nil, err
+	}
+	ssh := ssh.MakeSSHConfig(machine.Spec.Username, machine.Spec.Password, machine.Spec.Host,
+		machine.Spec.Port, timeout)
 	stdout, stderr, done, err := ssh.Run(osStatScript)
 
 	if err != nil {

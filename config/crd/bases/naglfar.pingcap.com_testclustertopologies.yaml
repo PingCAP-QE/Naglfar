@@ -15,6 +15,8 @@ spec:
     plural: testclustertopologies
     singular: testclustertopology
   scope: Namespaced
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: TestClusterTopology is the Schema for the testclustertopologies
@@ -36,32 +38,120 @@ spec:
           description: TestClusterTopologySpec defines the desired state of TestClusterTopology
           properties:
             resourceRequest:
+              description: ResourceRequest cannot be empty if the tidbCluster field
+                is set
               type: string
             tidbCluster:
               properties:
+                control:
+                  description: Control machine host
+                  type: string
+                grafana:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
                 monitor:
                   items:
-                    type: string
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    - logDir
+                    type: object
                   type: array
                 pd:
                   items:
-                    type: string
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    - logDir
+                    type: object
                   type: array
                 tidb:
+                  description: TiDB machine hosts
                   items:
-                    type: string
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                    required:
+                    - deployDir
+                    - host
+                    - logDir
+                    type: object
                   type: array
                 tikv:
+                  description: TiKV machine hosts
                   items:
-                    type: string
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        description: default 20160
+                        type: integer
+                      statusPort:
+                        description: default 20180
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    - logDir
+                    - port
+                    - statusPort
+                    type: object
                   type: array
+                version:
+                  description: 'TODO: add a deploy version spec: clusterName, base
+                    version, component versions(for PR and self build version) etc.'
+                  properties:
+                    version:
+                      type: string
+                  required:
+                  - version
+                  type: object
+              required:
+              - control
+              - version
               type: object
-            type:
-              enum:
-              - tidb-cluster
-              type: string
-          required:
-          - type
           type: object
         status:
           description: TestClusterTopologyStatus defines the observed state of TestClusterTopology

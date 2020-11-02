@@ -19,15 +19,17 @@ COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
 COPY scripts/ scripts/
+COPY pkg/ pkg/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on packr build -a -o manager main.go
+# Install insecure_key
+COPY docker/insecure_key /root/insecure_key
+RUN chmod 600 /root/insecure_key
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.12
 WORKDIR /
 COPY --from=builder /workspace/manager .
-USER nonroot:nonroot
+COPY --from=builder /root/insecure_key /root/insecure_key
 
 ENTRYPOINT ["/manager"]

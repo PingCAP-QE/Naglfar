@@ -73,6 +73,10 @@ type TestResourceStatus struct {
 	// +optional
 	HostMachine string `json:"hostMachine"`
 
+	// ClusterIP is the ip address of the container in the overlay(or calico) network
+	// +optional
+	ClusterIP string `json:"clusterIP"`
+
 	// +optional
 	DiskStat []*DiskStatus `json:"diskStat,omitempty"`
 

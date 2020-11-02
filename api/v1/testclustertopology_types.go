@@ -23,19 +23,77 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	ClusterTopologyStatePending ClusterTopologyState = "Pending"
+	ClusterTopologyStateReady   ClusterTopologyState = "Ready"
+)
+
+// TODO: add a deploy version spec: clusterName, base version, component versions(for PR and self build version) etc.
+type TiDBClusterVersion struct {
+	Version string `json:"version"`
+}
+
+type TiDBSpec struct {
+	Host      string `json:"host"`
+	DeployDir string `json:"deployDir"`
+	// +optional
+	DataDir string `json:"dataDir"`
+	LogDir  string `json:"logDir"`
+}
+
+type PDSpec struct {
+	Host      string `json:"host"`
+	DeployDir string `json:"deployDir"`
+	DataDir   string `json:"dataDir"`
+	LogDir    string `json:"logDir"`
+}
+
+type TiKVSpec struct {
+	Host string `json:"host"`
+	// default 20160
+	Port int `json:"port"`
+	// default 20180
+	StatusPort int    `json:"statusPort"`
+	DeployDir  string `json:"deployDir"`
+	DataDir    string `json:"dataDir"`
+	LogDir     string `json:"logDir"`
+}
+
+type PrometheusSpec struct {
+	Host      string `json:"host"`
+	DeployDir string `json:"deployDir"`
+	DataDir   string `json:"dataDir"`
+	LogDir    string `json:"logDir"`
+}
+
+type GrafanaSpec struct {
+	Host      string `json:"host"`
+	DeployDir string `json:"deployDir"`
+}
+
 type TiDBCluster struct {
+	Version TiDBClusterVersion `json:"version"`
+
+	// Control machine host
+	Control string `json:"control"`
+
+	// TiDB machine hosts
+	// +optional
+	TiDB []TiDBSpec `json:"tidb,omitempty"`
+
+	// TiKV machine hosts
+	// +optional
+	TiKV []TiKVSpec `json:"tikv,omitempty"`
+	// PD machine hosts
 
 	// +optional
-	TiDB []string `json:"tidb"`
+	PD []PDSpec `json:"pd"`
 
 	// +optional
-	TiKV []string `json:"tikv"`
+	Monitor []PrometheusSpec `json:"monitor,omitempty"`
 
 	// +optional
-	PD []string `json:"pd"`
-
-	// +optional
-	Monitor []string `json:"monitor"`
+	Grafana []GrafanaSpec `json:"grafana,omitempty"`
 }
 
 // TestClusterTopologySpec defines the desired state of TestClusterTopology
@@ -43,9 +101,7 @@ type TestClusterTopologySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// +kubebuilder:validation:Enum=tidb-cluster
-	Type string `json:"type"`
-
+	// ResourceRequest cannot be empty if the tidbCluster field is set
 	// +optional
 	ResourceRequest string `json:"resourceRequest,omitempty"`
 
@@ -53,17 +109,20 @@ type TestClusterTopologySpec struct {
 	TiDBCluster *TiDBCluster `json:"tidbCluster,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Pending;Ready
+type ClusterTopologyState string
+
 // TestClusterTopologyStatus defines the observed state of TestClusterTopology
 type TestClusterTopologyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// +kubebuilder:validation:Enum=Pending;Ready
 	// default Pending
-	State string `json:"state,omitempty"`
+	State ClusterTopologyState `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // TestClusterTopology is the Schema for the testclustertopologies API
 type TestClusterTopology struct {
