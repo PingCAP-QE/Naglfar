@@ -16,4 +16,4 @@ spec:
     cpuPercent: 200
   exclusiveDisks:
     - /dev/nvme0n1
-    - /dev/nvme2n1
+    - /dev/nvme1n1
