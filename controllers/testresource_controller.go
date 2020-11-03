@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
 	docker "github.com/docker/docker/client"
@@ -59,12 +60,17 @@ func stringsRemove(list []string, target string) []string {
 func resourcesRemove(list []corev1.ObjectReference, resource *naglfarv1.TestResource) []corev1.ObjectReference {
 	newList := make([]corev1.ObjectReference, 0, len(list)-1)
 	for _, elem := range list {
-		if elem.Kind == resource.Kind && elem.Namespace == resource.Namespace && elem.Name == elem.Name {
+		if elem.Kind == resource.Kind && elem.Namespace == resource.Namespace && elem.Name == resource.Name {
 			continue
 		}
 		newList = append(newList, elem)
 	}
 	return newList
+}
+
+func timeIsZero(timeStr string) bool {
+	datatime, err := time.Parse(time.RFC3339, timeStr)
+	return err == nil && datatime.IsZero()
 }
 
 // TestResourceReconciler reconciles a TestResource object
@@ -192,7 +198,7 @@ func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, mach
 		return
 	}
 
-	if stats.State.StartedAt == "" {
+	if timeIsZero(stats.State.StartedAt) {
 		err = dockerClient.ContainerStart(r.Ctx, cleanerName, dockerTypes.ContainerStartOptions{})
 		if err == nil {
 			requeue = true
@@ -209,6 +215,8 @@ func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, mach
 	if code != 0 {
 		r.Eventer.Eventf(resource, "Warning", "Clean", "fail to clean container: exit(%d)", code)
 	}
+
+	err = dockerClient.ContainerRemove(r.Ctx, cleanerName, dockerTypes.ContainerRemoveOptions{})
 
 	return
 }
@@ -252,6 +260,10 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 			}
 			continue
 		}
+	}
+
+	if newResource.Status.DiskStat == nil {
+		newResource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
 	}
 
 	for name, disk := range newResource.Spec.Disks {
@@ -480,7 +492,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		return
 	}
 
-	if stats.State.StartedAt == "" {
+	if timeIsZero(stats.State.StartedAt) {
 		err = dockerClient.ContainerStart(r.Ctx, containerName, dockerTypes.ContainerStartOptions{})
 		if err == nil {
 			result.Requeue = true
@@ -497,7 +509,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		resource.Status.State = naglfarv1.ResourceReady
 	}
 
-	if stats.State.FinishedAt != "" {
+	if !timeIsZero(stats.State.FinishedAt) {
 		resource.Status.State = naglfarv1.ResourceFinish
 	}
 

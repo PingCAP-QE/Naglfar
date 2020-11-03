@@ -130,11 +130,11 @@ type TestResourceList struct {
 }
 
 func (r *TestResource) ContainerName() string {
-	return fmt.Sprintf("%s:%s/%s", r.Kind, r.Namespace, r.Name)
+	return fmt.Sprintf("%s.%s", r.Namespace, r.Name)
 }
 
 func (r *TestResource) ContainerCleanerName() string {
-	return fmt.Sprintf("%sCleaner:%s/%s", r.Kind, r.Namespace, r.Name)
+	return fmt.Sprintf("%s.%s-cleaner", r.Namespace, r.Name)
 }
 
 func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConfig) {

@@ -45,6 +45,10 @@ spec:
               type: boolean
             dockerVersion:
               type: string
+            exclusiveDisks:
+              items:
+                type: string
+              type: array
             host:
               type: string
             password:

@@ -67,6 +67,8 @@ spec:
             testMachineResource:
               description: If sets, it means the static machine is required
               type: string
+            workingDir:
+              type: string
           required:
           - cpuPercent
           - memory
@@ -74,8 +76,6 @@ spec:
         status:
           description: TestResourceStatus defines the observed state of TestResource
           properties:
-            container;omitempty:
-              type: string
             diskStat:
               additionalProperties:
                 properties:
@@ -88,12 +88,15 @@ spec:
                     type: string
                   mountPath:
                     type: string
+                  originPath:
+                    type: string
                   size:
                     type: string
                 required:
                 - device
                 - kind
                 - mountPath
+                - originPath
                 - size
                 type: object
               type: object
@@ -141,9 +144,8 @@ spec:
               - fail
               - uninitialized
               - ready
+              - finish
               type: string
-          required:
-          - container;omitempty
           type: object
       type: object
   version: v1

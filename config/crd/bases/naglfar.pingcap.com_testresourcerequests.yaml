@@ -78,6 +78,8 @@ spec:
                       testMachineResource:
                         description: If sets, it means the static machine is required
                         type: string
+                      workingDir:
+                        type: string
                     required:
                     - cpuPercent
                     - memory

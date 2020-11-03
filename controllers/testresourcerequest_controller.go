@@ -144,6 +144,6 @@ func (r *TestResourceRequestReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&naglfarv1.TestResourceRequest{}).
-		// Owns(&naglfarv1.TestResource{}).
+		Owns(&naglfarv1.TestResource{}).
 		Complete(r)
 }
