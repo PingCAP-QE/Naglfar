@@ -19,13 +19,11 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	dockerTypes "github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
 	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,6 +34,38 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 )
+
+const resourceFinalizer = "testresource.naglfar.pingcap.com"
+
+func stringsContains(list []string, target string) bool {
+	for _, elem := range list {
+		if elem == target {
+			return true
+		}
+	}
+	return false
+}
+
+func stringsRemove(list []string, target string) []string {
+	newList := make([]string, 0, len(list)-1)
+	for _, elem := range list {
+		if target != elem {
+			newList = append(newList, elem)
+		}
+	}
+	return newList
+}
+
+func resourcesRemove(list []corev1.ObjectReference, resource *naglfarv1.TestResource) []corev1.ObjectReference {
+	newList := make([]corev1.ObjectReference, 0, len(list)-1)
+	for _, elem := range list {
+		if elem.Kind == resource.Kind && elem.Namespace == resource.Namespace && elem.Name == elem.Name {
+			continue
+		}
+		newList = append(newList, elem)
+	}
+	return newList
+}
 
 // TestResourceReconciler reconciles a TestResource object
 type TestResourceReconciler struct {
@@ -67,6 +97,40 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 
 	log.Info("resource reconcile", "content", resource)
 
+	if resource.ObjectMeta.DeletionTimestamp.IsZero() && !stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
+		resource.ObjectMeta.Finalizers = append(resource.ObjectMeta.Finalizers, resourceFinalizer)
+		err = r.Update(context.Background(), resource)
+		return
+	}
+
+	if !resource.ObjectMeta.DeletionTimestamp.IsZero() && stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
+		var machine *naglfarv1.Machine
+
+		machine, err = r.checkHostMachine(log, resource)
+
+		if err != nil {
+			return
+		}
+
+		if machine != nil {
+			result.Requeue, err = r.finalize(resource, machine)
+			if err != nil || result.Requeue {
+				return
+			}
+
+			machine.Status.TestResources = resourcesRemove(machine.Status.TestResources, resource)
+			err = r.Update(context.Background(), machine)
+
+			if err != nil {
+				return
+			}
+		}
+
+		resource.ObjectMeta.Finalizers = stringsRemove(resource.ObjectMeta.Finalizers, resourceFinalizer)
+		err = r.Update(context.Background(), resource)
+		return
+	}
+
 	switch resource.Status.State {
 	case "":
 		resource.Status.State = naglfarv1.ResourcePending
@@ -85,6 +149,68 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 	default:
 		return
 	}
+}
+
+func (r *TestResourceReconciler) removeContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
+	containerName := resource.ContainerName()
+	_, err = dockerClient.ContainerInspect(r.Ctx, containerName)
+
+	if err != nil {
+		// ignore not found
+		if docker.IsErrContainerNotFound(err) {
+			err = nil
+		}
+		return
+	}
+
+	err = dockerClient.ContainerRemove(r.Ctx, containerName, dockerTypes.ContainerRemoveOptions{Force: true})
+	return
+}
+
+func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, machine *naglfarv1.Machine) (requeue bool, err error) {
+	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	if err != nil {
+		return
+	}
+
+	if err = r.removeContainer(resource, dockerClient); err != nil {
+		return
+	}
+
+	cleanerName := resource.ContainerCleanerName()
+	stats, err := dockerClient.ContainerInspect(r.Ctx, cleanerName)
+
+	if err != nil {
+		if !docker.IsErrContainerNotFound(err) {
+			return
+		}
+
+		err = r.createCleaner(resource, dockerClient)
+		if err == nil {
+			requeue = true
+		}
+		return
+	}
+
+	if stats.State.StartedAt == "" {
+		err = dockerClient.ContainerStart(r.Ctx, cleanerName, dockerTypes.ContainerStartOptions{})
+		if err == nil {
+			requeue = true
+		}
+		return
+	}
+
+	code, err := dockerClient.ContainerWait(r.Ctx, cleanerName)
+
+	if err != nil {
+		return
+	}
+
+	if code != 0 {
+		r.Eventer.Eventf(resource, "Warning", "Clean", "fail to clean container: exit(%d)", code)
+	}
+
+	return
 }
 
 func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, newResource *naglfarv1.TestResource) (overflow bool, requeue bool, err error) {
@@ -268,58 +394,23 @@ func (r *TestResourceReconciler) checkHostMachine(log logr.Logger, targetResourc
 			return
 		}
 
-		if err != nil {
-			// machine not found
-			targetResource.Status.HostMachine = nil
-		} else {
+		if err == nil {
 			for _, resourceRef := range machine.Status.TestResources {
 				if resourceRef.Kind == targetResource.Kind && resourceRef.Namespace == targetResource.Namespace && resourceRef.Name == targetResource.Name {
 					return
 				}
 			}
-
 			// resource not found
-			targetResource.Status.HostMachine = nil
+			machine = nil
 		}
-	}
-
-	if targetResource.Status.HostMachine == nil {
-		targetResource.Status.State = naglfarv1.ResourcePending
-		err = r.Status().Update(r.Ctx, targetResource)
 	}
 
 	return
 }
 
 func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
-	mounts := make([]mount.Mount, 0)
-	for _, disk := range resource.Status.DiskStat {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: disk.OriginPath,
-			Target: disk.MountPath,
-		})
-	}
-
-	config := &container.Config{
-		Image:      resource.Spec.Image,
-		WorkingDir: resource.Spec.WorkingDir,
-	}
-
-	hostConfig := &container.HostConfig{
-		Mounts: mounts,
-		Resources: container.Resources{
-			Memory:   resource.Spec.Memory.Unwrap(),
-			CPUQuota: int64(resource.Spec.CPUPercent) * 1000,
-		},
-	}
-
-	if len(resource.Spec.Commands) != 0 {
-		script := strings.Join(resource.Spec.Commands, ";")
-		config.Cmd = []string{"bash", "-c", script}
-	}
-
 	containerName := resource.ContainerName()
+	config, hostConfig := resource.ContainerConfig()
 
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
 	if err != nil {
@@ -334,9 +425,33 @@ func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResourc
 	return
 }
 
+func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
+	containerName := resource.ContainerCleanerName()
+	config, hostConfig := resource.ContainerCleanerConfig()
+
+	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
+	if err != nil {
+		r.Eventer.Event(resource, "Warning", "CleanerCreate", err.Error())
+		return
+	}
+
+	for _, warning := range resp.Warnings {
+		r.Eventer.Event(resource, "Warning", "CleanerCreate", warning)
+	}
+
+	return
+}
+
 func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	machine, err := r.checkHostMachine(log, resource)
 	if err != nil {
+		return
+	}
+
+	if machine == nil {
+		resource.Status.HostMachine = nil
+		resource.Status.State = naglfarv1.ResourcePending
+		err = r.Status().Update(r.Ctx, resource)
 		return
 	}
 
@@ -353,29 +468,27 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	var stats dockerTypes.ContainerJSON
 	stats, err = dockerClient.ContainerInspect(r.Ctx, containerName)
 
-	if resource.Status.Container == nil && docker.IsErrContainerNotFound(err) {
-		err = r.createContainer(resource, dockerClient)
-		result.Requeue = true
-		return
-	}
-
 	if err != nil {
+		if !docker.IsErrContainerNotFound(err) {
+			return
+		}
+
+		err = r.createContainer(resource, dockerClient)
+		if err == nil {
+			result.Requeue = true
+		}
 		return
 	}
 
-	if resource.Status.Container == nil {
-		resource.Status.Container = &naglfarv1.ContainerStat{
-			ID:         stats.ID,
-			Name:       containerName,
-			Status:     stats.State.Status,
-			ExitCode:   stats.State.ExitCode,
-			Error:      stats.State.Error,
-			StartedAt:  stats.State.StartedAt,
-			FinishedAt: stats.State.FinishedAt,
+	if stats.State.StartedAt == "" {
+		err = dockerClient.ContainerStart(r.Ctx, containerName, dockerTypes.ContainerStartOptions{})
+		if err == nil {
+			result.Requeue = true
 		}
+		return
 	}
 
-	if stats.State.Restarting || stats.State.StartedAt == "" {
+	if stats.State.Restarting {
 		result.Requeue = true
 		return
 	}
@@ -408,6 +521,7 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 
 // TODO: complete reconcileStateFinish
 func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	// TODO: collect logs
 	return
 }
 

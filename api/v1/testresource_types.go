@@ -18,7 +18,11 @@ package v1
 
 import (
 	"fmt"
+	"path"
+	"strings"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,6 +34,8 @@ const (
 	ResourceReady                       = "ready"
 	ResourceFinish                      = "finish"
 )
+
+const cleanerImage = "alpine:latest"
 
 // +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish
 type ResourceState string
@@ -52,16 +58,6 @@ type DiskStatus struct {
 	Device     string    `json:"device"`
 	OriginPath string    `json:"originPath"`
 	MountPath  string    `json:"mountPath"`
-}
-
-type ContainerStat struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	ExitCode   int    `json:"exitCode"`
-	Error      string `json:"error,omitempty"`
-	StartedAt  string `json:"startedAt,omitempty"`
-	FinishedAt string `json:"finishedAt,omitempty"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -110,9 +106,6 @@ type TestResourceStatus struct {
 
 	// +optional
 	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
-
-	// +optional
-	Container *ContainerStat `json:"container;omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -138,6 +131,69 @@ type TestResourceList struct {
 
 func (r *TestResource) ContainerName() string {
 	return fmt.Sprintf("%s:%s/%s", r.Kind, r.Namespace, r.Name)
+}
+
+func (r *TestResource) ContainerCleanerName() string {
+	return fmt.Sprintf("%sCleaner:%s/%s", r.Kind, r.Namespace, r.Name)
+}
+
+func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConfig) {
+	mounts := make([]mount.Mount, 0)
+	for _, disk := range r.Status.DiskStat {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: disk.OriginPath,
+			Target: disk.MountPath,
+		})
+	}
+
+	config := &container.Config{
+		Image:      r.Spec.Image,
+		WorkingDir: r.Spec.WorkingDir,
+	}
+
+	hostConfig := &container.HostConfig{
+		Mounts: mounts,
+		Resources: container.Resources{
+			Memory:   r.Spec.Memory.Unwrap(),
+			CPUQuota: int64(r.Spec.CPUPercent) * 1000,
+		},
+	}
+
+	if len(r.Spec.Commands) != 0 {
+		script := strings.Join(r.Spec.Commands, ";")
+		config.Cmd = []string{"bash", "-c", script}
+	}
+
+	return config, hostConfig
+}
+
+func (r *TestResource) ContainerCleanerConfig() (*container.Config, *container.HostConfig) {
+	mounts := make([]mount.Mount, 0)
+	for _, disk := range r.Status.DiskStat {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: disk.OriginPath,
+			Target: disk.MountPath,
+		})
+	}
+
+	config := &container.Config{
+		Image: cleanerImage,
+	}
+
+	hostConfig := &container.HostConfig{
+		Mounts: mounts,
+	}
+
+	if len(mounts) > 0 {
+		config.Cmd = []string{"rm", "-rf"}
+		for _, mnt := range mounts {
+			config.Cmd = append(config.Cmd, path.Join(mnt.Target, "*"))
+		}
+	}
+
+	return config, hostConfig
 }
 
 func init() {
