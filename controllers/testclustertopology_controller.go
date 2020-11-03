@@ -84,6 +84,12 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 		if rr.Status.State != naglfarv1.TestResourceRequestReady {
+			// set the pending status when waiting for request being ready
+			ct.Status.State = naglfarv1.ClusterTopologyStatePending
+			if err := r.Status().Update(ctx, &ct); err != nil {
+				log.Error(err, "unable to update TestClusterTopology")
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		switch {
@@ -127,11 +133,11 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	for idx := range resourceList.Items {
 		resources = append(resources, &resourceList.Items[idx])
 	}
-	tiupCtl, err := tiup.MakeClusterManager(r.Log, ct.Spec.DeepCopy(), rr, resources)
+	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), rr, resources)
 	if err != nil {
 		return err
 	}
-	return tiupCtl.InstallCluster(ct.Name, ct.Spec.TiDBCluster.Version)
+	return tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version)
 }
 
 func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *naglfarv1.TestClusterTopology) error {

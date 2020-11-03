@@ -202,7 +202,7 @@ func MakeClusterManager(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 	}, nil
 }
 
-func (c *ClusterManager) InstallCluster(clusterName string, version naglfarv1.TiDBClusterVersion) error {
+func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, version naglfarv1.TiDBClusterVersion) error {
 	outfile, err := yaml.Marshal(c.spec)
 	if err != nil {
 		return err
@@ -210,7 +210,7 @@ func (c *ClusterManager) InstallCluster(clusterName string, version naglfarv1.Ti
 	if err := c.writeTopologyFileOnControl(outfile); err != nil {
 		return err
 	}
-	if err := c.deployCluster(clusterName, version.Version); err != nil {
+	if err := c.deployCluster(log, clusterName, version.Version); err != nil {
 		return err
 	}
 	return c.startCluster(clusterName)
@@ -244,19 +244,19 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 	if err != nil {
 		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
 	}
-	log.Info("inspect topology", "value", string(out))
+	log.V(2).Info("inspect the topology config generated", "value", string(out))
 	if err := client.Copy(bytes.NewReader(out), "/root/topology.yaml", "0655", int64(len(out))); err != nil {
 		return fmt.Errorf("error while copying file: %s", err)
 	}
 	return nil
 }
 
-func (c *ClusterManager) deployCluster(clusterName string, version string) error {
+func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
 	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
-		c.log.Error(err, "run command on remote failed",
+		log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostMachine, c.control.SSHPort),
 			"command", cmd,
 			"stderr", errStr)
