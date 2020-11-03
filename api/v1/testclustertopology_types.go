@@ -33,6 +33,15 @@ type TiDBClusterVersion struct {
 	Version string `json:"version"`
 }
 
+type ServerConfigs struct {
+	// +optional
+	TiDB string `json:"tidb,omitempty"`
+	// +optional
+	TiKV string `json:"tikv,omitempty"`
+	// +optional
+	PD string `json:"pd,omitempty"`
+}
+
 type TiDBSpec struct {
 	Host      string `json:"host"`
 	DeployDir string `json:"deployDir"`
@@ -74,6 +83,9 @@ type GrafanaSpec struct {
 type TiDBCluster struct {
 	Version TiDBClusterVersion `json:"version"`
 
+	// +optional
+	ServerConfigs ServerConfigs `json:"serverConfigs,omitempty"`
+
 	// Control machine host
 	Control string `json:"control"`
 
@@ -84,8 +96,8 @@ type TiDBCluster struct {
 	// TiKV machine hosts
 	// +optional
 	TiKV []TiKVSpec `json:"tikv,omitempty"`
-	// PD machine hosts
 
+	// PD machine hosts
 	// +optional
 	PD []PDSpec `json:"pd"`
 

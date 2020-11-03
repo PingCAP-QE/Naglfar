@@ -101,6 +101,7 @@ spec:
                                   type: object
                                 type: array
                               pd:
+                                description: PD machine hosts
                                 items:
                                   properties:
                                     dataDir:
@@ -118,6 +119,15 @@ spec:
                                   - logDir
                                   type: object
                                 type: array
+                              serverConfigs:
+                                properties:
+                                  pd:
+                                    type: string
+                                  tidb:
+                                    type: string
+                                  tikv:
+                                    type: string
+                                type: object
                               tidb:
                                 description: TiDB machine hosts
                                 items:

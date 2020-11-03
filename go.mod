@@ -13,7 +13,6 @@ require (
 	github.com/onsi/gomega v1.8.1
 	github.com/pingcap/tiup v1.2.2
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
-	golang.org/x/sys v0.0.0-20200420163511-1957bb5e6d1f
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.2
 	k8s.io/apimachinery v0.17.2

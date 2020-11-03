@@ -3,6 +3,8 @@ package tiup
 import (
 	"bytes"
 	"fmt"
+	"strings"
+
 	"github.com/bramvdbogaerde/go-scp"
 	"github.com/bramvdbogaerde/go-scp/auth"
 	"github.com/creasty/defaults"
@@ -10,7 +12,6 @@ import (
 	"github.com/pingcap/tiup/pkg/meta"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"
-	"strings"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	sshUtil "github.com/PingCAP-QE/Naglfar/pkg/ssh"
@@ -54,10 +55,46 @@ func IgnoreClusterNotExist(err error) error {
 	return err
 }
 
+func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.ServerConfigs) error {
+	unmarshalServerConfigToMaps := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		tidbConfigs = make(map[string]interface{}, 0)
+		tikvConfigs = make(map[string]interface{}, 0)
+		pdConfigs   = make(map[string]interface{}, 0)
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&tidbConfigs,
+		serverConfigs.TiDB,
+	}, {
+		&tikvConfigs,
+		serverConfigs.TiKV,
+	}, {
+		&pdConfigs,
+		serverConfigs.PD,
+	}} {
+		err := unmarshalServerConfigToMaps([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.ServerConfigs = tiupSpec.ServerConfigs{TiDB: tidbConfigs, TiKV: tikvConfigs, PD: pdConfigs}
+	return nil
+}
+
 func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec, rr *naglfarv1.TestResourceRequest, trs []*naglfarv1.TestResource) (spec tiupSpec.Specification, control *naglfarv1.TestResourceStatus, err error) {
 	spec.GlobalOptions = tiupSpec.GlobalOptions{
 		User:    "root",
 		SSHPort: 22,
+	}
+	if err := setServerConfigs(&spec, ctf.TiDBCluster.ServerConfigs); err != nil {
+		err = fmt.Errorf("set serverConfigs failed: %v", err)
+		return spec, nil, err
 	}
 	resourceMaps := make(map[string]*naglfarv1.TestResourceStatus)
 	for _, resource := range trs {

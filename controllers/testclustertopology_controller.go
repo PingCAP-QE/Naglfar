@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -34,12 +35,14 @@ import (
 // TestClusterTopologyReconciler reconciles a TestClusterTopology object
 type TestClusterTopologyReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log      logr.Logger
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testclustertopologies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testclustertopologies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
@@ -88,6 +91,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			if err := r.installTiDBCluster(ctx, &ct, &rr); err != nil {
 				return ctrl.Result{}, tiup.IgnoreClusterDuplicated(err)
 			}
+			r.Recorder.Event(&ct, "Normal", "Created", fmt.Sprintf("cluster %s is installed", ct.Name))
 		}
 		ct.Status.State = naglfarv1.ClusterTopologyStateReady
 		if err := r.Status().Update(ctx, &ct); err != nil {
