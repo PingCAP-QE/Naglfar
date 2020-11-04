@@ -91,11 +91,6 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 				return ctrl.Result{}, err
 			}
 			if rr.Status.State != naglfarv1.TestResourceRequestReady {
-				// set the pending status when waiting for request being ready
-				if err := r.Status().Update(ctx, &ct); err != nil {
-					log.Error(err, "unable to update TestClusterTopology")
-					return ctrl.Result{}, err
-				}
 				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 			}
 			switch {
