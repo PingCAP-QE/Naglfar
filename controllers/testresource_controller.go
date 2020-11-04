@@ -105,7 +105,7 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 
 	if resource.ObjectMeta.DeletionTimestamp.IsZero() && !stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
 		resource.ObjectMeta.Finalizers = append(resource.ObjectMeta.Finalizers, resourceFinalizer)
-		err = r.Update(context.Background(), resource)
+		err = r.Update(r.Ctx, resource)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 			}
 
 			machine.Status.TestResources = resourcesRemove(machine.Status.TestResources, resource)
-			err = r.Update(context.Background(), machine)
+			err = r.Status().Update(r.Ctx, machine)
 
 			if err != nil {
 				return
@@ -133,7 +133,7 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		}
 
 		resource.ObjectMeta.Finalizers = stringsRemove(resource.ObjectMeta.Finalizers, resourceFinalizer)
-		err = r.Update(context.Background(), resource)
+		err = r.Update(r.Ctx, resource)
 		return
 	}
 
@@ -528,6 +528,7 @@ func (r *TestResourceReconciler) reconcileStateFail(log logr.Logger, resource *n
 
 // TODO: complete reconcileStateReady
 func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	// TODO: poll container state
 	return
 }
 
