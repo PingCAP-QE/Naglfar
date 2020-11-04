@@ -17,29 +17,47 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"path"
+	"strings"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	NVMEKind  DiskKind = "nvme"
-	OtherKind          = "other"
+	ResourcePending       ResourceState = "pending"
+	ResourceFail                        = "fail"
+	ResourceUninitialized               = "uninitialized"
+	ResourceReady                       = "ready"
+	ResourceFinish                      = "finish"
 )
 
-// +kubebuilder:validation:Enum=nvme;other
-type DiskKind string
+const cleanerImage = "alpine:latest"
+
+// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish
+type ResourceState string
 
 type DiskSpec struct {
-	Name      string   `json:"name"`
-	Kind      DiskKind `json:"kind"`
-	Size      int64    `json:"size"`
-	MountPath string   `json:"mountPath"`
+	// default /mnt/<name>
+	// +optional
+	MountPath string `json:"mountPath"`
+
+	// +optional
+	Kind DiskKind `json:"kind"`
+
+	// +optional
+	Size BytesSize `json:"size"`
 }
 
 type DiskStatus struct {
-	Kind      DiskKind `json:"kind"`
-	Size      int64    `json:"size"`
-	Path      string   `json:"path"`
-	MountPath string   `json:"mountPath"`
+	Kind       DiskKind  `json:"kind"`
+	Size       BytesSize `json:"size"`
+	Device     string    `json:"device"`
+	OriginPath string    `json:"originPath"`
+	MountPath  string    `json:"mountPath"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -50,16 +68,28 @@ type TestResourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Memory int64 `json:"memory"`
+	Memory BytesSize `json:"memory"`
 
 	CPUPercent int32 `json:"cpuPercent"`
 
 	// +optional
-	Disks []*DiskSpec `json:"disks"`
+	MachineSelector string `json:"machineSelector,omitempty"`
+
+	// +optional
+	Disks map[string]DiskSpec `json:"disks,omitempty"`
 
 	// If sets, it means the static machine is required
 	// +optional
 	TestMachineResource string `json:"testMachineResource,omitempty"`
+
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// +optional
+	Commands []string `json:"commands,omitempty"`
+
+	// +optional
+	WorkingDir string `json:"workingDir,omitempty"`
 }
 
 // TestResourceStatus defines the observed state of TestResource
@@ -67,28 +97,21 @@ type TestResourceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// default pending
 	// +optional
-	Initialized bool `json:"initialized"`
+	State ResourceState `json:"state"`
 
 	// +optional
-	HostMachine string `json:"hostMachine"`
+	HostMachine *corev1.ObjectReference `json:"hostMachine,omitempty"`
 
 	// +optional
-	DiskStat []*DiskStatus `json:"diskStat,omitempty"`
-
-	// +optional
-	Username string `json:"username"`
-
-	// +optional
-	Password string `json:"password"`
-
-	// +optional
-	SSHPort int `json:"sshPort"`
+	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
 // TestResource is the Schema for the testresources API
+// +kubebuilder:subresource:status
 type TestResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -104,6 +127,73 @@ type TestResourceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TestResource `json:"items"`
+}
+
+func (r *TestResource) ContainerName() string {
+	return fmt.Sprintf("%s.%s", r.Namespace, r.Name)
+}
+
+func (r *TestResource) ContainerCleanerName() string {
+	return fmt.Sprintf("%s.%s-cleaner", r.Namespace, r.Name)
+}
+
+func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConfig) {
+	mounts := make([]mount.Mount, 0)
+	for _, disk := range r.Status.DiskStat {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: disk.OriginPath,
+			Target: disk.MountPath,
+		})
+	}
+
+	config := &container.Config{
+		Image:      r.Spec.Image,
+		WorkingDir: r.Spec.WorkingDir,
+	}
+
+	hostConfig := &container.HostConfig{
+		Mounts: mounts,
+		Resources: container.Resources{
+			Memory:   r.Spec.Memory.Unwrap(),
+			CPUQuota: int64(r.Spec.CPUPercent) * 1000,
+		},
+	}
+
+	if len(r.Spec.Commands) != 0 {
+		script := strings.Join(r.Spec.Commands, ";")
+		config.Cmd = []string{"bash", "-c", script}
+	}
+
+	return config, hostConfig
+}
+
+func (r *TestResource) ContainerCleanerConfig() (*container.Config, *container.HostConfig) {
+	mounts := make([]mount.Mount, 0)
+	for _, disk := range r.Status.DiskStat {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: disk.OriginPath,
+			Target: disk.MountPath,
+		})
+	}
+
+	config := &container.Config{
+		Image: cleanerImage,
+	}
+
+	hostConfig := &container.HostConfig{
+		Mounts: mounts,
+	}
+
+	if len(mounts) > 0 {
+		config.Cmd = []string{"rm", "-rf"}
+		for _, mnt := range mounts {
+			config.Cmd = append(config.Cmd, path.Join(mnt.Target, "*"))
+		}
+	}
+
+	return config, hostConfig
 }
 
 func init() {

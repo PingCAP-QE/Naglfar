@@ -54,7 +54,11 @@ var _ webhook.Validator = &TestResourceRequest{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *TestResourceRequest) ValidateCreate() error {
 	testresourcerequestlog.Info("validate create", "name", r.Name)
-
+	for _, resourceSpec := range r.Spec.Items {
+		if err := resourceSpec.Spec.ValidateCreate(); err != nil {
+			return err
+		}
+	}
 	// TODO(user): fill in your validation logic upon object creation.
 	return nil
 }

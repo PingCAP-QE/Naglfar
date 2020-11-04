@@ -1,0 +1,14 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestResource
+metadata:
+  name: n1
+  namespace: naglfar-system
+spec:
+  memory: 2GB
+  cpuPercent: 600
+  machineSelector: physical
+  image: hello-world
+  disks:
+    data1: 
+      kind: nvme
+

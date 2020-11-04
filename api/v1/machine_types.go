@@ -17,6 +17,10 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"path"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -24,32 +28,49 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	NVMEKind  DiskKind = "nvme"
+	OtherKind          = "other"
+)
+
+// +kubebuilder:validation:Enum=nvme;other
+type DiskKind string
+
 type ReserveResources struct {
 	// default 100
 	// +optional
 	CPUPercent int32 `json:"cpuPercent"`
 
-	// +kubebuilder:validation:Minimum=0
-
-	// default 1 << 30
+	// default 1 GiB
 	// +optional
-	Memory int64 `json:"memory"`
+	Memory BytesSize `json:"memory"`
 }
 
 type StorageDevice struct {
-	Device     string `json:"device"`
-	Filesystem string `json:"filesystem"`
-	Total      int64  `json:"total"`
-	Used       int64  `json:"used"`
-	MountPoint string `json:"mountPoint"`
+	Filesystem string    `json:"filesystem"`
+	Total      BytesSize `json:"total"`
+	Used       BytesSize `json:"used"`
+	MountPoint string    `json:"mountPoint"`
 }
 
 type MachineInfo struct {
-	Hostname       string           `json:"hostname"`
-	Architecture   string           `json:"architecture"`
-	Threads        int32            `json:"threads"`
-	Memory         int64            `json:"memory"`
-	StorageDevices []*StorageDevice `json:"devices"`
+	Hostname       string                   `json:"hostname"`
+	Architecture   string                   `json:"architecture"`
+	Threads        int32                    `json:"threads"`
+	Memory         BytesSize                `json:"memory"`
+	StorageDevices map[string]StorageDevice `json:"devices,omitempty"`
+}
+
+type DiskResource struct {
+	Size      BytesSize `json:"size"`
+	Kind      DiskKind  `json:"kind"`
+	MountPath string    `json:"mountPath"`
+}
+
+type AvailableResource struct {
+	Memory     BytesSize               `json:"memory"`
+	CPUPercent int32                   `json:"cpuPercent"`
+	Disks      map[string]DiskResource `json:"disks,omitempty"`
 }
 
 // MachineSpec defines the desired state of Machine
@@ -66,14 +87,29 @@ type MachineSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// default 22
 	// +optional
-	Port int `json:"port"`
+	SSHPort int `json:"sshPort"`
+
+	// +kubebuilder:validation:Minimum=0
+	// default 2375 (unencrypted) or 2376(encrypted)
+	// +optional
+	DockerPort int `json:"dockerPort"`
+
+	// +optional
+	DockerVersion string `json:"dockerVersion,omitempty"`
+
+	// default false
+	// +optional
+	DockerTLS bool `json:"dockerTLS"`
 
 	// default 10s
 	// +optional
-	Timeout string `json:"timeout"`
+	Timeout Duration `json:"timeout"`
 
 	// +optional
 	Reserve *ReserveResources `json:"reserve"`
+
+	// +optional
+	ExclusiveDisks []string `json:"exclusiveDisks,omitempty"`
 }
 
 // MachineStatus defines the observed state of Machine
@@ -91,6 +127,7 @@ type MachineStatus struct {
 // +kubebuilder:object:root=true
 
 // Machine is the Schema for the machines API
+// +kubebuilder:subresource:status
 type Machine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -106,6 +143,50 @@ type MachineList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Machine `json:"items"`
+}
+
+func (r *Machine) Available() *AvailableResource {
+	if r.Status.Info == nil {
+		return nil
+	}
+
+	available := new(AvailableResource)
+	available.Memory = r.Status.Info.Memory.Sub(r.Spec.Reserve.Memory)
+	available.CPUPercent = r.Status.Info.Threads*100 - r.Spec.Reserve.CPUPercent
+	available.Disks = make(map[string]DiskResource)
+
+	exclusiveSet := make(map[string]bool)
+
+	for _, device := range r.Spec.ExclusiveDisks {
+		exclusiveSet[device] = true
+	}
+
+	for device, disk := range r.Status.Info.StorageDevices {
+		if _, ok := exclusiveSet[device]; ok {
+			diskResource := DiskResource{
+				Size:      disk.Total.Sub(disk.Used),
+				MountPath: disk.MountPoint,
+			}
+
+			if strings.HasPrefix(path.Base(device), "nvme") {
+				diskResource.Kind = NVMEKind
+			} else {
+				diskResource.Kind = OtherKind
+			}
+
+			available.Disks[device] = diskResource
+		}
+	}
+
+	return available
+}
+
+func (r *Machine) DockerURL() string {
+	scheme := "http"
+	if r.Spec.DockerTLS {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, r.Spec.Host, r.Spec.DockerPort)
 }
 
 func init() {

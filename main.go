@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -79,9 +80,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.TestResourceReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("TestResource"),
-		Scheme: mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("TestResource"),
+		Ctx:     context.Background(),
+		Eventer: mgr.GetEventRecorderFor("testresource-controller"),
+		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TestResource")
 		os.Exit(1)
@@ -120,6 +123,10 @@ func main() {
 	}
 	if err = (&naglfarv1.TestResourceRequest{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "TestResourceRequest")
+		os.Exit(1)
+	}
+	if err = (&naglfarv1.TestResource{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "TestResource")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
