@@ -262,9 +262,7 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 		}
 	}
 
-	if newResource.Status.DiskStat == nil {
-		newResource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
-	}
+	newResource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
 
 	for name, disk := range newResource.Spec.Disks {
 		for device, diskResource := range rest.Disks {
@@ -374,12 +372,8 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 		var overflow bool
 		overflow, result.Requeue, err = r.tryRequestResource(machine, resource)
 
-		if result.Requeue {
+		if result.Requeue || err != nil {
 			return
-		}
-
-		if err != nil {
-			break
 		}
 
 		if overflow {
