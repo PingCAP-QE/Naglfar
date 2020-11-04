@@ -41,9 +41,6 @@ var _ webhook.Defaulter = &TestResourceRequest{}
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *TestResourceRequest) Default() {
 	testresourcerequestlog.Info("default", "name", r.Name)
-	if len(r.Status.State) == 0 {
-		r.Status.State = TestResourceRequestPending
-	}
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.

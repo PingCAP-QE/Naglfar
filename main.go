@@ -98,9 +98,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.TestClusterTopologyReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("TestClusterTopology"),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("TestClusterTopology"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("clustertoplogy-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TestClusterTopology")
 		os.Exit(1)

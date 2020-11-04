@@ -76,6 +76,10 @@ spec:
         status:
           description: TestResourceStatus defines the observed state of TestResource
           properties:
+            clusterIP:
+              description: ClusterIP is the ip address of the container in the overlay(or
+                calico) network
+              type: string
             diskStat:
               additionalProperties:
                 properties:
@@ -137,6 +141,10 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
+            password:
+              type: string
+            sshPort:
+              type: integer
             state:
               description: default pending
               enum:
@@ -145,6 +153,8 @@ spec:
               - uninitialized
               - ready
               - finish
+              type: string
+            username:
               type: string
           type: object
       type: object

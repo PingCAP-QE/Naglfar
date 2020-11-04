@@ -106,6 +106,19 @@ type TestResourceStatus struct {
 
 	// +optional
 	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
+
+	// ClusterIP is the ip address of the container in the overlay(or calico) network
+	// +optional
+	ClusterIP string `json:"clusterIP"`
+
+	// +optional
+	Username string `json:"username"`
+
+	// +optional
+	Password string `json:"password"`
+
+	// +optional
+	SSHPort int `json:"sshPort"`
 }
 
 // +kubebuilder:object:root=true

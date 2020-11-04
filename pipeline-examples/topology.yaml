@@ -1,0 +1,39 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestClusterTopology
+metadata:
+  name: test
+  namespace: test
+spec:
+  resourceRequest: cluster-1
+  tidbCluster:
+    serverConfigs:
+      tidb: |-
+        log.slow-threshold: 300
+        binlog.enable: false
+        binlog.ignore-error: false
+      tikv: |-
+        readpool.storage.use-unified-pool: false
+        readpool.coprocessor.use-unified-pool: true
+      pd: |-
+        schedule.leader-schedule-limit: 4
+        schedule.region-schedule-limit: 2048
+        schedule.replica-schedule-limit: 64
+    version:
+      version: nightly
+    control: n1
+    tikv:
+      - host: n1
+        port: 20160
+        statusPort: 20180
+        deployDir: /disk1/deploy/tikv-20160
+        dataDir: /disk1/data/tikv-20160
+        logDir: /disk1/deploy/tikv-20160/log
+    tidb:
+      - host: n1
+        deployDir: /disk1/deploy/tidb-4000
+        logDir: /disk1/deploy/tidb-4000/log
+    pd:
+      - host: n1
+        deployDir: /disk1/deploy/pd-2379
+        dataDir: /disk1/data/pd-2379
+        logDir: /disk1/deploy/pd-2379/log

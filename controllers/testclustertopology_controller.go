@@ -18,31 +18,102 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 )
 
 // TestClusterTopologyReconciler reconciles a TestClusterTopology object
 type TestClusterTopologyReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log      logr.Logger
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testclustertopologies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testclustertopologies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("testclustertopology", req.NamespacedName)
+	ctx := context.Background()
+	log := r.Log.WithValues("testclustertopology", req.NamespacedName)
 
-	// your logic here
+	var ct naglfarv1.TestClusterTopology
+	if err := r.Get(ctx, req.NamespacedName, &ct); err != nil {
+		log.Error(err, "unable to fetch TestClusterTopology")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
+	finalizerName := req.Name
+	if ct.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !stringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
+			ct.ObjectMeta.Finalizers = append(ct.ObjectMeta.Finalizers, finalizerName)
+			if err := r.Update(ctx, &ct); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		if stringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
+			if err := r.deleteTopology(ctx, &ct); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		ct.Finalizers = stringsRemove(ct.Finalizers, finalizerName)
+		if err := r.Update(ctx, &ct); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	switch ct.Status.State {
+	case "":
+		ct.Status.State = naglfarv1.ClusterTopologyStatePending
+		err := r.Status().Update(ctx, &ct)
+		return ctrl.Result{}, err
+	case naglfarv1.ClusterTopologyStatePending:
+		var rr naglfarv1.TestResourceRequest
+		// we should install a SUT on the resources what we have requested
+		if len(ct.Spec.ResourceRequest) != 0 {
+			if err := r.Get(ctx, types.NamespacedName{
+				Namespace: req.Namespace,
+				Name:      ct.Spec.ResourceRequest,
+			}, &rr); err != nil {
+				return ctrl.Result{}, err
+			}
+			if rr.Status.State != naglfarv1.TestResourceRequestReady {
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			}
+			switch {
+			case ct.Spec.TiDBCluster != nil:
+				if err := r.installTiDBCluster(ctx, &ct, &rr); tiup.IgnoreClusterNotExist(err) != nil {
+					r.Recorder.Event(&ct, "Warning", "Installed", err.Error())
+					return ctrl.Result{}, err
+				} else if err == nil {
+					r.Recorder.Event(&ct, "Normal", "Installed", fmt.Sprintf("cluster %s is installed", ct.Name))
+				}
+			}
+			ct.Status.State = naglfarv1.ClusterTopologyStateReady
+			if err := r.Status().Update(ctx, &ct); err != nil {
+				log.Error(err, "unable to update TestClusterTopology")
+				return ctrl.Result{}, err
+			}
+		} else {
+			// use the cluster created by tidb-operator
+			// TODO: wait for the cluster be ready
+		}
+	case naglfarv1.ClusterTopologyStateReady:
+		// DO NOTHING
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -50,4 +121,67 @@ func (r *TestClusterTopologyReconciler) SetupWithManager(mgr ctrl.Manager) error
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&naglfarv1.TestClusterTopology{}).
 		Complete(r)
+}
+
+func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) error {
+	log := r.Log.WithValues("installTiDBCluster", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+	if rr.Status.State != naglfarv1.TestResourceRequestReady {
+		return fmt.Errorf("testResourceRequest %s/%s isn't ready", rr.Namespace, rr.Name)
+	}
+	var resourceList naglfarv1.TestResourceList
+	var resources []*naglfarv1.TestResource
+	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+		log.Error(err, "unable to list child resources")
+	}
+	for idx := range resourceList.Items {
+		resources = append(resources, &resourceList.Items[idx])
+	}
+	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), rr, resources)
+	if err != nil {
+		return err
+	}
+	return tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version)
+}
+
+func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *naglfarv1.TestClusterTopology) error {
+	log := r.Log.WithValues("deleteTopology", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+	// if we cluster is installed on resource nodes
+	if len(ct.Spec.ResourceRequest) != 0 {
+		switch {
+		case ct.Spec.TiDBCluster != nil:
+			var rr naglfarv1.TestResourceRequest
+			if err := r.Get(ctx, types.NamespacedName{
+				Namespace: ct.Namespace,
+				Name:      ct.Spec.ResourceRequest,
+			}, &rr); err != nil {
+				return err
+			}
+			if rr.Status.State != naglfarv1.TestResourceRequestReady {
+				return fmt.Errorf("testResourceRequest %s/%s isn't ready", rr.Namespace, rr.Name)
+			}
+			var resourceList naglfarv1.TestResourceList
+			var resources []*naglfarv1.TestResource
+			if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+				log.Error(err, "unable to list child resources")
+			}
+			for idx := range resourceList.Items {
+				resources = append(resources, &resourceList.Items[idx])
+			}
+			tiupCtl, err := tiup.MakeClusterManager(r.Log, ct.Spec.DeepCopy(), &rr, resources)
+			if err != nil {
+				return err
+			}
+			if err := tiupCtl.UninstallCluster(ct.Name); err != nil {
+				// we ignore cluster not exist error
+				return tiup.IgnoreClusterNotExist(err)
+			}
+		}
+	}
+	return nil
 }
