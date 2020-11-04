@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/docker/go-units"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -45,12 +46,20 @@ var _ webhook.Defaulter = &Machine{}
 func (r *Machine) Default() {
 	machinelog.Info("default", "name", r.Name)
 
-	if r.Spec.Port == 0 {
-		r.Spec.Port = 22
+	if r.Spec.SSHPort == 0 {
+		r.Spec.SSHPort = 22
+	}
+
+	if r.Spec.DockerPort == 0 {
+		if r.Spec.DockerTLS {
+			r.Spec.DockerPort = 2376
+		} else {
+			r.Spec.DockerPort = 2375
+		}
 	}
 
 	if r.Spec.Timeout == "" {
-		r.Spec.Timeout = "1m"
+		r.Spec.Timeout = HumanDuration(10 * time.Second)
 	}
 
 	if r.Spec.Reserve == nil {
@@ -61,8 +70,8 @@ func (r *Machine) Default() {
 		r.Spec.Reserve.CPUPercent = 100
 	}
 
-	if r.Spec.Reserve.Memory == 0 {
-		r.Spec.Reserve.Memory = 1 << 30
+	if r.Spec.Reserve.Memory == "" {
+		r.Spec.Reserve.Memory = Size(1 * units.GiB)
 	}
 	// TODO(user): fill in your defaulting logic.
 }
@@ -76,8 +85,12 @@ var _ webhook.Validator = &Machine{}
 func (r *Machine) ValidateCreate() error {
 	machinelog.Info("validate create", "name", r.Name)
 
-	if r.Spec.Port <= 0 {
-		return fmt.Errorf("invalid port %d", r.Spec.Port)
+	if r.Spec.SSHPort <= 0 {
+		return fmt.Errorf("invalid port %d", r.Spec.SSHPort)
+	}
+
+	if r.Spec.DockerPort <= 0 {
+		return fmt.Errorf("invalid port %d", r.Spec.DockerPort)
 	}
 
 	if reserve := r.Spec.Reserve; reserve != nil {
@@ -85,22 +98,37 @@ func (r *Machine) ValidateCreate() error {
 			return fmt.Errorf("invalid cpu percent %d", reserve.CPUPercent)
 		}
 
-		if reserve.Memory <= 0 {
-			return fmt.Errorf("invalid memory %d", reserve.Memory)
+		if _, err := reserve.Memory.ToSize(); err != nil {
+			return fmt.Errorf("invalid memory size: %s", err.Error())
 		}
 	}
 
-	_, err := time.ParseDuration(r.Spec.Timeout)
+	if _, err := r.Spec.Timeout.Parse(); err != nil {
+		return fmt.Errorf("fail to parse timeout(%s): %s", r.Spec.Timeout, err.Error())
+	}
 
 	// TODO(user): fill in your validation logic upon object creation.
-	return err
+	return nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Machine) ValidateUpdate(old runtime.Object) error {
 	machinelog.Info("validate update", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object update.
+	if _, err := r.Status.Info.Memory.ToSize(); err != nil {
+		return fmt.Errorf("invalid memory size: %s", err.Error())
+	}
+
+	for _, device := range r.Status.Info.StorageDevices {
+		if _, err := device.Total.ToSize(); err != nil {
+			return fmt.Errorf("invalid storage size: %s", err.Error())
+		}
+
+		if _, err := device.Used.ToSize(); err != nil {
+			return fmt.Errorf("invalid storage size: %s", err.Error())
+		}
+	}
+
 	return nil
 }
 

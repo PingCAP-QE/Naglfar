@@ -217,7 +217,7 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine.Name, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster destroy -y %s", clusterName)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
@@ -252,7 +252,7 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 }
 
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine.Name, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
@@ -269,7 +269,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 }
 
 func (c *ClusterManager) startCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine.Name, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster start %s", clusterName)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {

@@ -1,3 +1,19 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: Machine
+metadata:
+  name: 172.16.0.1
+  labels:
+    type: physical
+spec:
+  username: root
+  password: root
+  host: 172.16.0.1
+  reserve:
+    memory: 2GB
+    cpuPercent: 200
+
+---
+
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -15,12 +31,8 @@ spec:
       spec:
         memory: 1GB
         cpuPercent: 200
-        image: alpine:latest
-        commands:
-          - echo 'Hello World!'
         disks:
-          disk1:
-            name: 
+          disk1: 
             kind: nvme
             size: 500GB
             mountPath: /disks1
@@ -31,8 +43,8 @@ spec:
         cpuPercent: 400
         disks:
           disk1:
-            name: 
             kind: nvme
             size: 1TB
-            mountPath: /disks1
+  
+
 

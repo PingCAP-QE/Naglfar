@@ -15,6 +15,8 @@ spec:
     plural: machines
     singular: machine
   scope: Namespaced
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: Machine is the Schema for the machines API
@@ -34,14 +36,23 @@ spec:
         spec:
           description: MachineSpec defines the desired state of Machine
           properties:
+            dockerPort:
+              description: default 2375 (unencrypted) or 2376(encrypted)
+              minimum: 0
+              type: integer
+            dockerTLS:
+              description: default false
+              type: boolean
+            dockerVersion:
+              type: string
+            exclusiveDisks:
+              items:
+                type: string
+              type: array
             host:
               type: string
             password:
               type: string
-            port:
-              description: default 22
-              minimum: 0
-              type: integer
             reserve:
               properties:
                 cpuPercent:
@@ -49,11 +60,13 @@ spec:
                   format: int32
                   type: integer
                 memory:
-                  description: default 1 << 30
-                  format: int64
-                  minimum: 0
-                  type: integer
+                  description: default 1 GiB
+                  type: string
               type: object
+            sshPort:
+              description: default 22
+              minimum: 0
+              type: integer
             timeout:
               description: default 10s
               type: string
@@ -72,39 +85,32 @@ spec:
                 architecture:
                   type: string
                 devices:
-                  items:
+                  additionalProperties:
                     properties:
-                      device:
-                        type: string
                       filesystem:
                         type: string
                       mountPoint:
                         type: string
                       total:
-                        format: int64
-                        type: integer
+                        type: string
                       used:
-                        format: int64
-                        type: integer
+                        type: string
                     required:
-                    - device
                     - filesystem
                     - mountPoint
                     - total
                     - used
                     type: object
-                  type: array
+                  type: object
                 hostname:
                   type: string
                 memory:
-                  format: int64
-                  type: integer
+                  type: string
                 threads:
                   format: int32
                   type: integer
               required:
               - architecture
-              - devices
               - hostname
               - memory
               - threads

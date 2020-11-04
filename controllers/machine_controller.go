@@ -20,8 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
+	"strconv"
 
+	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
-	"github.com/PingCAP-QE/Naglfar/pkg/ssh"
 )
 
 // MachineReconciler reconciles a Machine object
@@ -66,7 +66,7 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 			return
 		}
 
-		if err = r.Update(ctx, machine); err != nil {
+		if err = r.Status().Update(ctx, machine); err != nil {
 			log.Error(err, "unable to update Machine")
 			return
 		}
@@ -83,18 +83,26 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
+	timeout, _ := spec.Timeout.Parse()
+	return &easyssh.MakeConfig{
+		User:     spec.Username,
+		Password: spec.Password,
+		Server:   spec.Host,
+		Port:     strconv.Itoa(spec.SSHPort),
+		Timeout:  timeout,
+	}
+}
+
 func fetchMachineInfo(machine *naglfarv1.Machine) (*naglfarv1.MachineInfo, error) {
 	osStatScript, err := ScriptBox.FindString("os-stat.sh")
 
 	if err != nil {
 		return nil, err
 	}
-	timeout, err := time.ParseDuration(machine.Spec.Timeout)
-	if err != nil {
-		return nil, err
-	}
-	ssh := ssh.MakeSSHConfig(machine.Spec.Username, machine.Spec.Password, machine.Spec.Host,
-		machine.Spec.Port, timeout)
+
+	ssh := MakeSSHConfig(&machine.Spec)
+
 	stdout, stderr, done, err := ssh.Run(osStatScript)
 
 	if err != nil {
@@ -113,10 +121,38 @@ func fetchMachineInfo(machine *naglfarv1.Machine) (*naglfarv1.MachineInfo, error
 		return nil, err
 	}
 
-	info := new(naglfarv1.MachineInfo)
+	rawInfo := new(naglfarv1.MachineInfo)
 
-	if err = json.Unmarshal([]byte(stdout), info); err != nil {
-		log.Error(err, "fail to unmarshal os-stat result: \"%s\"", stdout)
+	if err = json.Unmarshal([]byte(stdout), rawInfo); err != nil {
+		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", stdout))
+	}
+
+	return makeMachineInfo(rawInfo)
+}
+
+func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, error) {
+	info := rawInfo.DeepCopy()
+	memory, err := info.Memory.ToSize()
+	if err != nil {
+		return nil, err
+	}
+
+	info.Memory = naglfarv1.Size(float64(memory))
+
+	for path, device := range info.StorageDevices {
+		totalSize, err := device.Total.ToSize()
+		if err != nil {
+			return nil, err
+		}
+		device.Total = naglfarv1.Size(float64(totalSize))
+
+		usedSize, err := device.Used.ToSize()
+		if err != nil {
+			return nil, err
+		}
+		device.Used = naglfarv1.Size(float64(usedSize))
+
+		info.StorageDevices[path] = device
 	}
 
 	return info, nil
