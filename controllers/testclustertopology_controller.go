@@ -56,57 +56,68 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 
 	finalizerName := req.Name
 	if ct.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !containsString(ct.ObjectMeta.Finalizers, finalizerName) {
+		if !stringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
 			ct.ObjectMeta.Finalizers = append(ct.ObjectMeta.Finalizers, finalizerName)
 			if err := r.Update(ctx, &ct); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 	} else {
-		if containsString(ct.ObjectMeta.Finalizers, finalizerName) {
+		if stringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
 			if err := r.deleteTopology(ctx, &ct); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
-		ct.Finalizers = removeString(ct.Finalizers, finalizerName)
+		ct.Finalizers = stringsRemove(ct.Finalizers, finalizerName)
 		if err := r.Update(ctx, &ct); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
-	var rr naglfarv1.TestResourceRequest
-	// we should install a SUT on the resources what we have requested
-	if len(ct.Spec.ResourceRequest) != 0 {
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: req.Namespace,
-			Name:      ct.Spec.ResourceRequest,
-		}, &rr); err != nil {
-			return ctrl.Result{}, err
-		}
-		if rr.Status.State != naglfarv1.TestResourceRequestReady {
-			// set the pending status when waiting for request being ready
-			ct.Status.State = naglfarv1.ClusterTopologyStatePending
+
+	switch ct.Status.State {
+	case "":
+		ct.Status.State = naglfarv1.ClusterTopologyStatePending
+		err := r.Status().Update(ctx, &ct)
+		return ctrl.Result{}, err
+	case naglfarv1.ClusterTopologyStatePending:
+		var rr naglfarv1.TestResourceRequest
+		// we should install a SUT on the resources what we have requested
+		if len(ct.Spec.ResourceRequest) != 0 {
+			if err := r.Get(ctx, types.NamespacedName{
+				Namespace: req.Namespace,
+				Name:      ct.Spec.ResourceRequest,
+			}, &rr); err != nil {
+				return ctrl.Result{}, err
+			}
+			if rr.Status.State != naglfarv1.TestResourceRequestReady {
+				// set the pending status when waiting for request being ready
+				if err := r.Status().Update(ctx, &ct); err != nil {
+					log.Error(err, "unable to update TestClusterTopology")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			}
+			switch {
+			case ct.Spec.TiDBCluster != nil:
+				if err := r.installTiDBCluster(ctx, &ct, &rr); tiup.IgnoreClusterNotExist(err) != nil {
+					r.Recorder.Event(&ct, "Warning", "Installed", err.Error())
+					return ctrl.Result{}, err
+				} else if err == nil {
+					r.Recorder.Event(&ct, "Normal", "Installed", fmt.Sprintf("cluster %s is installed", ct.Name))
+				}
+			}
+			ct.Status.State = naglfarv1.ClusterTopologyStateReady
 			if err := r.Status().Update(ctx, &ct); err != nil {
 				log.Error(err, "unable to update TestClusterTopology")
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		} else {
+			// use the cluster created by tidb-operator
+			// TODO: wait for the cluster be ready
 		}
-		switch {
-		case ct.Spec.TiDBCluster != nil:
-			if err := r.installTiDBCluster(ctx, &ct, &rr); err != nil {
-				return ctrl.Result{}, tiup.IgnoreClusterDuplicated(err)
-			}
-			r.Recorder.Event(&ct, "Normal", "Created", fmt.Sprintf("cluster %s is installed", ct.Name))
-		}
-		ct.Status.State = naglfarv1.ClusterTopologyStateReady
-		if err := r.Status().Update(ctx, &ct); err != nil {
-			log.Error(err, "unable to update TestClusterTopology")
-			return ctrl.Result{}, err
-		}
-	} else {
-		// use the cluster created by tidb-operator
-		// TODO: wait for the cluster be ready
+	case naglfarv1.ClusterTopologyStateReady:
+		// DO NOTHING
 	}
 	return ctrl.Result{}, nil
 }
@@ -178,26 +189,4 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 		}
 	}
 	return nil
-}
-
-//
-// Helper functions to check and remove string from a slice of strings.
-//
-func containsString(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(slice []string, s string) (result []string) {
-	for _, item := range slice {
-		if item == s {
-			continue
-		}
-		result = append(result, item)
-	}
-	return
 }
