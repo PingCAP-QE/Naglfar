@@ -23,6 +23,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/go-connections/nat"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -193,6 +194,9 @@ func (r *TestResource) ContainerCleanerConfig() (*container.Config, *container.H
 
 	hostConfig := &container.HostConfig{
 		Mounts: mounts,
+		PortBindings: nat.PortMap{
+			"22": {},
+		},
 	}
 
 	if len(mounts) > 0 {
