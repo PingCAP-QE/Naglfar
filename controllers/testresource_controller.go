@@ -453,8 +453,8 @@ func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource,
 	return
 }
 
-func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	machine, err := r.checkHostMachine(log, resource)
+func (r *TestResourceReconciler) getMachineOrRollback(log logr.Logger, resource *naglfarv1.TestResource) (machine *naglfarv1.Machine, rollback bool, err error) {
+	machine, err = r.checkHostMachine(log, resource)
 	if err != nil {
 		return
 	}
@@ -463,6 +463,14 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		resource.Status.HostMachine = nil
 		resource.Status.State = naglfarv1.ResourcePending
 		err = r.Status().Update(r.Ctx, resource)
+		rollback = true
+	}
+	return
+}
+
+func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	machine, rollabck, err := r.getMachineOrRollback(log, resource)
+	if err != nil || rollabck {
 		return
 	}
 
@@ -501,6 +509,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 
 	if stats.State.Restarting {
 		result.Requeue = true
+		result.RequeueAfter = time.Second
 		return
 	}
 
@@ -527,7 +536,48 @@ func (r *TestResourceReconciler) reconcileStateFail(log logr.Logger, resource *n
 
 // TODO: complete reconcileStateReady
 func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	// TODO: poll container state
+	machine, rollabck, err := r.getMachineOrRollback(log, resource)
+	if err != nil || rollabck {
+		return
+	}
+
+	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	if err != nil {
+		return
+	}
+
+	containerName := resource.ContainerName()
+	stats, err := dockerClient.ContainerInspect(r.Ctx, containerName)
+	if err != nil {
+		if !docker.IsErrContainerNotFound(err) {
+			return
+		}
+
+		// not found
+		resource.Status.State = naglfarv1.ResourceUninitialized
+		err = r.Status().Update(r.Ctx, resource)
+		return
+	}
+
+	if stats.State.Restarting {
+		resource.Status.State = naglfarv1.ResourceUninitialized
+	}
+
+	if !timeIsZero(stats.State.FinishedAt) {
+		resource.Status.State = naglfarv1.ResourceFinish
+	}
+
+	if stats.State.OOMKilled {
+		resource.Status.State = naglfarv1.ResourceFail
+	}
+
+	if resource.Status.State != naglfarv1.ResourceReady {
+		err = r.Status().Update(r.Ctx, resource)
+	} else {
+		result.Requeue = true
+		result.RequeueAfter = time.Second
+	}
+
 	return
 }
 
