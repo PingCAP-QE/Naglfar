@@ -474,7 +474,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		return
 	}
 
-	if resource.Spec.Image == "" {
+	if resource.Status.Image == "" {
 		return
 	}
 

@@ -36,10 +36,6 @@ spec:
         spec:
           description: TestResourceSpec defines the desired state of TestResource
           properties:
-            commands:
-              items:
-                type: string
-              type: array
             cpuPercent:
               format: int32
               type: integer
@@ -58,16 +54,12 @@ spec:
                     type: string
                 type: object
               type: object
-            image:
-              type: string
             machineSelector:
               type: string
             memory:
               type: string
             testMachineResource:
               description: If sets, it means the static machine is required
-              type: string
-            workingDir:
               type: string
           required:
           - cpuPercent
@@ -80,6 +72,10 @@ spec:
               description: ClusterIP is the ip address of the container in the overlay(or
                 calico) network
               type: string
+            commands:
+              items:
+                type: string
+              type: array
             diskStat:
               additionalProperties:
                 properties:
@@ -141,6 +137,8 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
+            image:
+              type: string
             password:
               type: string
             sshPort:

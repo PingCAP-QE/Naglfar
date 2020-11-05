@@ -81,15 +81,6 @@ type TestResourceSpec struct {
 	// If sets, it means the static machine is required
 	// +optional
 	TestMachineResource string `json:"testMachineResource,omitempty"`
-
-	// +optional
-	Image string `json:"image,omitempty"`
-
-	// +optional
-	Commands []string `json:"commands,omitempty"`
-
-	// +optional
-	WorkingDir string `json:"workingDir,omitempty"`
 }
 
 // TestResourceStatus defines the observed state of TestResource
@@ -106,6 +97,12 @@ type TestResourceStatus struct {
 
 	// +optional
 	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
+
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// +optional
+	Commands []string `json:"commands,omitempty"`
 
 	// ClusterIP is the ip address of the container in the overlay(or calico) network
 	// +optional
@@ -161,8 +158,7 @@ func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConf
 	}
 
 	config := &container.Config{
-		Image:      r.Spec.Image,
-		WorkingDir: r.Spec.WorkingDir,
+		Image: r.Status.Image,
 	}
 
 	hostConfig := &container.HostConfig{
@@ -173,8 +169,8 @@ func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConf
 		},
 	}
 
-	if len(r.Spec.Commands) != 0 {
-		script := strings.Join(r.Spec.Commands, ";")
+	if len(r.Status.Commands) != 0 {
+		script := strings.Join(r.Status.Commands, ";")
 		config.Cmd = []string{"bash", "-c", script}
 	}
 
