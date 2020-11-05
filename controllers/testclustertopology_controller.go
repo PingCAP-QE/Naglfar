@@ -96,10 +96,10 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			switch {
 			case ct.Spec.TiDBCluster != nil:
 				if err := r.installTiDBCluster(ctx, &ct, &rr); tiup.IgnoreClusterNotExist(err) != nil {
-					r.Recorder.Event(&ct, "Warning", "Installed", err.Error())
+					r.Recorder.Event(&ct, "Warning", "Install", err.Error())
 					return ctrl.Result{}, err
 				} else if err == nil {
-					r.Recorder.Event(&ct, "Normal", "Installed", fmt.Sprintf("cluster %s is installed", ct.Name))
+					r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("cluster %s is installed", ct.Name))
 				}
 			}
 			ct.Status.State = naglfarv1.ClusterTopologyStateReady

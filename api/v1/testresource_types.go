@@ -40,6 +40,10 @@ const cleanerImage = "alpine:latest"
 // +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish
 type ResourceState string
 
+func (r ResourceState) IsRequired() bool {
+	return r != ResourcePending && r != ResourceFail
+}
+
 type DiskSpec struct {
 	// default /mnt/<name>
 	// +optional

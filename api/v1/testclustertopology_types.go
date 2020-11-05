@@ -24,8 +24,8 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	ClusterTopologyStatePending ClusterTopologyState = "Pending"
-	ClusterTopologyStateReady   ClusterTopologyState = "Ready"
+	ClusterTopologyStatePending ClusterTopologyState = "pending"
+	ClusterTopologyStateReady   ClusterTopologyState = "ready"
 )
 
 // TODO: add a deploy version spec: clusterName, base version, component versions(for PR and self build version) etc.
@@ -121,7 +121,7 @@ type TestClusterTopologySpec struct {
 	TiDBCluster *TiDBCluster `json:"tidbCluster,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=Pending;Ready
+// +kubebuilder:validation:Enum=pending;ready
 type ClusterTopologyState string
 
 // TestClusterTopologyStatus defines the observed state of TestClusterTopology

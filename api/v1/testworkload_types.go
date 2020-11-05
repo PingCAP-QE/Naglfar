@@ -23,6 +23,13 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	TestWorkloadStatePending TestWorkloadState = "pending"
+	TestWorkloadStateRunning TestWorkloadState = "running"
+	TestWorkloadStateFinish  TestWorkloadState = "finish"
+	TestWorkloadStateFail    TestWorkloadState = "fail"
+)
+
 type ClusterTopologyRef struct {
 	Name      string `json:"name"`
 	AliasName string `json:"aliasName"`
@@ -44,8 +51,6 @@ type DockerContainer struct {
 type TestWorkloadItem struct {
 	Name string `json:"name"`
 
-	//JobTemplate *batchv1beta1.JobTemplateSpec `json:"jobTemplate,omitempty"`
-
 	// +optional
 	DockerContainer *DockerContainer `json:"dockerContainer,omitempty"`
 }
@@ -66,13 +71,21 @@ type TestWorkloadSpec struct {
 	TeardownTestClusterTopology []string `json:"teardownTestClusterTopology,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=pending;running;finish;fail
+type TestWorkloadState string
+
 // TestWorkloadStatus defines the observed state of TestWorkload
 type TestWorkloadStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// default pending
+	// +optional
+	State TestWorkloadState `json:"state"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // TestWorkload is the Schema for the testworkloads API
 type TestWorkload struct {
