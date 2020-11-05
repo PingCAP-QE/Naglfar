@@ -7,7 +7,6 @@ spec:
   memory: 2GB
   cpuPercent: 600
   machineSelector: physical
-  image: hello-world
   disks:
     data1: 
       kind: nvme

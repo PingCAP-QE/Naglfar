@@ -36,7 +36,7 @@ uninstall: manifests
 	kustomize build config/crd | kubectl delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests docker-build
+deploy: docker-build
 	kustomize build config/default | kubectl apply -f -
 
 destroy: manifests
@@ -62,7 +62,7 @@ generate:
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
-docker-build:
+docker-build: manifests generate
 	docker build . -t ${IMG}
 
 # Push the docker image
