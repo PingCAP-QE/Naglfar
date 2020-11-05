@@ -42,7 +42,8 @@ deploy: manifests docker-build
 destroy: manifests
 	kustomize build config/default | kubectl delete -f -
 
-redeploy: destroy deploy
+upgrade: deploy
+	kubectl rollout restart deployment/naglfar-controller-manager -n naglfar-system
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
