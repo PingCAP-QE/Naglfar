@@ -393,21 +393,26 @@ func (r *TestResourceReconciler) checkHostMachine(log logr.Logger, targetResourc
 	if targetResource.Status.HostMachine != nil {
 		host := targetResource.Status.HostMachine
 		hostname := types.NamespacedName{Namespace: host.Namespace, Name: host.Name}
-		machine = new(naglfarv1.Machine)
-		err = r.Get(r.Ctx, hostname, machine)
+		hostMachine := new(naglfarv1.Machine)
+
+		err = r.Get(r.Ctx, hostname, hostMachine)
+
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", hostname))
 			return
 		}
 
-		if err == nil {
-			for _, resourceRef := range machine.Status.TestResources {
-				if resourceRef.Kind == targetResource.Kind && resourceRef.Namespace == targetResource.Namespace && resourceRef.Name == targetResource.Name {
-					return
-				}
+		if err != nil {
+			// not found
+			err = nil
+			return
+		}
+
+		for _, resourceRef := range hostMachine.Status.TestResources {
+			if resourceRef.Kind == targetResource.Kind && resourceRef.Namespace == targetResource.Namespace && resourceRef.Name == targetResource.Name {
+				machine = hostMachine
+				return
 			}
-			// resource not found
-			machine = nil
 		}
 	}
 
