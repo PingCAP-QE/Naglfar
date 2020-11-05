@@ -409,7 +409,7 @@ func (r *TestResourceReconciler) checkHostMachine(log logr.Logger, targetResourc
 		}
 
 		for _, resourceRef := range hostMachine.Status.TestResources {
-			if resourceRef.Kind == targetResource.Kind && resourceRef.Namespace == targetResource.Namespace && resourceRef.Name == targetResource.Name {
+			if resourceRef.UID == targetResource.UID {
 				machine = hostMachine
 				return
 			}
