@@ -65,7 +65,7 @@ func (r *TestWorkloadReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	case naglfarv1.TestWorkloadStatePending:
 		return r.reconcilePending(ctx, workload)
 	case naglfarv1.TestWorkloadStateRunning:
-		return r.reconcileRunning(workload)
+		return r.reconcileRunning(ctx, workload)
 	case naglfarv1.TestWorkloadStateFail:
 		return r.reconcileFail(workload)
 	case naglfarv1.TestWorkloadStateFinish:
@@ -147,13 +147,63 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 			return ctrl.Result{}, err
 		}
 		r.Recorder.Event(workload, "Normal", "Install", "all workload has been installed")
+		return ctrl.Result{}, nil
 	}
 	// otherwise, we are still pending
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
-func (r *TestWorkloadReconciler) reconcileRunning(workload *naglfarv1.TestWorkload) (ctrl.Result, error) {
-	return ctrl.Result{}, nil
+func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload *naglfarv1.TestWorkload) (ctrl.Result, error) {
+	ns := workload.Namespace
+	var finishedCount = 0
+	for _, item := range workload.Spec.Workloads {
+		resourceRequest := new(naglfarv1.TestResourceRequest)
+		err := r.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      item.DockerContainer.ResourceRequest.Name,
+		}, resourceRequest)
+		if err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(nil)
+		}
+		var testResources naglfarv1.TestResourceList
+		if err := r.List(ctx, &testResources, client.InNamespace(ns), client.MatchingFields{resourceOwnerKey: resourceRequest.Name}); err != nil {
+			return ctrl.Result{}, err
+		}
+		var workloadNode *naglfarv1.TestResource
+		var workloadNodeName = fmt.Sprintf("%s-%s", item.DockerContainer.ResourceRequest.Name, item.DockerContainer.ResourceRequest.Node)
+
+		for _, testResource := range testResources.Items {
+			if testResource.Name == workloadNodeName {
+				workloadNode = &testResource
+				break
+			}
+		}
+		if workloadNode == nil {
+			err := fmt.Errorf("cannot find the resource: %s", workloadNodeName)
+			r.Recorder.Event(workload, "Warning", "Inspect", err.Error())
+			return ctrl.Result{}, err
+		}
+		switch workloadNode.Status.State {
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceUninitialized:
+			// Confusing state, we need to wait and claim down...
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		case naglfarv1.ResourceReady:
+			// no nothing
+		case naglfarv1.ResourceFinish:
+			finishedCount += 1
+		default:
+			panic(fmt.Sprintf("it's a bug, we forget to process the `%s` state", workloadNode.Status.State))
+		}
+	}
+	if finishedCount == len(workload.Spec.Workloads) {
+		workload.Status.State = naglfarv1.TestWorkloadStateFinish
+		if err := r.Status().Update(ctx, workload); err != nil {
+			return ctrl.Result{}, err
+		}
+		r.Recorder.Event(workload, "Normal", "Finish", "all workload has been finished")
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 func (r *TestWorkloadReconciler) reconcileFail(workload *naglfarv1.TestWorkload) (ctrl.Result, error) {
