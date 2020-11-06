@@ -108,6 +108,26 @@ type TiDBCluster struct {
 	Grafana []GrafanaSpec `json:"grafana,omitempty"`
 }
 
+func (c *TiDBCluster) AllHosts() map[string]struct{} {
+	result := map[string]struct{}{}
+	for _, item := range c.TiDB {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.TiKV {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.PD {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.Monitor {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.Grafana {
+		result[item.Host] = struct{}{}
+	}
+	return result
+}
+
 // TestClusterTopologySpec defines the desired state of TestClusterTopology
 type TestClusterTopologySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster

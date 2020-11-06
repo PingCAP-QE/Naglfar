@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/docker/docker/api/types/mount"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -95,12 +96,15 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			}
 			switch {
 			case ct.Spec.TiDBCluster != nil:
-				if err := r.installTiDBCluster(ctx, &ct, &rr); tiup.IgnoreClusterNotExist(err) != nil {
+				requeue, err := r.installTiDBCluster(ctx, &ct, &rr)
+				if err != nil {
 					r.Recorder.Event(&ct, "Warning", "Install", err.Error())
 					return ctrl.Result{}, err
-				} else if err == nil {
-					r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("cluster %s is installed", ct.Name))
 				}
+				if requeue {
+					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+				r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("cluster %s is installed", ct.Name))
 			}
 			ct.Status.State = naglfarv1.ClusterTopologyStateReady
 			if err := r.Status().Update(ctx, &ct); err != nil {
@@ -123,27 +127,56 @@ func (r *TestClusterTopologyReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Complete(r)
 }
 
-func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) error {
+func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
 	log := r.Log.WithValues("installTiDBCluster", types.NamespacedName{
 		Namespace: ct.Namespace,
 		Name:      ct.Name,
 	})
-	if rr.Status.State != naglfarv1.TestResourceRequestReady {
-		return fmt.Errorf("testResourceRequest %s/%s isn't ready", rr.Namespace, rr.Name)
-	}
 	var resourceList naglfarv1.TestResourceList
 	var resources []*naglfarv1.TestResource
 	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
-	for idx := range resourceList.Items {
-		resources = append(resources, &resourceList.Items[idx])
+	filterClusterResources := func() []*naglfarv1.TestResource {
+		allHosts := ct.Spec.TiDBCluster.AllHosts()
+		result := make([]*naglfarv1.TestResource, 0)
+		for idx, item := range resourceList.Items {
+			if _, ok := allHosts[item.Name]; ok {
+				result = append(result, &resourceList.Items[idx])
+			}
+		}
+		return result
+	}
+	resources = filterClusterResources()
+	for idx := range resources {
+		resource := resources[idx]
+		if resource.Status.State == naglfarv1.ResourceUninitialized {
+			requeue = true
+			if resource.Status.Image == "" {
+				// TODO fix hardcode
+				resource.Status.Image = tiup.ContainerImage
+				resource.Status.Privilege = true
+				resource.Status.Mounts = []naglfarv1.TestResourceMount{{
+					Type:     mount.TypeBind,
+					Source:   "/sys/fs/cgroup",
+					Target:   "/sys/fs/cgroup",
+					ReadOnly: true,
+				}}
+				err := r.Status().Update(ctx, resource)
+				if err != nil {
+					return false, err
+				}
+			}
+		}
+	}
+	if requeue {
+		return true, nil
 	}
 	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), rr, resources)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version)
+	return false, tiup.IgnoreClusterDuplicated(tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version))
 }
 
 func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *naglfarv1.TestClusterTopology) error {
