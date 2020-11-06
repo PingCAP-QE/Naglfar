@@ -48,13 +48,13 @@ func ParseKey(key string) Ref {
 	}
 }
 
-func (r *Ref) Namespaced() types.NamespacedName {
+func (r Ref) Namespaced() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: r.Namespace,
 		Name:      r.Name,
 	}
 }
 
-func (r *Ref) Key() string {
+func (r Ref) Key() string {
 	return fmt.Sprintf("%s/%s/%s", r.Namespace, r.Name, r.UID)
 }

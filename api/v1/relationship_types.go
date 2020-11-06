@@ -15,8 +15,9 @@
 package v1
 
 import (
-	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -32,16 +33,40 @@ type RelationshipSpec struct {
 type RelationshipStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	OneToMany map[string]RefList `json:"oneToMany,omitempty"`
-	ManyToOne map[string]ref.Ref `json:"manyToOne,omitempty"`
+	MachineToResources map[string]ResourceRefList `json:"machineToResources"`
+	ResourceToMachine  map[string]MachineRef      `json:"resourceToMachine"`
 }
 
-type RefList []ref.Ref
+type ResourceRefList []ResourceRef
+
+type MachineRef struct {
+	ref.Ref `json:",inline"`
+	Binding ResourceBinding `json:"binding"`
+}
+
+type ResourceRef struct {
+	ref.Ref `json:",inline"`
+	Binding ResourceBinding `json:"binding"`
+}
+
+type ResourceBinding struct {
+	Memory     BytesSize              `json:"memory"`
+	CPUPercent int32                  `json:"cpuPercent"`
+	Disks      map[string]DiskBinding `json:"disks,omitempty"`
+}
+
+type DiskBinding struct {
+	Kind       DiskKind  `json:"kind"`
+	Size       BytesSize `json:"size"`
+	Device     string    `json:"device"`
+	OriginPath string    `json:"originPath"`
+	MountPath  string    `json:"mountPath"`
+}
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 
 // Relationship is the Schema for the relationships API
+// +kubebuilder:subresource:status
 type Relationship struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

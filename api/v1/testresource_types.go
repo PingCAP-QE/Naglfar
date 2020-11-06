@@ -21,9 +21,9 @@ import (
 	"path"
 	"strings"
 
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -50,14 +50,6 @@ type DiskSpec struct {
 
 	// +optional
 	Size BytesSize `json:"size"`
-}
-
-type DiskStatus struct {
-	Kind       DiskKind  `json:"kind"`
-	Size       BytesSize `json:"size"`
-	Device     string    `json:"device"`
-	OriginPath string    `json:"originPath"`
-	MountPath  string    `json:"mountPath"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -93,12 +85,6 @@ type TestResourceStatus struct {
 	State ResourceState `json:"state"`
 
 	// +optional
-	HostMachine *corev1.ObjectReference `json:"hostMachine,omitempty"`
-
-	// +optional
-	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
-
-	// +optional
 	Image string `json:"image,omitempty"`
 
 	// +optional
@@ -116,6 +102,10 @@ type TestResourceStatus struct {
 
 	// +optional
 	SSHPort int `json:"sshPort"`
+
+	// TODO: delete me
+	// +optional
+	HostMachine ref.Ref `json:"hostMachine"`
 }
 
 // +kubebuilder:object:root=true
@@ -147,9 +137,9 @@ func (r *TestResource) ContainerCleanerName() string {
 	return fmt.Sprintf("%s.%s-cleaner", r.Namespace, r.Name)
 }
 
-func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConfig) {
+func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
-	for _, disk := range r.Status.DiskStat {
+	for _, disk := range binding.Disks {
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: disk.OriginPath,
@@ -164,8 +154,8 @@ func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConf
 	hostConfig := &container.HostConfig{
 		Mounts: mounts,
 		Resources: container.Resources{
-			Memory:   r.Spec.Memory.Unwrap(),
-			CPUQuota: int64(r.Spec.CPUPercent) * 1000,
+			Memory:   binding.Memory.Unwrap(),
+			CPUQuota: int64(binding.CPUPercent) * 1000,
 		},
 	}
 
@@ -177,9 +167,9 @@ func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConf
 	return config, hostConfig
 }
 
-func (r *TestResource) ContainerCleanerConfig() (*container.Config, *container.HostConfig) {
+func (r *TestResource) ContainerCleanerConfig(binding *ResourceBinding) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
-	for _, disk := range r.Status.DiskStat {
+	for _, disk := range binding.Disks {
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: disk.OriginPath,

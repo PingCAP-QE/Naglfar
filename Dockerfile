@@ -6,7 +6,7 @@ FROM golang:1.13 as builder
 WORKDIR /workspace
 
 # install packr
-RUN --mount=type=cache,target=/root/go/pkg \
+RUN --mount=type=cache,target=/go/pkg \
     --mount=type=cache,target=/root/.cache/go-build \
     go get -u github.com/gobuffalo/packr/packr
 
@@ -22,7 +22,7 @@ COPY scripts/ scripts/
 COPY pkg/ pkg/
 
 # Build
-RUN --mount=type=cache,target=/root/go/pkg \
+RUN --mount=type=cache,target=/go/pkg \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on packr build -a -o manager main.go
 # Install insecure_key

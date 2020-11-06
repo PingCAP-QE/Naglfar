@@ -94,11 +94,6 @@ func (r *TestResource) ValidateCreate() error {
 func (r *TestResource) ValidateUpdate(old runtime.Object) error {
 	testresourcelog.Info("validate update", "name", r.Name)
 
-	for _, disk := range r.Status.DiskStat {
-		if _, err := disk.Size.ToSize(); err != nil {
-			return fmt.Errorf("invalid disk size: %s", err.Error())
-		}
-	}
 	// TODO(user): fill in your validation logic upon object update.
 	return nil
 }

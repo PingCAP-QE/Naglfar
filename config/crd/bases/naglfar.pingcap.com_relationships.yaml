@@ -39,29 +39,45 @@ spec:
         status:
           description: RelationshipStatus defines the observed state of Relationship
           properties:
-            manyToOne:
-              additionalProperties:
-                properties:
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                  uid:
-                    description: UID is a type that holds unique ID values, including
-                      UUIDs.  Because we don't ONLY use UUIDs, this is an alias to
-                      string.  Being a type captures intent and helps make sure that
-                      UIDs and names do not get conflated.
-                    type: string
-                required:
-                - name
-                - namespace
-                - uid
-                type: object
-              type: object
-            oneToMany:
+            machineToResources:
               additionalProperties:
                 items:
                   properties:
+                    binding:
+                      properties:
+                        cpuPercent:
+                          format: int32
+                          type: integer
+                        disks:
+                          additionalProperties:
+                            properties:
+                              device:
+                                type: string
+                              kind:
+                                enum:
+                                - nvme
+                                - other
+                                type: string
+                              mountPath:
+                                type: string
+                              originPath:
+                                type: string
+                              size:
+                                type: string
+                            required:
+                            - device
+                            - kind
+                            - mountPath
+                            - originPath
+                            - size
+                            type: object
+                          type: object
+                        memory:
+                          type: string
+                      required:
+                      - cpuPercent
+                      - memory
+                      type: object
                     name:
                       type: string
                     namespace:
@@ -73,6 +89,7 @@ spec:
                         that UIDs and names do not get conflated.
                       type: string
                   required:
+                  - binding
                   - name
                   - namespace
                   - uid
@@ -82,6 +99,64 @@ spec:
                 of cluster Important: Run "make" to regenerate code after modifying
                 this file'
               type: object
+            resourceToMachine:
+              additionalProperties:
+                properties:
+                  binding:
+                    properties:
+                      cpuPercent:
+                        format: int32
+                        type: integer
+                      disks:
+                        additionalProperties:
+                          properties:
+                            device:
+                              type: string
+                            kind:
+                              enum:
+                              - nvme
+                              - other
+                              type: string
+                            mountPath:
+                              type: string
+                            originPath:
+                              type: string
+                            size:
+                              type: string
+                          required:
+                          - device
+                          - kind
+                          - mountPath
+                          - originPath
+                          - size
+                          type: object
+                        type: object
+                      memory:
+                        type: string
+                    required:
+                    - cpuPercent
+                    - memory
+                    type: object
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    description: UID is a type that holds unique ID values, including
+                      UUIDs.  Because we don't ONLY use UUIDs, this is an alias to
+                      string.  Being a type captures intent and helps make sure that
+                      UIDs and names do not get conflated.
+                    type: string
+                required:
+                - binding
+                - name
+                - namespace
+                - uid
+                type: object
+              type: object
+          required:
+          - machineToResources
+          - resourceToMachine
           type: object
       type: object
   version: v1
