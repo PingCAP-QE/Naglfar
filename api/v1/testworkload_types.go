@@ -25,9 +25,8 @@ import (
 
 const (
 	TestWorkloadStatePending TestWorkloadState = "pending"
-	TestWorkloadStateRunning TestWorkloadState = "running"
-	TestWorkloadStateFinish  TestWorkloadState = "finish"
-	TestWorkloadStateFail    TestWorkloadState = "fail"
+	TestWorkloadStateRunning                   = "running"
+	TestWorkloadStateFinish                    = "finish"
 )
 
 type ClusterTopologyRef struct {
@@ -40,7 +39,7 @@ type ResourceRequestRef struct {
 	Node string `json:"node"`
 }
 
-type DockerContainer struct {
+type DockerContainerSpec struct {
 	Name            string             `json:"name"`
 	ResourceRequest ResourceRequestRef `json:"resourceRequest"`
 	Image           string             `json:"image"`
@@ -48,11 +47,11 @@ type DockerContainer struct {
 	Command []string `json:"command,omitempty"`
 }
 
-type TestWorkloadItem struct {
+type TestWorkloadItemSpec struct {
 	Name string `json:"name"`
 
 	// +optional
-	DockerContainer *DockerContainer `json:"dockerContainer,omitempty"`
+	DockerContainer *DockerContainerSpec `json:"dockerContainer,omitempty"`
 }
 
 // TestWorkloadSpec defines the desired state of TestWorkload
@@ -65,7 +64,7 @@ type TestWorkloadSpec struct {
 	ClusterTopologiesRefs []ClusterTopologyRef `json:"clusterTopologies,omitempty"`
 
 	// Workloads specifies workload templates
-	Workloads []TestWorkloadItem `json:"workloads"`
+	Workloads []TestWorkloadItemSpec `json:"workloads"`
 
 	// +optional
 	TeardownTestClusterTopology []string `json:"teardownTestClusterTopology,omitempty"`

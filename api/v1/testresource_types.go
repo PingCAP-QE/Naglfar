@@ -34,15 +34,19 @@ const (
 	ResourceUninitialized               = "uninitialized"
 	ResourceReady                       = "ready"
 	ResourceFinish                      = "finish"
+	ResourceDestroy                     = "destroy"
 )
 
 const cleanerImage = "alpine:latest"
 
-// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish
+// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish;destroy
 type ResourceState string
 
 func (r ResourceState) IsRequired() bool {
 	return r != ResourcePending && r != ResourceFail
+}
+func (r ResourceState) IsInstalled() bool {
+	return r == ResourceReady || r == ResourceFinish
 }
 
 type DiskSpec struct {
