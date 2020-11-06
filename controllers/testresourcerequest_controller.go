@@ -18,17 +18,21 @@ package controllers
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 )
+
+const requestFinalizer = "testresourcerequest.naglfar.pingcap.com"
 
 var (
 	resourceOwnerKey = ".metadata.controller"
@@ -38,8 +42,9 @@ var (
 // TestResourceRequestReconciler reconciles a TestResourceRequest object
 type TestResourceRequestReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log     logr.Logger
+	Eventer record.EventRecorder
+	Scheme  *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresourcerequests,verbs=get;list;watch;create;update;patch;delete
@@ -61,37 +66,70 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	if resourceRequest.ObjectMeta.DeletionTimestamp.IsZero() && !stringsContains(resourceRequest.ObjectMeta.Finalizers, requestFinalizer) {
+		resourceRequest.ObjectMeta.Finalizers = append(resourceRequest.ObjectMeta.Finalizers, requestFinalizer)
+		err = r.Update(ctx, &resourceRequest)
+		return
+	}
+
+	if !resourceRequest.ObjectMeta.DeletionTimestamp.IsZero() && stringsContains(resourceRequest.ObjectMeta.Finalizers, requestFinalizer) {
+		if err = r.removeAllResources(ctx, &resourceRequest); err != nil {
+			return
+		}
+
+		resourceRequest.ObjectMeta.Finalizers = stringsRemove(resourceRequest.ObjectMeta.Finalizers, requestFinalizer)
+		err = r.Update(ctx, &resourceRequest)
+		return
+	}
+
+	if resourceRequest.Status.State == "" {
+		resourceRequest.Status.State = naglfarv1.TestResourceRequestPending
+		err = r.Status().Update(ctx, &resourceRequest)
+		if err == nil {
+			result.Requeue = true
+		}
+		return
+	}
+
+	if resourceRequest.Status.State == naglfarv1.TestResourceRequestReady {
+		return
+	}
+
 	var (
-		resources   naglfarv1.TestResourceList
-		resourceMap = make(map[string]*naglfarv1.TestResource)
-		readyCount  = 0
+		resourceMap     = make(map[string]*naglfarv1.TestResource)
+		failedResources = make([]string, 0)
+		readyCount      = 0
 	)
-	if err = r.List(ctx, &resources, client.InNamespace(req.Namespace), client.MatchingFields{resourceOwnerKey: req.Name}); err != nil {
+
+	resources, err := r.listResources(ctx, &resourceRequest)
+	if err != nil {
 		log.Error(err, "unable to list child resources")
 		return
 	}
 
 	for idx, item := range resources.Items {
 		resourceMap[item.Name] = &resources.Items[idx]
-		if item.Status.State == naglfarv1.ResourceUninitialized {
+		switch item.Status.State {
+		case naglfarv1.ResourceUninitialized:
 			readyCount++
+		case naglfarv1.ResourceFail:
+			failedResources = append(failedResources, item.Name)
 		}
 	}
+
+	if len(failedResources) > 0 {
+		r.Eventer.Eventf(&resourceRequest, "Warning", "ResourceFail", "resources request fails: %s", strings.Join(failedResources, ","))
+		err = r.removeAllResources(ctx, &resourceRequest)
+		return
+	}
+
 	// if all resources are ready, set the resource request's state to be ready
 	if readyCount == len(resourceRequest.Spec.Items) {
 		log.Info("all resources are in ready state")
 		resourceRequest.Status.State = naglfarv1.TestResourceRequestReady
-		if err := r.Status().Update(ctx, &resourceRequest); err != nil {
-			log.Error(err, "unable to update TestResourceRequest status")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	} else {
-		resourceRequest.Status.State = naglfarv1.TestResourceRequestPending
-		if err := r.Status().Update(ctx, &resourceRequest); err != nil {
-			log.Error(err, "unable to update TestResourceRequest status")
-			return ctrl.Result{}, err
-		}
+		err = r.Status().Update(ctx, &resourceRequest)
+		return
 	}
 
 	for idx, item := range resourceRequest.Spec.Items {
@@ -110,6 +148,28 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		}
 	}
 	return ctrl.Result{RequeueAfter: time.Second}, nil
+}
+
+func (r *TestResourceRequestReconciler) listResources(ctx context.Context, request *naglfarv1.TestResourceRequest) (naglfarv1.TestResourceList, error) {
+	var resources naglfarv1.TestResourceList
+	err := r.List(ctx, &resources, client.InNamespace(request.Namespace), client.MatchingFields{resourceOwnerKey: request.Name})
+	return resources, err
+}
+
+func (r *TestResourceRequestReconciler) removeAllResources(ctx context.Context, request *naglfarv1.TestResourceRequest) error {
+	resources, err := r.listResources(ctx, request)
+	if err != nil {
+		return err
+	}
+
+	for _, resource := range resources.Items {
+		err = r.Delete(ctx, &resource)
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *TestResourceRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {

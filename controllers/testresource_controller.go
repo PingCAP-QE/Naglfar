@@ -462,6 +462,7 @@ func (r *TestResourceReconciler) getMachineOrRollback(log logr.Logger, resource 
 
 	if machine == nil {
 		resource.Status.HostMachine = nil
+		resource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
 		resource.Status.State = naglfarv1.ResourcePending
 		err = r.Status().Update(r.Ctx, resource)
 		rollback = true

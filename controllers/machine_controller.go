@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
@@ -126,6 +127,8 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 		}
 	}
 
+	result.Requeue = true
+	result.RequeueAfter = time.Second
 	return
 }
 

@@ -90,9 +90,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.TestResourceRequestReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("TestResourceRequest"),
-		Scheme: mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("TestResourceRequest"),
+		Eventer: mgr.GetEventRecorderFor("testresourcerequest-controller"),
+		Scheme:  mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TestResourceRequest")
 		os.Exit(1)
