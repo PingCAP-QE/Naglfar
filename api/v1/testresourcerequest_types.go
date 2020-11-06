@@ -77,6 +77,18 @@ type TestResourceRequestList struct {
 	Items           []TestResourceRequest `json:"items"`
 }
 
+func (r *TestResourceRequest) ConstructTestResource(idx int) *TestResource {
+	return &TestResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      make(map[string]string),
+			Annotations: make(map[string]string),
+			Name:        r.Spec.Items[idx].Name,
+			Namespace:   r.Namespace,
+		},
+		Spec: *r.Spec.Items[idx].Spec.DeepCopy(),
+	}
+}
+
 func init() {
 	SchemeBuilder.Register(&TestResourceRequest{}, &TestResourceRequestList{})
 }

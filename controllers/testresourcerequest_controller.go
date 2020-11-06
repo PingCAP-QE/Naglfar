@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -48,10 +47,11 @@ type TestResourceRequestReconciler struct {
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources/status,verbs=get
 
-func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+// TODO: add finalizer
+// TODO: fail
+func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("testresourcerequest", req.NamespacedName)
-	testResourceNameFormat := "%s-%s"
 
 	var resourceRequest naglfarv1.TestResourceRequest
 	if err := r.Get(ctx, req.NamespacedName, &resourceRequest); err != nil {
@@ -66,12 +66,14 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		resourceMap = make(map[string]*naglfarv1.TestResource)
 		readyCount  = 0
 	)
-	if err := r.List(ctx, &resources, client.InNamespace(req.Namespace), client.MatchingFields{resourceOwnerKey: req.Name}); err != nil {
+	if err = r.List(ctx, &resources, client.InNamespace(req.Namespace), client.MatchingFields{resourceOwnerKey: req.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
+		return
 	}
+
 	for idx, item := range resources.Items {
 		resourceMap[item.Name] = &resources.Items[idx]
-		if item.Status.State == naglfarv1.ResourceUninitialized || item.Status.State == naglfarv1.ResourceReady {
+		if item.Status.State == naglfarv1.ResourceUninitialized {
 			readyCount++
 		}
 	}
@@ -91,37 +93,20 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 	}
-	// otherwise, wait all resources to be ready
-	constructTestResource := func(resourceRequest *naglfarv1.TestResourceRequest, idx int) (*naglfarv1.TestResource, error) {
-		name := fmt.Sprintf("%s-%s", resourceRequest.Name, resourceRequest.Spec.Items[idx].Name)
-		tr := &naglfarv1.TestResource{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels:      make(map[string]string),
-				Annotations: make(map[string]string),
-				Name:        name,
-				Namespace:   resourceRequest.Namespace,
-			},
-			Spec: *resourceRequest.Spec.Items[idx].Spec.DeepCopy(),
-		}
 
-		if err := ctrl.SetControllerReference(resourceRequest, tr, r.Scheme); err != nil {
-			return nil, err
-		}
-		return tr, nil
-	}
 	for idx, item := range resourceRequest.Spec.Items {
-		if _, e := resourceMap[fmt.Sprintf(testResourceNameFormat, resourceRequest.Name, item.Name)]; !e {
-			tr, err := constructTestResource(&resourceRequest, idx)
-			if err != nil {
+		if _, e := resourceMap[item.Name]; !e {
+			tr := resourceRequest.ConstructTestResource(idx)
+			if err := ctrl.SetControllerReference(&resourceRequest, tr, r.Scheme); err != nil {
 				log.Error(err, "unable to construct a TestResource from template")
 				// don't bother requeuing until we get a change to the spec
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
+
 			if err := r.Create(ctx, tr); err != nil {
 				log.Error(err, "unable to create a TestResource for TestResourceRequest", "testResource", tr)
 				return ctrl.Result{}, err
 			}
-			log.V(1).Info("create a TestResource", "testResource", tr)
 		}
 	}
 	return ctrl.Result{RequeueAfter: time.Second}, nil

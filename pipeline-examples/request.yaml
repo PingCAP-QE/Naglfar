@@ -15,7 +15,6 @@ spec:
       spec:
         memory: 1GB
         cpuPercent: 200
-        image: alpine:latest
         commands:
           - echo 'Hello World!'
         disks:
