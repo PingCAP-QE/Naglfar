@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
@@ -262,9 +263,7 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 		}
 	}
 
-	if newResource.Status.DiskStat == nil {
-		newResource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
-	}
+	newResource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
 
 	for name, disk := range newResource.Spec.Disks {
 		for device, diskResource := range rest.Disks {
@@ -374,12 +373,8 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 		var overflow bool
 		overflow, result.Requeue, err = r.tryRequestResource(machine, resource)
 
-		if result.Requeue {
+		if result.Requeue || err != nil {
 			return
-		}
-
-		if err != nil {
-			break
 		}
 
 		if overflow {
@@ -399,21 +394,26 @@ func (r *TestResourceReconciler) checkHostMachine(log logr.Logger, targetResourc
 	if targetResource.Status.HostMachine != nil {
 		host := targetResource.Status.HostMachine
 		hostname := types.NamespacedName{Namespace: host.Namespace, Name: host.Name}
-		machine = new(naglfarv1.Machine)
-		err = r.Get(r.Ctx, hostname, machine)
+		hostMachine := new(naglfarv1.Machine)
+
+		err = r.Get(r.Ctx, hostname, hostMachine)
+
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", hostname))
 			return
 		}
 
-		if err == nil {
-			for _, resourceRef := range machine.Status.TestResources {
-				if resourceRef.Kind == targetResource.Kind && resourceRef.Namespace == targetResource.Namespace && resourceRef.Name == targetResource.Name {
-					return
-				}
+		if err != nil {
+			// not found
+			err = nil
+			return
+		}
+
+		for _, resourceRef := range hostMachine.Status.TestResources {
+			if resourceRef.UID == targetResource.UID {
+				machine = hostMachine
+				return
 			}
-			// resource not found
-			machine = nil
 		}
 	}
 
@@ -454,8 +454,8 @@ func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource,
 	return
 }
 
-func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	machine, err := r.checkHostMachine(log, resource)
+func (r *TestResourceReconciler) getMachineOrRollback(log logr.Logger, resource *naglfarv1.TestResource) (machine *naglfarv1.Machine, rollback bool, err error) {
+	machine, err = r.checkHostMachine(log, resource)
 	if err != nil {
 		return
 	}
@@ -464,10 +464,18 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		resource.Status.HostMachine = nil
 		resource.Status.State = naglfarv1.ResourcePending
 		err = r.Status().Update(r.Ctx, resource)
+		rollback = true
+	}
+	return
+}
+
+func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	machine, rollabck, err := r.getMachineOrRollback(log, resource)
+	if err != nil || rollabck {
 		return
 	}
 
-	if resource.Spec.Image == "" {
+	if resource.Status.Image == "" {
 		return
 	}
 
@@ -502,11 +510,15 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 
 	if stats.State.Restarting {
 		result.Requeue = true
+		result.RequeueAfter = time.Second
 		return
 	}
 
 	if stats.State.Running {
 		resource.Status.State = naglfarv1.ResourceReady
+		if ports, ok := stats.NetworkSettings.Ports["22"]; ok && len(ports) > 0 {
+			resource.Status.SSHPort, _ = strconv.Atoi(ports[0].HostPort)
+		}
 	}
 
 	if !timeIsZero(stats.State.FinishedAt) {
@@ -528,7 +540,48 @@ func (r *TestResourceReconciler) reconcileStateFail(log logr.Logger, resource *n
 
 // TODO: complete reconcileStateReady
 func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	// TODO: poll container state
+	machine, rollabck, err := r.getMachineOrRollback(log, resource)
+	if err != nil || rollabck {
+		return
+	}
+
+	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	if err != nil {
+		return
+	}
+
+	containerName := resource.ContainerName()
+	stats, err := dockerClient.ContainerInspect(r.Ctx, containerName)
+	if err != nil {
+		if !docker.IsErrContainerNotFound(err) {
+			return
+		}
+
+		// not found
+		resource.Status.State = naglfarv1.ResourceUninitialized
+		err = r.Status().Update(r.Ctx, resource)
+		return
+	}
+
+	if stats.State.Restarting {
+		resource.Status.State = naglfarv1.ResourceUninitialized
+	}
+
+	if !timeIsZero(stats.State.FinishedAt) {
+		resource.Status.State = naglfarv1.ResourceFinish
+	}
+
+	if stats.State.OOMKilled {
+		resource.Status.State = naglfarv1.ResourceFail
+	}
+
+	if resource.Status.State != naglfarv1.ResourceReady {
+		err = r.Status().Update(r.Ctx, resource)
+	} else {
+		result.Requeue = true
+		result.RequeueAfter = time.Second
+	}
+
 	return
 }
 

@@ -25,7 +25,9 @@ import (
 	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -70,8 +72,58 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 			log.Error(err, "unable to update Machine")
 			return
 		}
+	}
 
-		log.Info("machine updated", "content", machine)
+	if len(machine.Status.TestResources) != 0 {
+		// release leaked resources
+		leakedIndexSet := make(map[int]bool)
+		resourceSet := make(map[types.NamespacedName]bool)
+
+		for index, resourceRef := range machine.Status.TestResources {
+			resourceName := types.NamespacedName{Namespace: resourceRef.Namespace, Name: resourceRef.Name}
+			if resourceSet[resourceName] {
+				leakedIndexSet[index] = true
+				continue
+			}
+			resourceSet[resourceName] = true
+
+			resource := new(naglfarv1.TestResource)
+
+			err = r.Get(ctx, resourceName, resource)
+
+			if client.IgnoreNotFound(err) != nil {
+				return
+			}
+
+			if err != nil {
+				// not found
+				err = nil
+				leakedIndexSet[index] = true
+				continue
+			}
+
+			hostRef := resource.Status.HostMachine
+
+			if hostRef.UID != machine.UID {
+				leakedIndexSet[index] = true
+				continue
+			}
+		}
+
+		if len(leakedIndexSet) > 0 {
+			log.Info("resources leaked", "set", leakedIndexSet)
+			newResourceList := make([]corev1.ObjectReference, 0, len(machine.Status.TestResources)-len(leakedIndexSet))
+			for index, resourceRef := range machine.Status.TestResources {
+				if !leakedIndexSet[index] {
+					newResourceList = append(newResourceList, resourceRef)
+				}
+			}
+			machine.Status.TestResources = newResourceList
+			if err = r.Status().Update(ctx, machine); err != nil {
+				log.Error(err, "unable to update Machine")
+				return
+			}
+		}
 	}
 
 	return
