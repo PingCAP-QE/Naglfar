@@ -19,7 +19,6 @@ package v1
 import (
 	"fmt"
 	"path"
-	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -114,7 +113,10 @@ type TestResourceStatus struct {
 	Image string `json:"image,omitempty"`
 
 	// +optional
-	Commands []string `json:"commands,omitempty"`
+	Command []string `json:"command,omitempty"`
+
+	// +optional
+	Envs []string `json:"envs,omitempty"`
 
 	// ClusterIP is the ip address of the container in the overlay(or calico) network
 	// +optional
@@ -185,6 +187,8 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 
 	config := &container.Config{
 		Image: r.Status.Image,
+		Cmd:   r.Status.Command,
+		Env:   r.Status.Envs,
 	}
 
 	hostConfig := &container.HostConfig{
@@ -195,11 +199,6 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 		},
 		// set privilege
 		Privileged: r.Status.Privilege,
-	}
-
-	if len(r.Status.Commands) != 0 {
-		script := strings.Join(r.Status.Commands, ";")
-		config.Cmd = []string{"bash", "-c", script}
 	}
 
 	return config, hostConfig
