@@ -73,6 +73,11 @@ type TestWorkloadSpec struct {
 // +kubebuilder:validation:Enum=pending;running;finish;fail
 type TestWorkloadState string
 
+type TestWorkloadResult struct {
+	// plain text format
+	PlainText string `json:"plainText"`
+}
+
 // TestWorkloadStatus defines the observed state of TestWorkload
 type TestWorkloadStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -81,6 +86,10 @@ type TestWorkloadStatus struct {
 	// default pending
 	// +optional
 	State TestWorkloadState `json:"state"`
+
+	// Save the results passed through
+	// +optional
+	Results map[string]TestWorkloadResult `json:"results"`
 }
 
 // +kubebuilder:object:root=true
