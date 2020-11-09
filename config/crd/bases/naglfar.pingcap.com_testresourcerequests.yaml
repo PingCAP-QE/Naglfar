@@ -88,8 +88,8 @@ spec:
             state:
               description: default Pending
               enum:
-              - Pending
-              - Ready
+              - pending
+              - ready
               type: string
           required:
           - state

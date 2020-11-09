@@ -153,6 +153,8 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return r.reconcileStateReady(log, resource)
 	case naglfarv1.ResourceFinish:
 		return r.reconcileStateFinish(log, resource)
+	case naglfarv1.ResourceDestroy:
+		return r.reconcileStateDestroy(log, resource)
 	default:
 		return
 	}
@@ -588,6 +590,20 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 // TODO: complete reconcileStateFinish
 func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	// TODO: collect logs
+	return
+}
+
+func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	machine, _, err := r.getMachineOrRollback(log, resource)
+	if err != nil {
+		return
+	}
+	result.Requeue, err = r.finalize(resource, machine)
+	if result.Requeue || err != nil {
+		return
+	}
+	resource.Status.State = naglfarv1.ResourceUninitialized
+	err = r.Status().Update(r.Ctx, resource)
 	return
 }
 

@@ -62,21 +62,21 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	var (
-		resources   naglfarv1.TestResourceList
-		resourceMap = make(map[string]*naglfarv1.TestResource)
-		readyCount  = 0
+		resources     naglfarv1.TestResourceList
+		resourceMap   = make(map[string]*naglfarv1.TestResource)
+		requiredCount = 0
 	)
 	if err := r.List(ctx, &resources, client.InNamespace(req.Namespace), client.MatchingFields{resourceOwnerKey: req.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
 	for idx, item := range resources.Items {
 		resourceMap[item.Name] = &resources.Items[idx]
-		if item.Status.State == naglfarv1.ResourceUninitialized || item.Status.State == naglfarv1.ResourceReady {
-			readyCount++
+		if item.Status.State.IsRequired() {
+			requiredCount++
 		}
 	}
-	// if all resources are ready, set the resource request's state to be ready
-	if readyCount == len(resourceRequest.Spec.Items) {
+	// if all resources has been required, set the resource request's state to be ready
+	if requiredCount == len(resourceRequest.Spec.Items) {
 		log.Info("all resources are in ready state")
 		resourceRequest.Status.State = naglfarv1.TestResourceRequestReady
 		if err := r.Status().Update(ctx, &resourceRequest); err != nil {

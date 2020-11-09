@@ -139,8 +139,25 @@ spec:
               type: object
             image:
               type: string
+            mount:
+              items:
+                properties:
+                  readOnly:
+                    type: boolean
+                  source:
+                    type: string
+                  target:
+                    type: string
+                  type:
+                    description: Type represents the type of a mount.
+                    type: string
+                type: object
+              type: array
             password:
               type: string
+            privilege:
+              description: default false
+              type: boolean
             sshPort:
               type: integer
             state:
@@ -151,6 +168,7 @@ spec:
               - uninitialized
               - ready
               - finish
+              - destroy
               type: string
             username:
               type: string

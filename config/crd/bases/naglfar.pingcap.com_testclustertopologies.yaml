@@ -177,8 +177,8 @@ spec:
             state:
               description: default Pending
               enum:
-              - Pending
-              - Ready
+              - pending
+              - ready
               type: string
           type: object
       type: object
