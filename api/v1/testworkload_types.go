@@ -23,6 +23,12 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	TestWorkloadStatePending TestWorkloadState = "pending"
+	TestWorkloadStateRunning                   = "running"
+	TestWorkloadStateFinish                    = "finish"
+)
+
 type ClusterTopologyRef struct {
 	Name      string `json:"name"`
 	AliasName string `json:"aliasName"`
@@ -33,7 +39,7 @@ type ResourceRequestRef struct {
 	Node string `json:"node"`
 }
 
-type DockerContainer struct {
+type DockerContainerSpec struct {
 	Name            string             `json:"name"`
 	ResourceRequest ResourceRequestRef `json:"resourceRequest"`
 	Image           string             `json:"image"`
@@ -41,13 +47,11 @@ type DockerContainer struct {
 	Command []string `json:"command,omitempty"`
 }
 
-type TestWorkloadItem struct {
+type TestWorkloadItemSpec struct {
 	Name string `json:"name"`
 
-	//JobTemplate *batchv1beta1.JobTemplateSpec `json:"jobTemplate,omitempty"`
-
 	// +optional
-	DockerContainer *DockerContainer `json:"dockerContainer,omitempty"`
+	DockerContainer *DockerContainerSpec `json:"dockerContainer,omitempty"`
 }
 
 // TestWorkloadSpec defines the desired state of TestWorkload
@@ -60,19 +64,36 @@ type TestWorkloadSpec struct {
 	ClusterTopologiesRefs []ClusterTopologyRef `json:"clusterTopologies,omitempty"`
 
 	// Workloads specifies workload templates
-	Workloads []TestWorkloadItem `json:"workloads"`
+	Workloads []TestWorkloadItemSpec `json:"workloads"`
 
 	// +optional
 	TeardownTestClusterTopology []string `json:"teardownTestClusterTopology,omitempty"`
+}
+
+// +kubebuilder:validation:Enum=pending;running;finish;fail
+type TestWorkloadState string
+
+type TestWorkloadResult struct {
+	// plain text format
+	PlainText string `json:"plainText"`
 }
 
 // TestWorkloadStatus defines the observed state of TestWorkload
 type TestWorkloadStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// default pending
+	// +optional
+	State TestWorkloadState `json:"state"`
+
+	// Save the results passed through
+	// +optional
+	Results map[string]TestWorkloadResult `json:"results"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // TestWorkload is the Schema for the testworkloads API
 type TestWorkload struct {

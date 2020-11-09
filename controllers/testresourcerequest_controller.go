@@ -99,7 +99,7 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 	var (
 		resourceMap     = make(map[string]*naglfarv1.TestResource)
 		failedResources = make([]string, 0)
-		readyCount      = 0
+		requiredCount   = 0
 	)
 
 	resources, err := r.listResources(ctx, &resourceRequest)
@@ -108,13 +108,15 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		return
 	}
 
-	for idx, item := range resources.Items {
-		resourceMap[item.Name] = &resources.Items[idx]
-		switch item.Status.State {
-		case naglfarv1.ResourceUninitialized:
-			readyCount++
-		case naglfarv1.ResourceFail:
+	for _, item := range resources.Items {
+		resourceMap[item.Name] = &item
+
+		if item.Status.State == naglfarv1.ResourceFail {
 			failedResources = append(failedResources, item.Name)
+		}
+
+		if item.Status.State.IsRequired() {
+			requiredCount++
 		}
 	}
 
@@ -124,8 +126,8 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		return
 	}
 
-	// if all resources are ready, set the resource request's state to be ready
-	if readyCount == len(resourceRequest.Spec.Items) {
+	// if all resources has been required, set the resource request's state to be ready
+	if requiredCount == len(resourceRequest.Spec.Items) {
 		log.Info("all resources are in ready state")
 		resourceRequest.Status.State = naglfarv1.TestResourceRequestReady
 		err = r.Status().Update(ctx, &resourceRequest)

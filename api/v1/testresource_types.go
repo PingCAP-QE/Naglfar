@@ -19,11 +19,11 @@ package v1
 import (
 	"fmt"
 	"path"
-	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
-	corev1 "k8s.io/api/core/v1"
+
+	"github.com/docker/go-connections/nat"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,12 +33,21 @@ const (
 	ResourceUninitialized               = "uninitialized"
 	ResourceReady                       = "ready"
 	ResourceFinish                      = "finish"
+	ResourceDestroy                     = "destroy"
 )
 
 const cleanerImage = "alpine:latest"
 
-// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish
+// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish;destroy
 type ResourceState string
+
+func (r ResourceState) IsRequired() bool {
+	return r != "" && r != ResourcePending && r != ResourceFail
+}
+
+func (r ResourceState) IsInstalled() bool {
+	return r == ResourceReady || r == ResourceFinish
+}
 
 type DiskSpec struct {
 	// default /mnt/<name>
@@ -50,14 +59,6 @@ type DiskSpec struct {
 
 	// +optional
 	Size BytesSize `json:"size"`
-}
-
-type DiskStatus struct {
-	Kind       DiskKind  `json:"kind"`
-	Size       BytesSize `json:"size"`
-	Device     string    `json:"device"`
-	OriginPath string    `json:"originPath"`
-	MountPath  string    `json:"mountPath"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -83,6 +84,15 @@ type TestResourceSpec struct {
 	TestMachineResource string `json:"testMachineResource,omitempty"`
 }
 
+// https://github.com/moby/moby/blob/master/api/types/mount/mount.go#L23
+
+type TestResourceMount struct {
+	Type     mount.Type `json:"type,omitempty"`
+	Source   string     `json:"source,omitempty"`
+	Target   string     `json:"target,omitempty"`
+	ReadOnly bool       `json:"readOnly,omitempty"`
+}
+
 // TestResourceStatus defines the observed state of TestResource
 type TestResourceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -93,20 +103,29 @@ type TestResourceStatus struct {
 	State ResourceState `json:"state"`
 
 	// +optional
-	HostMachine *corev1.ObjectReference `json:"hostMachine,omitempty"`
+	// Container configuration section
+	// default false
+	Privilege bool `json:"privilege,omitempty"`
 
 	// +optional
-	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
+	Mounts []TestResourceMount `json:"mount,omitempty"`
 
 	// +optional
 	Image string `json:"image,omitempty"`
 
 	// +optional
-	Commands []string `json:"commands,omitempty"`
+	Command []string `json:"command,omitempty"`
+
+	// +optional
+	Envs []string `json:"envs,omitempty"`
 
 	// ClusterIP is the ip address of the container in the overlay(or calico) network
 	// +optional
 	ClusterIP string `json:"clusterIP"`
+
+	// HostIP is the ip address of the host machine
+	// +optional
+	HostIP string `json:"hostIP"`
 
 	// +optional
 	Username string `json:"username"`
@@ -147,9 +166,9 @@ func (r *TestResource) ContainerCleanerName() string {
 	return fmt.Sprintf("%s.%s-cleaner", r.Namespace, r.Name)
 }
 
-func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConfig) {
+func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
-	for _, disk := range r.Status.DiskStat {
+	for _, disk := range binding.Disks {
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: disk.OriginPath,
@@ -157,29 +176,38 @@ func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConf
 		})
 	}
 
+	// bind mounts
+	for _, m := range r.Status.Mounts {
+		mounts = append(mounts, mount.Mount{
+			Type:     m.Type,
+			Source:   m.Source,
+			Target:   m.Target,
+			ReadOnly: m.ReadOnly,
+		})
+	}
+
 	config := &container.Config{
 		Image: r.Status.Image,
+		Cmd:   r.Status.Command,
+		Env:   r.Status.Envs,
 	}
 
 	hostConfig := &container.HostConfig{
 		Mounts: mounts,
 		Resources: container.Resources{
-			Memory:   r.Spec.Memory.Unwrap(),
-			CPUQuota: int64(r.Spec.CPUPercent) * 1000,
+			Memory:   binding.Memory.Unwrap(),
+			CPUQuota: int64(binding.CPUPercent) * 1000,
 		},
-	}
-
-	if len(r.Status.Commands) != 0 {
-		script := strings.Join(r.Status.Commands, ";")
-		config.Cmd = []string{"bash", "-c", script}
+		// set privilege
+		Privileged: r.Status.Privilege,
 	}
 
 	return config, hostConfig
 }
 
-func (r *TestResource) ContainerCleanerConfig() (*container.Config, *container.HostConfig) {
+func (r *TestResource) ContainerCleanerConfig(binding *ResourceBinding) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
-	for _, disk := range r.Status.DiskStat {
+	for _, disk := range binding.Disks {
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: disk.OriginPath,
@@ -193,6 +221,9 @@ func (r *TestResource) ContainerCleanerConfig() (*container.Config, *container.H
 
 	hostConfig := &container.HostConfig{
 		Mounts: mounts,
+		PortBindings: nat.PortMap{
+			"22": {},
+		},
 	}
 
 	if len(mounts) > 0 {

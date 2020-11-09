@@ -15,6 +15,8 @@ spec:
     plural: testworkloads
     singular: testworkload
   scope: Namespaced
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: TestWorkload is the Schema for the testworkloads API
@@ -91,6 +93,26 @@ spec:
           type: object
         status:
           description: TestWorkloadStatus defines the observed state of TestWorkload
+          properties:
+            results:
+              additionalProperties:
+                properties:
+                  plainText:
+                    description: plain text format
+                    type: string
+                required:
+                - plainText
+                type: object
+              description: Save the results passed through
+              type: object
+            state:
+              description: default pending
+              enum:
+              - pending
+              - running
+              - finish
+              - fail
+              type: string
           type: object
       type: object
   version: v1

@@ -1,0 +1,4 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: Relationship
+metadata:
+  name: machine-testresource

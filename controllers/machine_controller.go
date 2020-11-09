@@ -26,13 +26,13 @@ import (
 	"github.com/appleboy/easyssh-proxy"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
-	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 )
 
 // MachineReconciler reconciles a Machine object
@@ -44,6 +44,8 @@ type MachineReconciler struct {
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships,verbs=get;list
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships/status,verbs=get;update;patch
 
 func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
 	ctx := context.Background()
@@ -75,61 +77,38 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 		}
 	}
 
-	if len(machine.Status.TestResources) != 0 {
-		// release leaked resources
-		leakedIndexSet := make(map[int]bool)
-		resourceSet := make(map[types.NamespacedName]bool)
+	relation, err := r.getRelationship(ctx)
+	if err != nil {
+		return
+	}
 
-		for index, resourceRef := range machine.Status.TestResources {
-			resourceName := types.NamespacedName{Namespace: resourceRef.Namespace, Name: resourceRef.Name}
-			if resourceSet[resourceName] {
-				leakedIndexSet[index] = true
-				continue
-			}
-			resourceSet[resourceName] = true
+	machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
 
-			resource := new(naglfarv1.TestResource)
+	if relation.Status.MachineToResources == nil {
+		result.Requeue = true
+		result.RequeueAfter = time.Second
+		log.Info("relationship not ready")
+		return
+	}
 
-			err = r.Get(ctx, resourceName, resource)
-
-			if client.IgnoreNotFound(err) != nil {
-				return
-			}
-
-			if err != nil {
-				// not found
-				err = nil
-				leakedIndexSet[index] = true
-				continue
-			}
-
-			hostRef := resource.Status.HostMachine
-
-			if hostRef.UID != machine.UID {
-				leakedIndexSet[index] = true
-				continue
-			}
-		}
-
-		if len(leakedIndexSet) > 0 {
-			log.Info("resources leaked", "set", leakedIndexSet)
-			newResourceList := make([]corev1.ObjectReference, 0, len(machine.Status.TestResources)-len(leakedIndexSet))
-			for index, resourceRef := range machine.Status.TestResources {
-				if !leakedIndexSet[index] {
-					newResourceList = append(newResourceList, resourceRef)
-				}
-			}
-			machine.Status.TestResources = newResourceList
-			if err = r.Status().Update(ctx, machine); err != nil {
-				log.Error(err, "unable to update Machine")
-				return
-			}
-		}
+	if relation.Status.MachineToResources[machineKey] == nil {
+		relation.Status.MachineToResources[machineKey] = make(naglfarv1.ResourceRefList, 0)
+		err = r.Status().Update(ctx, relation)
 	}
 
 	result.Requeue = true
 	result.RequeueAfter = time.Second
 	return
+}
+
+func (r *MachineReconciler) getRelationship(ctx context.Context) (*naglfarv1.Relationship, error) {
+	var relation naglfarv1.Relationship
+	err := r.Get(ctx, relationshipName, &relation)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		err = nil
+	}
+	return &relation, err
 }
 
 func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {

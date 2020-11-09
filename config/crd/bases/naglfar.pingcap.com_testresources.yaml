@@ -72,75 +72,38 @@ spec:
               description: ClusterIP is the ip address of the container in the overlay(or
                 calico) network
               type: string
-            commands:
+            command:
               items:
                 type: string
               type: array
-            diskStat:
-              additionalProperties:
-                properties:
-                  device:
-                    type: string
-                  kind:
-                    enum:
-                    - nvme
-                    - other
-                    type: string
-                  mountPath:
-                    type: string
-                  originPath:
-                    type: string
-                  size:
-                    type: string
-                required:
-                - device
-                - kind
-                - mountPath
-                - originPath
-                - size
-                type: object
-              type: object
-            hostMachine:
-              description: ObjectReference contains enough information to let you
-                inspect or modify the referred object.
-              properties:
-                apiVersion:
-                  description: API version of the referent.
-                  type: string
-                fieldPath:
-                  description: 'If referring to a piece of an object instead of an
-                    entire object, this string should contain a valid JSON/Go field
-                    access statement, such as desiredState.manifest.containers[2].
-                    For example, if the object reference is to a container within
-                    a pod, this would take on a value like: "spec.containers{name}"
-                    (where "name" refers to the name of the container that triggered
-                    the event) or if no container name is specified "spec.containers[2]"
-                    (container with index 2 in this pod). This syntax is chosen only
-                    to have some well-defined way of referencing a part of an object.
-                    TODO: this design is not final and this field is subject to change
-                    in the future.'
-                  type: string
-                kind:
-                  description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                  type: string
-                name:
-                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
-                  type: string
-                namespace:
-                  description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
-                  type: string
-                resourceVersion:
-                  description: 'Specific resourceVersion to which this reference is
-                    made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
-                  type: string
-                uid:
-                  description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
-                  type: string
-              type: object
+            envs:
+              items:
+                type: string
+              type: array
+            hostIP:
+              description: HostIP is the ip address of the host machine
+              type: string
             image:
               type: string
+            mount:
+              items:
+                properties:
+                  readOnly:
+                    type: boolean
+                  source:
+                    type: string
+                  target:
+                    type: string
+                  type:
+                    description: Type represents the type of a mount.
+                    type: string
+                type: object
+              type: array
             password:
               type: string
+            privilege:
+              description: Container configuration section default false
+              type: boolean
             sshPort:
               type: integer
             state:
@@ -151,6 +114,7 @@ spec:
               - uninitialized
               - ready
               - finish
+              - destroy
               type: string
             username:
               type: string

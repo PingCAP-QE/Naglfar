@@ -19,24 +19,29 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
 	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	ref "k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 )
 
 const resourceFinalizer = "testresource.naglfar.pingcap.com"
+
+var relationshipName = types.NamespacedName{
+	Namespace: "default",
+	Name:      "machine-testresource",
+}
 
 func stringsContains(list []string, target string) bool {
 	for _, elem := range list {
@@ -57,10 +62,10 @@ func stringsRemove(list []string, target string) []string {
 	return newList
 }
 
-func resourcesRemove(list []corev1.ObjectReference, resource *naglfarv1.TestResource) []corev1.ObjectReference {
-	newList := make([]corev1.ObjectReference, 0, len(list)-1)
+func refsRemove(list naglfarv1.ResourceRefList, resource ref.Ref) naglfarv1.ResourceRefList {
+	newList := make(naglfarv1.ResourceRefList, 0, len(list)-1)
 	for _, elem := range list {
-		if elem.Kind == resource.Kind && elem.Namespace == resource.Namespace && elem.Name == resource.Name {
+		if elem.Ref == resource {
 			continue
 		}
 		newList = append(newList, elem)
@@ -84,13 +89,14 @@ type TestResourceReconciler struct {
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines/status,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships,verbs=get;list
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch
 
 func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("testresource", req.NamespacedName)
-
 	resource := new(naglfarv1.TestResource)
 
 	if err = r.Get(r.Ctx, req.NamespacedName, resource); err != nil {
@@ -110,24 +116,32 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 	}
 
 	if !resource.ObjectMeta.DeletionTimestamp.IsZero() && stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
-		var machine *naglfarv1.Machine
+		var relation *naglfarv1.Relationship
 
-		machine, err = r.checkHostMachine(log, resource)
-
-		if err != nil {
+		if relation, err = r.getRelationship(); err != nil {
 			return
 		}
 
-		if machine != nil {
-			result.Requeue, err = r.finalize(resource, machine)
-			if err != nil || result.Requeue {
+		resourceRef := ref.CreateRef(&resource.ObjectMeta)
+		resourceKey := resourceRef.Key()
+
+		if machineRef, ok := relation.Status.ResourceToMachine[resourceKey]; ok {
+			var machine naglfarv1.Machine
+			if err = r.Get(r.Ctx, machineRef.Namespaced(), &machine); err != nil {
+				// TODO: deal with not found
 				return
 			}
 
-			machine.Status.TestResources = resourcesRemove(machine.Status.TestResources, resource)
-			err = r.Status().Update(r.Ctx, machine)
+			result.Requeue, err = r.finalize(resource, &machine)
 
-			if err != nil {
+			if result.Requeue || err != nil {
+				return
+			}
+
+			machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
+			relation.Status.MachineToResources[machineKey] = refsRemove(relation.Status.MachineToResources[machineKey], resourceRef)
+			delete(relation.Status.ResourceToMachine, resourceKey)
+			if err = r.Status().Update(r.Ctx, relation); err != nil {
 				return
 			}
 		}
@@ -152,9 +166,21 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return r.reconcileStateReady(log, resource)
 	case naglfarv1.ResourceFinish:
 		return r.reconcileStateFinish(log, resource)
+	case naglfarv1.ResourceDestroy:
+		return r.reconcileStateDestroy(log, resource)
 	default:
 		return
 	}
+}
+
+func (r *TestResourceReconciler) getRelationship() (*naglfarv1.Relationship, error) {
+	var relation naglfarv1.Relationship
+	err := r.Get(r.Ctx, relationshipName, &relation)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		err = nil
+	}
+	return &relation, err
 }
 
 func (r *TestResourceReconciler) removeContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
@@ -222,48 +248,16 @@ func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, mach
 	return
 }
 
-func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, newResource *naglfarv1.TestResource) (overflow bool, requeue bool, err error) {
-	rest := machine.Available()
-
+func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResource, newResource *naglfarv1.TestResource) (*naglfarv1.ResourceBinding, bool) {
 	if rest == nil {
-		requeue = true
-		return
+		return nil, true
 	}
 
-	for _, refer := range machine.Status.TestResources {
-		resource := new(naglfarv1.TestResource)
-
-		name := types.NamespacedName{Namespace: refer.Namespace, Name: refer.Name}
-
-		log := r.Log.WithValues("testresource", name)
-
-		if err = r.Get(r.Ctx, name, resource); err != nil {
-			log.Error(err, "unable to fetch TestResource")
-			if apierrors.IsNotFound(err) {
-				// ignore error, resource may deleted
-				continue
-			}
-			return
-		}
-
-		rest.CPUPercent -= resource.Spec.CPUPercent
-		rest.Memory = rest.Memory.Sub(resource.Spec.Memory)
-
-		if len(resource.Status.DiskStat) != 0 {
-			for _, stat := range resource.Status.DiskStat {
-				if _, ok := rest.Disks[stat.Device]; !ok {
-					log.Error(fmt.Errorf("device %s unavialable on machine %s", stat.Device, machine.Name), "data maybe outdated")
-					requeue = true
-					return
-				}
-
-				delete(rest.Disks, stat.Device)
-			}
-			continue
-		}
+	binding := &naglfarv1.ResourceBinding{
+		CPUPercent: newResource.Spec.CPUPercent,
+		Memory:     newResource.Spec.Memory,
+		Disks:      make(map[string]naglfarv1.DiskBinding),
 	}
-
-	newResource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
 
 	for name, disk := range newResource.Spec.Disks {
 		for device, diskResource := range rest.Disks {
@@ -271,7 +265,7 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 				disk.Size.Unwrap() <= diskResource.Size.Unwrap() {
 
 				delete(rest.Disks, name)
-				newResource.Status.DiskStat[name] = naglfarv1.DiskStatus{
+				binding.Disks[name] = naglfarv1.DiskBinding{
 					Kind:       disk.Kind,
 					Size:       diskResource.Size,
 					Device:     device,
@@ -284,69 +278,34 @@ func (r *TestResourceReconciler) resourceOverflow(machine *naglfarv1.Machine, ne
 		}
 	}
 
-	overflow = len(newResource.Status.DiskStat) < len(newResource.Spec.Disks) ||
+	overflow := len(binding.Disks) < len(newResource.Spec.Disks) ||
 		rest.Memory.Unwrap() < newResource.Spec.Memory.Unwrap() ||
 		rest.CPUPercent < newResource.Spec.CPUPercent
 
-	return
-}
-
-func (r *TestResourceReconciler) tryRequestResource(machine *naglfarv1.Machine, newResource *naglfarv1.TestResource) (overflow bool, requeue bool, err error) {
-	log := r.Log.WithValues("testresource", newResource.Name)
-
-	overflow, requeue, err = r.resourceOverflow(machine, newResource)
-
-	if overflow || requeue || err != nil {
-		return
+	if overflow {
+		return nil, overflow
 	}
 
-	resourceRef, err := ref.GetReference(r.Scheme, newResource)
+	return binding, false
+}
+
+func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglfarv1.TestResource) (success bool, err error) {
+	relation, err := r.getRelationship()
 	if err != nil {
-		log.Error(err, "unable to make reference to resource", "resource", newResource)
 		return
 	}
 
-	machineRef, err := ref.GetReference(r.Scheme, machine)
-	if err != nil {
-		log.Error(err, "unable to make reference to machine", "machine", machine)
+	resourceRef := ref.CreateRef(&resource.ObjectMeta)
+	resourceKey := resourceRef.Key()
+
+	_, success = relation.Status.ResourceToMachine[resourceKey]
+
+	if success {
 		return
 	}
 
-	machine.Status.TestResources = append(machine.Status.TestResources, *resourceRef)
-	newResource.Status.HostMachine = machineRef
-
-	return
-}
-
-func (r *TestResourceReconciler) updatePendingResource(machine *naglfarv1.Machine, resource *naglfarv1.TestResource) (requeue bool) {
-	log := r.Log.WithValues("testresource", resource.Name)
-	if resource.Status.State != naglfarv1.ResourcePending {
-		if err := r.Status().Update(r.Ctx, resource); err != nil {
-			log.Info("fail to update, maybe conflict", "testresource", types.NamespacedName{Namespace: resource.Name, Name: resource.Name})
-			return true
-		}
-	}
-
-	if resource.Status.State == naglfarv1.ResourceUninitialized {
-		if err := r.Status().Update(r.Ctx, machine); err != nil {
-			log.Info("fail to update, maybe conflict", "machine", machine.Name)
-			return true
-		}
-	}
-
-	return false
-}
-
-func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	machine := new(naglfarv1.Machine)
 	var machines []naglfarv1.Machine
-
-	defer func() {
-		if !result.Requeue {
-			result.Requeue = r.updatePendingResource(machine, resource)
-		}
-	}()
-
 	if resource.Spec.TestMachineResource != "" {
 		if err = r.Get(r.Ctx, types.NamespacedName{Namespace: "default", Name: resource.Spec.TestMachineResource}, machine); err != nil {
 			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", resource.Spec.TestMachineResource))
@@ -370,59 +329,96 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 	}
 
 	for _, *machine = range machines {
-		var overflow bool
-		overflow, result.Requeue, err = r.tryRequestResource(machine, resource)
-
-		if result.Requeue || err != nil {
-			return
+		machineRef := ref.CreateRef(&machine.ObjectMeta)
+		machineKey := machineRef.Key()
+		resources, ok := relation.Status.MachineToResources[machineKey]
+		if !ok {
+			continue
 		}
 
+		binding, overflow := r.resourceOverflow(machine.Rest(resources), resource)
 		if overflow {
 			continue
 		}
 
-		resource.Status.State = naglfarv1.ResourceUninitialized
-		return
+		relation.Status.ResourceToMachine[resourceKey] = naglfarv1.MachineRef{
+			Ref:     machineRef,
+			Binding: *binding,
+		}
+
+		relation.Status.MachineToResources[machineKey] = append(
+			relation.Status.MachineToResources[machineKey],
+			naglfarv1.ResourceRef{
+				Ref:     resourceRef,
+				Binding: *binding,
+			},
+		)
+
+		if err = r.Status().Update(r.Ctx, relation); err != nil {
+			return
+		}
+		success = true
+		break
 	}
-
-	resource.Status.State = naglfarv1.ResourceFail
-
 	return
 }
 
-func (r *TestResourceReconciler) checkHostMachine(log logr.Logger, targetResource *naglfarv1.TestResource) (machine *naglfarv1.Machine, err error) {
-	if targetResource.Status.HostMachine != nil {
-		host := targetResource.Status.HostMachine
-		hostname := types.NamespacedName{Namespace: host.Namespace, Name: host.Name}
-		hostMachine := new(naglfarv1.Machine)
-
-		err = r.Get(r.Ctx, hostname, hostMachine)
-
-		if client.IgnoreNotFound(err) != nil {
-			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", hostname))
-			return
-		}
-
-		if err != nil {
-			// not found
-			err = nil
-			return
-		}
-
-		for _, resourceRef := range hostMachine.Status.TestResources {
-			if resourceRef.UID == targetResource.UID {
-				machine = hostMachine
-				return
-			}
-		}
+func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	success, err := r.requestResouce(log, resource)
+	if err != nil {
+		return
 	}
 
+	if success {
+		resource.Status.State = naglfarv1.ResourceUninitialized
+	} else {
+		resource.Status.State = naglfarv1.ResourceFail
+	}
+
+	err = r.Status().Update(r.Ctx, resource)
 	return
+}
+
+func (r *TestResourceReconciler) getResouceBinding(resourceRef ref.Ref) (binding *naglfarv1.ResourceBinding, err error) {
+	relation, err := r.getRelationship()
+	if err != nil {
+		return
+	}
+
+	resourceKey := resourceRef.Key()
+
+	machine := relation.Status.ResourceToMachine[resourceKey]
+
+	return &machine.Binding, nil
+}
+
+func (r *TestResourceReconciler) getHostMachine(resourceRef ref.Ref) (*naglfarv1.Machine, error) {
+	var machine naglfarv1.Machine
+
+	relation, err := r.getRelationship()
+	if err != nil {
+		return nil, err
+	}
+
+	resourceKey := resourceRef.Key()
+
+	machineRef := relation.Status.ResourceToMachine[resourceKey]
+
+	err = r.Get(r.Ctx, machineRef.Namespaced(), &machine)
+
+	return &machine, err
 }
 
 func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
 	containerName := resource.ContainerName()
-	config, hostConfig := resource.ContainerConfig()
+
+	binding, err := r.getResouceBinding(ref.CreateRef(&resource.ObjectMeta))
+
+	if err != nil {
+		return
+	}
+
+	config, hostConfig := resource.ContainerConfig(binding)
 
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
 	if err != nil {
@@ -439,7 +435,14 @@ func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResourc
 
 func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
 	containerName := resource.ContainerCleanerName()
-	config, hostConfig := resource.ContainerCleanerConfig()
+
+	binding, err := r.getResouceBinding(ref.CreateRef(&resource.ObjectMeta))
+
+	if err != nil {
+		return
+	}
+
+	config, hostConfig := resource.ContainerCleanerConfig(binding)
 
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
 	if err != nil {
@@ -454,29 +457,13 @@ func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource,
 	return
 }
 
-func (r *TestResourceReconciler) getMachineOrRollback(log logr.Logger, resource *naglfarv1.TestResource) (machine *naglfarv1.Machine, rollback bool, err error) {
-	machine, err = r.checkHostMachine(log, resource)
-	if err != nil {
-		return
-	}
-
-	if machine == nil {
-		resource.Status.HostMachine = nil
-		resource.Status.DiskStat = make(map[string]naglfarv1.DiskStatus)
-		resource.Status.State = naglfarv1.ResourcePending
-		err = r.Status().Update(r.Ctx, resource)
-		rollback = true
-	}
-	return
-}
-
 func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	machine, rollabck, err := r.getMachineOrRollback(log, resource)
-	if err != nil || rollabck {
+	if resource.Status.Image == "" {
 		return
 	}
 
-	if resource.Status.Image == "" {
+	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
+	if err != nil {
 		return
 	}
 
@@ -517,14 +504,13 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 
 	if stats.State.Running {
 		resource.Status.State = naglfarv1.ResourceReady
+		if ports, ok := stats.NetworkSettings.Ports["22"]; ok && len(ports) > 0 {
+			resource.Status.SSHPort, _ = strconv.Atoi(ports[0].HostPort)
+		}
 	}
 
 	if !timeIsZero(stats.State.FinishedAt) {
 		resource.Status.State = naglfarv1.ResourceFinish
-	}
-
-	if stats.State.OOMKilled {
-		resource.Status.State = naglfarv1.ResourceFail
 	}
 
 	err = r.Status().Update(r.Ctx, resource)
@@ -538,8 +524,8 @@ func (r *TestResourceReconciler) reconcileStateFail(log logr.Logger, resource *n
 
 // TODO: complete reconcileStateReady
 func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	machine, rollabck, err := r.getMachineOrRollback(log, resource)
-	if err != nil || rollabck {
+	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
+	if err != nil {
 		return
 	}
 
@@ -569,10 +555,6 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 		resource.Status.State = naglfarv1.ResourceFinish
 	}
 
-	if stats.State.OOMKilled {
-		resource.Status.State = naglfarv1.ResourceFail
-	}
-
 	if resource.Status.State != naglfarv1.ResourceReady {
 		err = r.Status().Update(r.Ctx, resource)
 	} else {
@@ -586,6 +568,20 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 // TODO: complete reconcileStateFinish
 func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	// TODO: collect logs
+	return
+}
+
+func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
+	if err != nil {
+		return
+	}
+	result.Requeue, err = r.finalize(resource, machine)
+	if result.Requeue || err != nil {
+		return
+	}
+	resource.Status.State = naglfarv1.ResourceUninitialized
+	err = r.Status().Update(r.Ctx, resource)
 	return
 }
 
