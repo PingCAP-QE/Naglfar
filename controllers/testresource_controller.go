@@ -506,10 +506,6 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		resource.Status.State = naglfarv1.ResourceFinish
 	}
 
-	if stats.State.OOMKilled {
-		resource.Status.State = naglfarv1.ResourceFail
-	}
-
 	err = r.Status().Update(r.Ctx, resource)
 	return
 }
@@ -550,10 +546,6 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 
 	if !timeIsZero(stats.State.FinishedAt) {
 		resource.Status.State = naglfarv1.ResourceFinish
-	}
-
-	if stats.State.OOMKilled {
-		resource.Status.State = naglfarv1.ResourceFail
 	}
 
 	if resource.Status.State != naglfarv1.ResourceReady {

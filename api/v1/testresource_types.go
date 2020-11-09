@@ -21,7 +21,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,6 +93,10 @@ type TestResourceStatus struct {
 	// +optional
 	ClusterIP string `json:"clusterIP"`
 
+	// HostIP is the ip address of the host machine
+	// +optional
+	HostIP string `json:"hostIP"`
+
 	// +optional
 	Username string `json:"username"`
 
@@ -102,10 +105,6 @@ type TestResourceStatus struct {
 
 	// +optional
 	SSHPort int `json:"sshPort"`
-
-	// TODO: delete me
-	// +optional
-	HostMachine ref.Ref `json:"hostMachine"`
 }
 
 // +kubebuilder:object:root=true
