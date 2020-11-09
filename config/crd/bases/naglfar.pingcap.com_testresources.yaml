@@ -72,7 +72,7 @@ spec:
               description: ClusterIP is the ip address of the container in the overlay(or
                 calico) network
               type: string
-            commands:
+            command:
               items:
                 type: string
               type: array
@@ -100,6 +100,10 @@ spec:
                 - size
                 type: object
               type: object
+            envs:
+              items:
+                type: string
+              type: array
             hostMachine:
               description: ObjectReference contains enough information to let you
                 inspect or modify the referred object.
