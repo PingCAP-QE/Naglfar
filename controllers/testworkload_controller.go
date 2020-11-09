@@ -206,20 +206,12 @@ func (r *TestWorkloadReconciler) getWorkloadRequestNode(ctx context.Context, ns 
 	if err != nil {
 		return nil, err
 	}
-	var testResources naglfarv1.TestResourceList
-	if err := r.List(ctx, &testResources, client.InNamespace(ns), client.MatchingFields{resourceOwnerKey: resourceRequest.Name}); err != nil {
-		return nil, err
-	}
-	var workloadNode *naglfarv1.TestResource
-	var workloadNodeName = workloadSpec.ResourceRequest.Node
-
-	for _, testResource := range testResources.Items {
-		if testResource.Name == workloadNodeName {
-			workloadNode = &testResource
-			break
-		}
-	}
-	return workloadNode, nil
+	var workloadNode naglfarv1.TestResource
+	err = r.Get(ctx, types.NamespacedName{
+		Namespace: ns,
+		Name:      workloadSpec.ResourceRequest.Node,
+	}, &workloadNode)
+	return &workloadNode, err
 }
 
 func (r *TestWorkloadReconciler) checkTopologiesReady(ctx context.Context, clusterTopologies map[types.NamespacedName]struct{}) (bool, error) {

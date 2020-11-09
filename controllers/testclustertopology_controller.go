@@ -148,9 +148,9 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 		return result
 	}
 	resources = filterClusterResources()
-	for idx := range resources {
-		resource := resources[idx]
-		if resource.Status.State == naglfarv1.ResourceUninitialized {
+	for _, resource := range resources {
+		switch resource.Status.State {
+		case naglfarv1.ResourceUninitialized:
 			requeue = true
 			if resource.Status.Image == "" {
 				// TODO fix hardcode
@@ -167,6 +167,12 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 					return false, err
 				}
 			}
+		case naglfarv1.ResourceReady:
+			if resource.Status.Image != tiup.ContainerImage {
+				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
+			}
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
 		}
 	}
 	if requeue {
