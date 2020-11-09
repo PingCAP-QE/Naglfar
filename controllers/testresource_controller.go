@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
@@ -165,6 +166,8 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return r.reconcileStateReady(log, resource)
 	case naglfarv1.ResourceFinish:
 		return r.reconcileStateFinish(log, resource)
+	case naglfarv1.ResourceDestroy:
+		return r.reconcileStateDestroy(log, resource)
 	default:
 		return
 	}
@@ -500,6 +503,9 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 
 	if stats.State.Running {
 		resource.Status.State = naglfarv1.ResourceReady
+		if ports, ok := stats.NetworkSettings.Ports["22"]; ok && len(ports) > 0 {
+			resource.Status.SSHPort, _ = strconv.Atoi(ports[0].HostPort)
+		}
 	}
 
 	if !timeIsZero(stats.State.FinishedAt) {
@@ -561,6 +567,20 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 // TODO: complete reconcileStateFinish
 func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	// TODO: collect logs
+	return
+}
+
+func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
+	if err != nil {
+		return
+	}
+	result.Requeue, err = r.finalize(resource, machine)
+	if result.Requeue || err != nil {
+		return
+	}
+	resource.Status.State = naglfarv1.ResourceUninitialized
+	err = r.Status().Update(r.Ctx, resource)
 	return
 }
 

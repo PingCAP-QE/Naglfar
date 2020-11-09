@@ -24,8 +24,8 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	ClusterTopologyStatePending ClusterTopologyState = "Pending"
-	ClusterTopologyStateReady   ClusterTopologyState = "Ready"
+	ClusterTopologyStatePending ClusterTopologyState = "pending"
+	ClusterTopologyStateReady   ClusterTopologyState = "ready"
 )
 
 // TODO: add a deploy version spec: clusterName, base version, component versions(for PR and self build version) etc.
@@ -108,6 +108,26 @@ type TiDBCluster struct {
 	Grafana []GrafanaSpec `json:"grafana,omitempty"`
 }
 
+func (c *TiDBCluster) AllHosts() map[string]struct{} {
+	result := map[string]struct{}{}
+	for _, item := range c.TiDB {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.TiKV {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.PD {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.Monitor {
+		result[item.Host] = struct{}{}
+	}
+	for _, item := range c.Grafana {
+		result[item.Host] = struct{}{}
+	}
+	return result
+}
+
 // TestClusterTopologySpec defines the desired state of TestClusterTopology
 type TestClusterTopologySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -121,7 +141,7 @@ type TestClusterTopologySpec struct {
 	TiDBCluster *TiDBCluster `json:"tidbCluster,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=Pending;Ready
+// +kubebuilder:validation:Enum=pending;ready
 type ClusterTopologyState string
 
 // TestClusterTopologyStatus defines the observed state of TestClusterTopology

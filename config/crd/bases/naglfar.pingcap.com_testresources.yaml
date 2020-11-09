@@ -76,28 +76,30 @@ spec:
               items:
                 type: string
               type: array
-            hostMachine:
-              description: 'TODO: delete me'
-              properties:
-                name:
-                  type: string
-                namespace:
-                  type: string
-                uid:
-                  description: UID is a type that holds unique ID values, including
-                    UUIDs.  Because we don't ONLY use UUIDs, this is an alias to string.  Being
-                    a type captures intent and helps make sure that UIDs and names
-                    do not get conflated.
-                  type: string
-              required:
-              - name
-              - namespace
-              - uid
-              type: object
+            hostIP:
+              description: HostIP is the ip address of the host machine
+              type: string
             image:
               type: string
+            mount:
+              items:
+                properties:
+                  readOnly:
+                    type: boolean
+                  source:
+                    type: string
+                  target:
+                    type: string
+                  type:
+                    description: Type represents the type of a mount.
+                    type: string
+                type: object
+              type: array
             password:
               type: string
+            privilege:
+              description: Container configuration section default false
+              type: boolean
             sshPort:
               type: integer
             state:
@@ -108,6 +110,7 @@ spec:
               - uninitialized
               - ready
               - finish
+              - destroy
               type: string
             username:
               type: string

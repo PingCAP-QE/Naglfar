@@ -20,6 +20,7 @@ import (
 
 // Our controller node and worker nodes share the same insecure_key path
 const insecureKeyPath = "/root/insecure_key"
+const ContainerImage = "naglfar/base-image"
 
 type ErrClusterDuplicated struct {
 	clusterName string

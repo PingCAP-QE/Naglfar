@@ -23,6 +23,8 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+
+	"github.com/docker/go-connections/nat"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -32,12 +34,20 @@ const (
 	ResourceUninitialized               = "uninitialized"
 	ResourceReady                       = "ready"
 	ResourceFinish                      = "finish"
+	ResourceDestroy                     = "destroy"
 )
 
 const cleanerImage = "alpine:latest"
 
-// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish
+// +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish;destroy
 type ResourceState string
+
+func (r ResourceState) IsRequired() bool {
+	return r != ResourcePending && r != ResourceFail
+}
+func (r ResourceState) IsInstalled() bool {
+	return r == ResourceReady || r == ResourceFinish
+}
 
 type DiskSpec struct {
 	// default /mnt/<name>
@@ -74,6 +84,15 @@ type TestResourceSpec struct {
 	TestMachineResource string `json:"testMachineResource,omitempty"`
 }
 
+// https://github.com/moby/moby/blob/master/api/types/mount/mount.go#L23
+
+type TestResourceMount struct {
+	Type     mount.Type `json:"type,omitempty"`
+	Source   string     `json:"source,omitempty"`
+	Target   string     `json:"target,omitempty"`
+	ReadOnly bool       `json:"readOnly,omitempty"`
+}
+
 // TestResourceStatus defines the observed state of TestResource
 type TestResourceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -82,6 +101,14 @@ type TestResourceStatus struct {
 	// default pending
 	// +optional
 	State ResourceState `json:"state"`
+
+	// +optional
+	// Container configuration section
+	// default false
+	Privilege bool `json:"privilege,omitempty"`
+
+	// +optional
+	Mounts []TestResourceMount `json:"mount,omitempty"`
 
 	// +optional
 	Image string `json:"image,omitempty"`
@@ -146,6 +173,16 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 		})
 	}
 
+	// bind mounts
+	for _, m := range r.Status.Mounts {
+		mounts = append(mounts, mount.Mount{
+			Type:     m.Type,
+			Source:   m.Source,
+			Target:   m.Target,
+			ReadOnly: m.ReadOnly,
+		})
+	}
+
 	config := &container.Config{
 		Image: r.Status.Image,
 	}
@@ -156,6 +193,8 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 			Memory:   binding.Memory.Unwrap(),
 			CPUQuota: int64(binding.CPUPercent) * 1000,
 		},
+		// set privilege
+		Privileged: r.Status.Privilege,
 	}
 
 	if len(r.Status.Commands) != 0 {
@@ -182,6 +221,9 @@ func (r *TestResource) ContainerCleanerConfig(binding *ResourceBinding) (*contai
 
 	hostConfig := &container.HostConfig{
 		Mounts: mounts,
+		PortBindings: nat.PortMap{
+			"22": {},
+		},
 	}
 
 	if len(mounts) > 0 {

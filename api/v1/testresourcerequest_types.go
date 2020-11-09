@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	TestResourceRequestPending TestResourceRequestState = "Pending"
-	TestResourceRequestReady   TestResourceRequestState = "Ready"
+	TestResourceRequestPending TestResourceRequestState = "pending"
+	TestResourceRequestReady   TestResourceRequestState = "ready"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -44,7 +44,7 @@ type TestResourceRequestSpec struct {
 	Items []*ResourceRequestItem `json:"items,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=Pending;Ready
+// +kubebuilder:validation:Enum=pending;ready
 type TestResourceRequestState string
 
 // TestResourceRequestStatus defines the observed state of TestResourceRequest
