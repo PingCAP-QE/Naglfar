@@ -76,6 +76,11 @@ spec:
               items:
                 type: string
               type: array
+<<<<<<< HEAD
+            hostIP:
+              description: HostIP is the ip address of the host machine
+              type: string
+=======
             diskStat:
               additionalProperties:
                 properties:
@@ -141,6 +146,7 @@ spec:
                   description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
                   type: string
               type: object
+>>>>>>> master
             image:
               type: string
             mount:
@@ -160,7 +166,7 @@ spec:
             password:
               type: string
             privilege:
-              description: default false
+              description: Container configuration section default false
               type: boolean
             sshPort:
               type: integer

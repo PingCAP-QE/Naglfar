@@ -38,6 +38,7 @@ uninstall: manifests
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: docker-build
 	kustomize build config/default | kubectl apply -f -
+	kubectl apply -f relationship/machine-testresource.yaml
 
 destroy: manifests
 	kustomize build config/default | kubectl delete -f -
@@ -63,7 +64,7 @@ generate:
 
 # Build the docker image
 docker-build: manifests generate
-	docker build . -t ${IMG}
+	DOCKER_BUILDKIT=1 docker build . -t ${IMG}
 
 # Push the docker image
 docker-push:

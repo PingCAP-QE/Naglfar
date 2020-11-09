@@ -101,12 +101,12 @@ func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 	for _, resource := range trs {
 		resourceMaps[resource.Name] = &resource.Status
 	}
-	control, exist := resourceMaps[fmt.Sprintf("%s-%s", rr.Name, ctf.TiDBCluster.Control)]
+	control, exist := resourceMaps[ctf.TiDBCluster.Control]
 	if !exist {
 		return spec, nil, fmt.Errorf("control node not found: `%s`", ctf.TiDBCluster.Control)
 	}
 	for _, item := range ctf.TiDBCluster.TiDB {
-		node, exist := resourceMaps[fmt.Sprintf("%s-%s", rr.Name, item.Host)]
+		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("tidb node not found: `%s`", item.Host)
 		}
@@ -121,7 +121,7 @@ func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 		})
 	}
 	for _, item := range ctf.TiDBCluster.TiKV {
-		node, exist := resourceMaps[fmt.Sprintf("%s-%s", rr.Name, item.Host)]
+		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("tikv node not found: `%s`", item.Host)
 		}
@@ -137,7 +137,7 @@ func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 		})
 	}
 	for _, item := range ctf.TiDBCluster.PD {
-		node, exist := resourceMaps[fmt.Sprintf("%s-%s", rr.Name, item.Host)]
+		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("pd node not found: `%s`", item.Host)
 		}
@@ -153,7 +153,7 @@ func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 		})
 	}
 	for _, item := range ctf.TiDBCluster.Monitor {
-		node, exist := resourceMaps[fmt.Sprintf("%s-%s", rr.Name, item.Host)]
+		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("monitor node not found: `%s`", item.Host)
 		}
@@ -168,7 +168,7 @@ func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 		})
 	}
 	for _, item := range ctf.TiDBCluster.Grafana {
-		node, exist := resourceMaps[fmt.Sprintf("%s-%s", rr.Name, item.Host)]
+		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("grafana node not found: `%s`", item.Host)
 		}
@@ -218,12 +218,12 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine.Name, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster destroy -y %s", clusterName)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
-			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostMachine, c.control.SSHPort),
+			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
 			"stderr", errStr)
 
@@ -240,7 +240,7 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 	log := c.log.WithName("clusterManager").WithName("writeTopologyFileOnControl")
 
 	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
-	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostMachine, c.control.SSHPort), &clientConfig)
+	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
 	if err != nil {
 		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
@@ -253,12 +253,12 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 }
 
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine.Name, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
 		log.Error(err, "run command on remote failed",
-			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostMachine, c.control.SSHPort),
+			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
 			"stderr", errStr)
 		if strings.Contains(errStr, "specify another cluster name") {
@@ -270,12 +270,12 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 }
 
 func (c *ClusterManager) startCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostMachine.Name, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster start %s", clusterName)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
-			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostMachine, c.control.SSHPort),
+			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
 			"stderr", errStr)
 		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)

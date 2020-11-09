@@ -21,7 +21,6 @@ import (
 	"path"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -119,9 +118,6 @@ type MachineStatus struct {
 
 	// +optional
 	Info *MachineInfo `json:"info,omitempty"`
-
-	// +optional
-	TestResources []corev1.ObjectReference `json:"testResources,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -179,6 +175,34 @@ func (r *Machine) Available() *AvailableResource {
 	}
 
 	return available
+}
+
+func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
+	rest = r.Available()
+
+	if rest == nil {
+		return
+	}
+
+	for _, refer := range resources {
+		rest.CPUPercent -= refer.Binding.CPUPercent
+		rest.Memory = rest.Memory.Sub(refer.Binding.Memory)
+
+		if len(refer.Binding.Disks) != 0 {
+			for _, diskBinding := range refer.Binding.Disks {
+				if _, ok := rest.Disks[diskBinding.Device]; !ok {
+					// something wrong,
+					rest = nil
+					return
+				}
+
+				delete(rest.Disks, diskBinding.Device)
+			}
+			continue
+		}
+	}
+
+	return
 }
 
 func (r *Machine) DockerURL() string {

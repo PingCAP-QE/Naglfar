@@ -40,6 +40,26 @@ rules:
 - apiGroups:
   - naglfar.pingcap.com
   resources:
+  - relationships
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - relationships/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
   - testclustertopologies
   verbs:
   - create

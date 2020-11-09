@@ -19,4 +19,7 @@ resources:
 - group: naglfar
   kind: TestWorkflow
   version: v1
+- group: naglfar
+  kind: Relationship
+  version: v1
 version: "2"

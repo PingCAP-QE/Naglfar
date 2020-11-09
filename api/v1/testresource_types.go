@@ -22,8 +22,8 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+
 	"github.com/docker/go-connections/nat"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -58,14 +58,6 @@ type DiskSpec struct {
 
 	// +optional
 	Size BytesSize `json:"size"`
-}
-
-type DiskStatus struct {
-	Kind       DiskKind  `json:"kind"`
-	Size       BytesSize `json:"size"`
-	Device     string    `json:"device"`
-	OriginPath string    `json:"originPath"`
-	MountPath  string    `json:"mountPath"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -110,15 +102,9 @@ type TestResourceStatus struct {
 	State ResourceState `json:"state"`
 
 	// +optional
-	HostMachine *corev1.ObjectReference `json:"hostMachine,omitempty"`
-
 	// Container configuration section
-
 	// default false
 	Privilege bool `json:"privilege,omitempty"`
-
-	// +optional
-	DiskStat map[string]DiskStatus `json:"diskStat,omitempty"`
 
 	// +optional
 	Mounts []TestResourceMount `json:"mount,omitempty"`
@@ -135,6 +121,10 @@ type TestResourceStatus struct {
 	// ClusterIP is the ip address of the container in the overlay(or calico) network
 	// +optional
 	ClusterIP string `json:"clusterIP"`
+
+	// HostIP is the ip address of the host machine
+	// +optional
+	HostIP string `json:"hostIP"`
 
 	// +optional
 	Username string `json:"username"`
@@ -175,9 +165,9 @@ func (r *TestResource) ContainerCleanerName() string {
 	return fmt.Sprintf("%s.%s-cleaner", r.Namespace, r.Name)
 }
 
-func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConfig) {
+func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
-	for _, disk := range r.Status.DiskStat {
+	for _, disk := range binding.Disks {
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: disk.OriginPath,
@@ -204,8 +194,8 @@ func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConf
 	hostConfig := &container.HostConfig{
 		Mounts: mounts,
 		Resources: container.Resources{
-			Memory:   r.Spec.Memory.Unwrap(),
-			CPUQuota: int64(r.Spec.CPUPercent) * 1000,
+			Memory:   binding.Memory.Unwrap(),
+			CPUQuota: int64(binding.CPUPercent) * 1000,
 		},
 		// set privilege
 		Privileged: r.Status.Privilege,
@@ -214,9 +204,9 @@ func (r *TestResource) ContainerConfig() (*container.Config, *container.HostConf
 	return config, hostConfig
 }
 
-func (r *TestResource) ContainerCleanerConfig() (*container.Config, *container.HostConfig) {
+func (r *TestResource) ContainerCleanerConfig(binding *ResourceBinding) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
-	for _, disk := range r.Status.DiskStat {
+	for _, disk := range binding.Disks {
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
 			Source: disk.OriginPath,

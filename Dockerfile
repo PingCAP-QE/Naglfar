@@ -1,18 +1,18 @@
+# syntax=docker/dockerfile:experimental
+
 # Build the manager binary
 FROM golang:1.13 as builder
 
 WORKDIR /workspace
 
 # install packr
-RUN go get -u github.com/gobuffalo/packr/packr
+RUN --mount=type=cache,target=/go/pkg \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go get -u github.com/gobuffalo/packr/packr
 
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
-RUN go mod download
 
 # Copy the go source
 COPY main.go main.go
@@ -22,7 +22,9 @@ COPY scripts/ scripts/
 COPY pkg/ pkg/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on packr build -a -o manager main.go
+RUN --mount=type=cache,target=/go/pkg \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on packr build -a -o manager main.go
 # Install insecure_key
 COPY docker/insecure_key /root/insecure_key
 RUN chmod 600 /root/insecure_key
