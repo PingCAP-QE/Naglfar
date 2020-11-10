@@ -38,6 +38,8 @@ import (
 
 const resourceFinalizer = "testresource.naglfar.pingcap.com"
 
+const clusterNetwork = "naglfar-overlay"
+
 var relationshipName = types.NamespacedName{
 	Namespace: "default",
 	Name:      "machine-testresource",
@@ -508,8 +510,17 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	}
 
 	if stats.State.Running {
+		network, ok := stats.NetworkSettings.Networks[clusterNetwork]
+		if !ok {
+			err = dockerClient.NetworkConnect(r.Ctx, clusterNetwork, containerName, nil)
+			if err == nil {
+				result.Requeue = true
+			}
+			return
+		}
+		resource.Status.ClusterIP = network.IPAddress
 		resource.Status.State = naglfarv1.ResourceReady
-		if ports, ok := stats.NetworkSettings.Ports["22"]; ok && len(ports) > 0 {
+		if ports, ok := stats.NetworkSettings.Ports[naglfarv1.SSHPort]; ok && len(ports) > 0 {
 			resource.Status.SSHPort, _ = strconv.Atoi(ports[0].HostPort)
 		}
 	}
