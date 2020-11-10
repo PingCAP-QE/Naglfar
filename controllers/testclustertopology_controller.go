@@ -178,7 +178,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	if requeue {
 		return true, nil
 	}
-	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), rr, resources)
+	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
 	if err != nil {
 		return false, err
 	}
@@ -212,7 +212,7 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 			for idx := range resourceList.Items {
 				resources = append(resources, &resourceList.Items[idx])
 			}
-			tiupCtl, err := tiup.MakeClusterManager(r.Log, ct.Spec.DeepCopy(), &rr, resources)
+			tiupCtl, err := tiup.MakeClusterManager(r.Log, ct.Spec.DeepCopy(), resources)
 			if err != nil {
 				return err
 			}
