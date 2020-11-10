@@ -42,8 +42,9 @@ const cleanerImage = "alpine:latest"
 type ResourceState string
 
 func (r ResourceState) IsRequired() bool {
-	return r != ResourcePending && r != ResourceFail
+	return r != "" && r != ResourcePending && r != ResourceFail
 }
+
 func (r ResourceState) IsInstalled() bool {
 	return r == ResourceReady || r == ResourceFinish
 }

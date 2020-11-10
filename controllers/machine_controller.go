@@ -96,6 +96,8 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 		err = r.Status().Update(ctx, relation)
 	}
 
+	result.Requeue = true
+	result.RequeueAfter = time.Second
 	return
 }
 
