@@ -98,8 +98,8 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 		return spec, nil, err
 	}
 	resourceMaps := make(map[string]*naglfarv1.TestResourceStatus)
-	for _, resource := range trs {
-		resourceMaps[resource.Name] = &resource.Status
+	for idx, resource := range trs {
+		resourceMaps[resource.Name] = &trs[idx].Status
 	}
 	control, exist := resourceMaps[ctf.TiDBCluster.Control]
 	if !exist {

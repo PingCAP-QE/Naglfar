@@ -140,9 +140,9 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	filterClusterResources := func() []*naglfarv1.TestResource {
 		allHosts := ct.Spec.TiDBCluster.AllHosts()
 		result := make([]*naglfarv1.TestResource, 0)
-		for _, item := range resourceList.Items {
+		for idx, item := range resourceList.Items {
 			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, &item)
+				result = append(result, &resourceList.Items[idx])
 			}
 		}
 		return result
