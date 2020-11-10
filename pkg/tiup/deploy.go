@@ -88,7 +88,7 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 	return nil
 }
 
-func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec, rr *naglfarv1.TestResourceRequest, trs []*naglfarv1.TestResource) (spec tiupSpec.Specification, control *naglfarv1.TestResourceStatus, err error) {
+func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource) (spec tiupSpec.Specification, control *naglfarv1.TestResourceStatus, err error) {
 	spec.GlobalOptions = tiupSpec.GlobalOptions{
 		User:    "root",
 		SSHPort: 22,
@@ -98,8 +98,8 @@ func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 		return spec, nil, err
 	}
 	resourceMaps := make(map[string]*naglfarv1.TestResourceStatus)
-	for _, resource := range trs {
-		resourceMaps[resource.Name] = &resource.Status
+	for idx, resource := range trs {
+		resourceMaps[resource.Name] = &trs[idx].Status
 	}
 	control, exist := resourceMaps[ctf.TiDBCluster.Control]
 	log.Info("build specification", "resourceMaps", resourceMaps)
@@ -192,8 +192,8 @@ type ClusterManager struct {
 	control *naglfarv1.TestResourceStatus
 }
 
-func MakeClusterManager(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec, rr *naglfarv1.TestResourceRequest, trs []*naglfarv1.TestResource) (*ClusterManager, error) {
-	specification, control, err := buildSpecification(log, ctf, rr, trs)
+func MakeClusterManager(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource) (*ClusterManager, error) {
+	specification, control, err := BuildSpecification(ctf, trs)
 	if err != nil {
 		return nil, err
 	}
