@@ -206,6 +206,7 @@ func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, mach
 	}
 
 	if err = r.removeContainer(resource, dockerClient); err != nil {
+		err = client.IgnoreNotFound(err)
 		return
 	}
 
