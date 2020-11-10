@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -71,7 +72,13 @@ func (c *Client) GetTiDBClusterTopology(ctx context.Context, clusterName string)
 func (c *Client) getTestResources(ctx context.Context) ([]*naglfarv1.TestResource, error) {
 	var resourceList naglfarv1.TestResourceList
 	var resources []*naglfarv1.TestResource
-	if err := c.List(ctx, &resourceList, client.InNamespace(namespace)); err != nil {
+	err := retry(3, time.Second, func() error {
+		if err := c.List(ctx, &resourceList, client.InNamespace(namespace)); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	for _, item := range resourceList.Items {
@@ -88,10 +95,13 @@ func (c *Client) getClusterTopology(ctx context.Context, clusterName string) (*n
 	if err != nil {
 		return nil, err
 	}
-	if err := c.Get(ctx, key, &ct); err != nil {
-		return nil, err
-	}
-	return &ct, nil
+	err = retry(3, time.Second, func() error {
+		if err := c.Get(ctx, key, &ct); err != nil {
+			return err
+		}
+		return nil
+	})
+	return &ct, err
 }
 
 func (c *Client) getTestWorkload(ctx context.Context) (*naglfarv1.TestWorkload, error) {
@@ -102,10 +112,13 @@ func (c *Client) getTestWorkload(ctx context.Context) (*naglfarv1.TestWorkload, 
 	if err != nil {
 		return nil, err
 	}
-	if err := c.Get(ctx, key, &workload); err != nil {
-		return nil, err
-	}
-	return &workload, nil
+	err = retry(3, time.Second, func() error {
+		if err := c.Get(ctx, key, &workload); err != nil {
+			return err
+		}
+		return nil
+	})
+	return &workload, err
 }
 
 // NewClient creates the Naglfar client
