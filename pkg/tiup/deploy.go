@@ -102,7 +102,6 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 		resourceMaps[resource.Name] = &trs[idx].Status
 	}
 	control, exist := resourceMaps[ctf.TiDBCluster.Control]
-	log.Info("build specification", "resourceMaps", resourceMaps)
 	if !exist {
 		return spec, nil, fmt.Errorf("control node not found: `%s`", ctf.TiDBCluster.Control)
 	}
@@ -219,12 +218,12 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster destroy -y %s", clusterName)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
-			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostIP, c.control.SSHPort),
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
 			"stderr", errStr)
 
@@ -254,12 +253,12 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 }
 
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
 		log.Error(err, "run command on remote failed",
-			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostIP, c.control.SSHPort),
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
 			"stderr", errStr)
 		if strings.Contains(errStr, "specify another cluster name") {
@@ -271,12 +270,12 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 }
 
 func (c *ClusterManager) startCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig(c.control.Username, insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster start %s", clusterName)
 	_, errStr, _, err := ssh.Run(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
-			"host", fmt.Sprintf("%s@%s:%d", c.control.Username, c.control.HostIP, c.control.SSHPort),
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
 			"stderr", errStr)
 		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)

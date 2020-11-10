@@ -130,9 +130,6 @@ type TestResourceStatus struct {
 	HostIP string `json:"hostIP"`
 
 	// +optional
-	Username string `json:"username"`
-
-	// +optional
 	Password string `json:"password"`
 
 	// +optional
