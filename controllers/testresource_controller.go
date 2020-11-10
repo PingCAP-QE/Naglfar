@@ -17,12 +17,15 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -409,6 +412,21 @@ func (r *TestResourceReconciler) getHostMachine(resourceRef ref.Ref) (*naglfarv1
 	return &machine, err
 }
 
+func (r *TestResourceReconciler) pullImageIfNotExist(dockerClient docker.APIClient, config *container.Config) error {
+	_, _, err := dockerClient.ImageInspectWithRaw(r.Ctx, config.Image)
+	if !docker.IsErrImageNotFound(err) {
+		return err
+	}
+	reader, err := dockerClient.ImagePull(r.Ctx, config.Image, dockerTypes.ImagePullOptions{})
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	var b bytes.Buffer
+	_, err = io.Copy(&b, reader)
+	return err
+}
+
 func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
 	containerName := resource.ContainerName()
 
@@ -419,7 +437,9 @@ func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResourc
 	}
 
 	config, hostConfig := resource.ContainerConfig(binding)
-
+	if err = r.pullImageIfNotExist(dockerClient, config); err != nil {
+		return
+	}
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
 	if err != nil {
 		r.Eventer.Event(resource, "Warning", "ContainerCreate", err.Error())
