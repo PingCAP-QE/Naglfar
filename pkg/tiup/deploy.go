@@ -20,7 +20,7 @@ import (
 
 // Our controller node and worker nodes share the same insecure_key path
 const insecureKeyPath = "/root/insecure_key"
-const ContainerImage = "naglfar/base-image"
+const ContainerImage = "mahjonp/base-image"
 
 type ErrClusterDuplicated struct {
 	clusterName string
@@ -102,6 +102,7 @@ func buildSpecification(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 		resourceMaps[resource.Name] = &resource.Status
 	}
 	control, exist := resourceMaps[ctf.TiDBCluster.Control]
+	log.Info("build specification", "resourceMaps", resourceMaps)
 	if !exist {
 		return spec, nil, fmt.Errorf("control node not found: `%s`", ctf.TiDBCluster.Control)
 	}

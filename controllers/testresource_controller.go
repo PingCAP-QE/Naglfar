@@ -41,6 +41,8 @@ import (
 
 const resourceFinalizer = "testresource.naglfar.pingcap.com"
 
+const clusterNetwork = "naglfar-overlay"
+
 var relationshipName = types.NamespacedName{
 	Namespace: "default",
 	Name:      "machine-testresource",
@@ -292,7 +294,7 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 	return binding, false
 }
 
-func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglfarv1.TestResource) (success bool, err error) {
+func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglfarv1.TestResource) (hostIP string, err error) {
 	relation, err := r.getRelationship()
 	if err != nil {
 		return
@@ -300,14 +302,18 @@ func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglf
 
 	resourceRef := ref.CreateRef(&resource.ObjectMeta)
 	resourceKey := resourceRef.Key()
+	machine := new(naglfarv1.Machine)
 
-	_, success = relation.Status.ResourceToMachine[resourceKey]
+	machineRef, success := relation.Status.ResourceToMachine[resourceKey]
 
 	if success {
-		return
+		err = r.Get(r.Ctx, machineRef.Namespaced(), machine)
+		if err != nil {
+			return
+		}
+		hostIP = machine.Spec.Host
 	}
 
-	machine := new(naglfarv1.Machine)
 	var machines []naglfarv1.Machine
 	if resource.Spec.TestMachineResource != "" {
 		if err = r.Get(r.Ctx, types.NamespacedName{Namespace: "default", Name: resource.Spec.TestMachineResource}, machine); err != nil {
@@ -360,19 +366,20 @@ func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglf
 		if err = r.Status().Update(r.Ctx, relation); err != nil {
 			return
 		}
-		success = true
+		hostIP = machine.Spec.Host
 		break
 	}
 	return
 }
 
 func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	success, err := r.requestResouce(log, resource)
+	ip, err := r.requestResouce(log, resource)
 	if err != nil {
 		return
 	}
 
-	if success {
+	if ip != "" {
+		resource.Status.HostIP = ip
 		resource.Status.State = naglfarv1.ResourceUninitialized
 	} else {
 		resource.Status.State = naglfarv1.ResourceFail
@@ -523,8 +530,17 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	}
 
 	if stats.State.Running {
+		network, ok := stats.NetworkSettings.Networks[clusterNetwork]
+		if !ok {
+			err = dockerClient.NetworkConnect(r.Ctx, clusterNetwork, containerName, nil)
+			if err == nil {
+				result.Requeue = true
+			}
+			return
+		}
+		resource.Status.ClusterIP = network.IPAddress
 		resource.Status.State = naglfarv1.ResourceReady
-		if ports, ok := stats.NetworkSettings.Ports["22"]; ok && len(ports) > 0 {
+		if ports, ok := stats.NetworkSettings.Ports[naglfarv1.SSHPort]; ok && len(ports) > 0 {
 			resource.Status.SSHPort, _ = strconv.Atoi(ports[0].HostPort)
 		}
 	}

@@ -38,6 +38,8 @@ const (
 
 const cleanerImage = "alpine:latest"
 
+const SSHPort = "22/tcp"
+
 // +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish;destroy
 type ResourceState string
 
@@ -187,13 +189,15 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 	}
 
 	config := &container.Config{
-		Image: r.Status.Image,
-		Cmd:   r.Status.Command,
-		Env:   r.Status.Envs,
+		Image:        r.Status.Image,
+		Cmd:          r.Status.Command,
+		Env:          r.Status.Envs,
+		ExposedPorts: nat.PortSet{SSHPort: struct{}{}},
 	}
 
 	hostConfig := &container.HostConfig{
-		Mounts: mounts,
+		Mounts:          mounts,
+		PublishAllPorts: true,
 		Resources: container.Resources{
 			Memory:   binding.Memory.Unwrap(),
 			CPUQuota: int64(binding.CPUPercent) * 1000,
@@ -221,9 +225,6 @@ func (r *TestResource) ContainerCleanerConfig(binding *ResourceBinding) (*contai
 
 	hostConfig := &container.HostConfig{
 		Mounts: mounts,
-		PortBindings: nat.PortMap{
-			"22": {},
-		},
 	}
 
 	if len(mounts) > 0 {
