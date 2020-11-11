@@ -255,7 +255,10 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
 	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
-	_, errStr, _, err := ssh.Run(cmd)
+	_, errStr, timeout, err := ssh.Run(cmd)
+	if timeout {
+		err = fmt.Errorf("command `%s` timeout", cmd)
+	}
 	if err != nil {
 		log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
