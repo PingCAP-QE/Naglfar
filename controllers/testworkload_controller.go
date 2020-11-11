@@ -102,7 +102,7 @@ func (r *TestWorkloadReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 // 2. set the workload container configuration on specified resource nodes: image, commands etc
 // 3. poll the state of workload resource nodes, if all workloads have started, set itself to `running`
 func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload *naglfarv1.TestWorkload) (ctrl.Result, error) {
-	var clusterTopologies map[types.NamespacedName]struct{}
+	clusterTopologies := make(map[types.NamespacedName]struct{})
 	for _, item := range workload.Spec.ClusterTopologiesRefs {
 		clusterTopologies[types.NamespacedName{
 			Namespace: workload.Namespace,
@@ -114,8 +114,10 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 		return ctrl.Result{}, err
 	}
 	if !allReady {
+		r.Recorder.Event(workload, "Warning", "Waiting", "not all clusters are ready")
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
+	r.Recorder.Event(workload, "Normal", "Install", "clusters are all ready")
 	var installedCount = 0
 	for _, item := range workload.Spec.Workloads {
 		workloadNode, err := r.getWorkloadRequestNode(ctx, workload.Namespace, item.DockerContainer)
@@ -132,8 +134,8 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized:
 			if workloadNode.Status.Image == "" {
-				workloadNode.Status.Image, workloadNode.Status.Command = item.DockerContainer.Image, item.DockerContainer.Command
 				workloadNode.Status.Image, workloadNode.Status.Command, workloadNode.Status.Envs = r.getContainerConfig(workload, item.DockerContainer)
+				r.Recorder.Event(workload, "Normal", "Install", fmt.Sprintf("installing the workload: %s", item.Name))
 				if err := r.Status().Update(ctx, workloadNode); err != nil {
 					return ctrl.Result{}, err
 				}

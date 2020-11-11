@@ -1,0 +1,21 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestWorkload
+metadata:
+  name: naglfar-demo
+  namespace: naglfar-test
+spec:
+  clusterTopologies:
+    - name: tidb-cluster
+      aliasName: standard
+  workloads:
+    - name: naglfar-demo
+      dockerContainer:
+        name: naglfar-demo
+        resourceRequest:
+          name: tidb-cluster
+          node: n3
+        image: "alpine"
+        command:
+          - sh
+          - -c
+          - sleep 100000

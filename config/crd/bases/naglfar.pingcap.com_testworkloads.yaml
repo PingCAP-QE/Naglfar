@@ -100,8 +100,6 @@ spec:
                   plainText:
                     description: plain text format
                     type: string
-                required:
-                - plainText
                 type: object
               description: Save the results passed through
               type: object

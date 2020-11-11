@@ -75,7 +75,8 @@ type TestWorkloadState string
 
 type TestWorkloadResult struct {
 	// plain text format
-	PlainText string `json:"plainText"`
+	// +optional
+	PlainText string `json:"plainText,omitempty"`
 }
 
 // TestWorkloadStatus defines the observed state of TestWorkload
@@ -89,7 +90,7 @@ type TestWorkloadStatus struct {
 
 	// Save the results passed through
 	// +optional
-	Results map[string]TestWorkloadResult `json:"results"`
+	Results map[string]TestWorkloadResult `json:"results,omitempty"`
 }
 
 // +kubebuilder:object:root=true
