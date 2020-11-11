@@ -116,8 +116,6 @@ spec:
               - finish
               - destroy
               type: string
-            username:
-              type: string
           type: object
       type: object
   version: v1
