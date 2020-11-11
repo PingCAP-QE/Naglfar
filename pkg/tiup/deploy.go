@@ -20,7 +20,7 @@ import (
 
 // Our controller node and worker nodes share the same insecure_key path
 const insecureKeyPath = "/root/insecure_key"
-const ContainerImage = "mahjonp/base-image"
+const ContainerImage = "docker.io/mahjonp/base-image:latest"
 
 type ErrClusterDuplicated struct {
 	clusterName string
