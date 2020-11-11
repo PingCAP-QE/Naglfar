@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/bramvdbogaerde/go-scp"
 	"github.com/bramvdbogaerde/go-scp/auth"
@@ -18,9 +19,12 @@ import (
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
 
-// Our controller node and worker nodes share the same insecure_key path
-const insecureKeyPath = "/root/insecure_key"
-const ContainerImage = "docker.io/mahjonp/base-image:latest"
+const (
+	// Our controller node and worker nodes share the same insecure_key path
+	insecureKeyPath = "/root/insecure_key"
+	ContainerImage  = "docker.io/mahjonp/base-image:latest"
+	sshTimeout      = 10 * time.Minute
+)
 
 type ErrClusterDuplicated struct {
 	clusterName string
@@ -220,7 +224,7 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
 	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster destroy -y %s", clusterName)
-	_, errStr, _, err := ssh.Run(cmd)
+	_, errStr, _, err := ssh.Run(cmd, sshTimeout)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
@@ -255,7 +259,7 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
 	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
-	_, errStr, timeout, err := ssh.Run(cmd)
+	_, errStr, timeout, err := ssh.Run(cmd, sshTimeout)
 	if timeout {
 		err = fmt.Errorf("command `%s` timeout", cmd)
 	}
@@ -275,7 +279,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 func (c *ClusterManager) startCluster(clusterName string) error {
 	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster start %s", clusterName)
-	_, errStr, _, err := ssh.Run(cmd)
+	_, errStr, _, err := ssh.Run(cmd, sshTimeout)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
