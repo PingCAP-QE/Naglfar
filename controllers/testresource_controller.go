@@ -83,6 +83,16 @@ func timeIsZero(timeStr string) bool {
 	return err == nil && datatime.IsZero()
 }
 
+func pickCpuSet(cpuSet []int, i int32) (set []int) {
+	if len(cpuSet) < int(i) {
+		return
+	}
+	for index := 0; index < int(i); index++ {
+		set = append(set, cpuSet[index])
+	}
+	return
+}
+
 // TestResourceReconciler reconciles a TestResource object
 type TestResourceReconciler struct {
 	client.Client
@@ -257,6 +267,7 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 
 	binding := &naglfarv1.ResourceBinding{
 		CPUPercent: newResource.Spec.CPUPercent,
+		CPUSet:     pickCpuSet(rest.IdleCPUSet, newResource.Spec.CPUPercent/100),
 		Memory:     newResource.Spec.Memory,
 		Disks:      make(map[string]naglfarv1.DiskBinding),
 	}
@@ -282,7 +293,8 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 
 	overflow := len(binding.Disks) < len(newResource.Spec.Disks) ||
 		rest.Memory.Unwrap() < newResource.Spec.Memory.Unwrap() ||
-		rest.CPUPercent < newResource.Spec.CPUPercent
+		rest.CPUPercent < newResource.Spec.CPUPercent ||
+		len(rest.IdleCPUSet) < int(newResource.Spec.CPUPercent/100)
 
 	if overflow {
 		return nil, overflow
@@ -291,7 +303,7 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 	return binding, false
 }
 
-func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglfarv1.TestResource) (hostIP string, err error) {
+func (r *TestResourceReconciler) requestResource(log logr.Logger, resource *naglfarv1.TestResource) (hostIP string, err error) {
 	relation, err := r.getRelationship()
 	if err != nil {
 		return
@@ -309,6 +321,7 @@ func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglf
 			return
 		}
 		hostIP = machine.Spec.Host
+		return
 	}
 
 	var machines []naglfarv1.Machine
@@ -370,7 +383,7 @@ func (r *TestResourceReconciler) requestResouce(log logr.Logger, resource *naglf
 }
 
 func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	ip, err := r.requestResouce(log, resource)
+	ip, err := r.requestResource(log, resource)
 	if err != nil {
 		return
 	}
@@ -386,7 +399,7 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 	return
 }
 
-func (r *TestResourceReconciler) getResouceBinding(resourceRef ref.Ref) (binding *naglfarv1.ResourceBinding, err error) {
+func (r *TestResourceReconciler) getResourceBinding(resourceRef ref.Ref) (binding *naglfarv1.ResourceBinding, err error) {
 	relation, err := r.getRelationship()
 	if err != nil {
 		return
@@ -434,7 +447,7 @@ func (r *TestResourceReconciler) pullImageIfNotExist(dockerClient docker.APIClie
 func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
 	containerName := resource.ContainerName()
 
-	binding, err := r.getResouceBinding(ref.CreateRef(&resource.ObjectMeta))
+	binding, err := r.getResourceBinding(ref.CreateRef(&resource.ObjectMeta))
 
 	if err != nil {
 		return
@@ -460,7 +473,7 @@ func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResourc
 func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
 	containerName := resource.ContainerCleanerName()
 
-	binding, err := r.getResouceBinding(ref.CreateRef(&resource.ObjectMeta))
+	binding, err := r.getResourceBinding(ref.CreateRef(&resource.ObjectMeta))
 
 	if err != nil {
 		return

@@ -52,6 +52,7 @@ type ResourceRef struct {
 type ResourceBinding struct {
 	Memory     BytesSize              `json:"memory"`
 	CPUPercent int32                  `json:"cpuPercent"`
+	CPUSet     []int                  `json:"cpuSet,omitempty"`
 	Disks      map[string]DiskBinding `json:"disks,omitempty"`
 }
 
