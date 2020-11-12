@@ -111,9 +111,6 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		err = client.IgnoreNotFound(err)
 		return
 	}
-
-	log.Info("resource reconcile", "content", resource)
-
 	if resource.ObjectMeta.DeletionTimestamp.IsZero() && !stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
 		resource.ObjectMeta.Finalizers = append(resource.ObjectMeta.Finalizers, resourceFinalizer)
 		err = r.Update(r.Ctx, resource)

@@ -81,8 +81,8 @@ func (c *Client) getTestResources(ctx context.Context) ([]*naglfarv1.TestResourc
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range resourceList.Items {
-		resources = append(resources, &item)
+	for idx := range resourceList.Items {
+		resources = append(resources, &resourceList.Items[idx])
 	}
 	return resources, nil
 }

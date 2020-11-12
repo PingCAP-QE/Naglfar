@@ -860,6 +860,11 @@ func (in *TestResourceStatus) DeepCopyInto(out *TestResourceStatus) {
 		*out = make([]TestResourceMount, len(*in))
 		copy(*out, *in)
 	}
+	if in.Binds != nil {
+		in, out := &in.Binds, &out.Binds
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Command != nil {
 		in, out := &in.Command, &out.Command
 		*out = make([]string, len(*in))
