@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/docker/docker/api/types/mount"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -156,12 +155,13 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 				// TODO fix hardcode
 				resource.Status.Image = tiup.ContainerImage
 				resource.Status.Privilege = true
-				resource.Status.Mounts = []naglfarv1.TestResourceMount{{
-					Type:     mount.TypeBind,
-					Source:   "/sys/fs/cgroup",
-					Target:   "/sys/fs/cgroup",
-					ReadOnly: true,
-				}}
+				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
+				//resource.Status.Mounts = []naglfarv1.TestResourceMount{{
+				//	Type:     mount.TypeBind,
+				//	Source:   "/sys/fs/cgroup",
+				//	Target:   "/sys/fs/cgroup",
+				//	ReadOnly: true,
+				//}}
 				err := r.Status().Update(ctx, resource)
 				if err != nil {
 					return false, err

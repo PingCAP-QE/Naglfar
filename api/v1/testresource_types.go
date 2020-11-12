@@ -113,6 +113,9 @@ type TestResourceStatus struct {
 	Mounts []TestResourceMount `json:"mount,omitempty"`
 
 	// +optional
+	Binds []string `json:"binds,omitempty"`
+
+	// +optional
 	Image string `json:"image,omitempty"`
 
 	// +optional
@@ -184,7 +187,6 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 			ReadOnly: m.ReadOnly,
 		})
 	}
-
 	config := &container.Config{
 		Image:        r.Status.Image,
 		Cmd:          r.Status.Command,
@@ -193,12 +195,13 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 	}
 
 	hostConfig := &container.HostConfig{
+		Binds:           r.Status.Binds,
 		Mounts:          mounts,
 		PublishAllPorts: true,
 		Resources: container.Resources{
 			Memory:    binding.Memory.Unwrap(),
-			CPUQuota:  int64(binding.CPUPercent) * 1000,
-			CPUPeriod: 100 * 1000,
+			CPUQuota:  int64(binding.CPUPercent) * 10000,
+			CPUPeriod: 100 * 10000,
 		},
 		// set privilege
 		Privileged: r.Status.Privilege,

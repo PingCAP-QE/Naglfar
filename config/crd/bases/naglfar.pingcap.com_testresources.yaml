@@ -68,6 +68,10 @@ spec:
         status:
           description: TestResourceStatus defines the observed state of TestResource
           properties:
+            binds:
+              items:
+                type: string
+              type: array
             clusterIP:
               description: ClusterIP is the ip address of the container in the overlay(or
                 calico) network
