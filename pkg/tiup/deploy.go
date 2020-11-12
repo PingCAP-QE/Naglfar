@@ -222,15 +222,19 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster destroy -y %s", clusterName)
-	_, errStr, _, err := ssh.Run(cmd, sshTimeout)
+	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
+			"stdStr", stdStr,
 			"stderr", errStr)
-
 		// catch Error: tidb cluster `xxx` not exists
 		if strings.Contains(errStr, "not exists") {
 			return ErrClusterNotExist{clusterName: clusterName}
@@ -241,15 +245,12 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 }
 
 func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
-	log := c.log.WithName("clusterManager").WithName("writeTopologyFileOnControl")
-
 	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
 	if err != nil {
 		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
 	}
-	log.V(2).Info("inspect the topology config generated", "value", string(out))
 	if err := client.Copy(bytes.NewReader(out), "/root/topology.yaml", "0655", int64(len(out))); err != nil {
 		return fmt.Errorf("error while copying file: %s", err)
 	}
@@ -257,16 +258,18 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 }
 
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
-	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
-	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
-	_, errStr, timeout, err := ssh.Run(cmd, sshTimeout)
-	if timeout {
-		err = fmt.Errorf("command `%s` timeout", cmd)
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
 	}
+	defer client.Close()
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
+	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
+			"stdout", stdStr,
 			"stderr", errStr)
 		if strings.Contains(errStr, "specify another cluster name") {
 			return ErrClusterDuplicated{clusterName: clusterName}
@@ -277,13 +280,18 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 }
 
 func (c *ClusterManager) startCluster(clusterName string) error {
-	ssh := sshUtil.MakeSSHKeyConfig("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster start %s", clusterName)
-	_, errStr, _, err := ssh.Run(cmd, sshTimeout)
+	stdout, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
+			"stdout", stdout,
 			"stderr", errStr)
 		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
 	}
