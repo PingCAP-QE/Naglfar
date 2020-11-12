@@ -196,8 +196,9 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 		Mounts:          mounts,
 		PublishAllPorts: true,
 		Resources: container.Resources{
-			Memory:   binding.Memory.Unwrap(),
-			CPUQuota: int64(binding.CPUPercent) * 1000,
+			Memory:    binding.Memory.Unwrap(),
+			CPUQuota:  int64(binding.CPUPercent) * 1000,
+			CPUPeriod: 100 * 1000,
 		},
 		// set privilege
 		Privileged: r.Status.Privilege,
