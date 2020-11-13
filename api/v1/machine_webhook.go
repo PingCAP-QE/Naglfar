@@ -85,20 +85,20 @@ var _ webhook.Validator = &Machine{}
 func (r *Machine) ValidateCreate() error {
 	machinelog.Info("validate create", "name", r.Name)
 
-	if r.Spec.SSHPort <= 0 {
+	if r.Spec.SSHPort < 0 {
 		return fmt.Errorf("invalid port %d", r.Spec.SSHPort)
 	}
 
-	if r.Spec.DockerPort <= 0 {
+	if r.Spec.DockerPort < 0 {
 		return fmt.Errorf("invalid port %d", r.Spec.DockerPort)
 	}
 
 	if reserve := r.Spec.Reserve; reserve != nil {
-		if reserve.CPUPercent <= 0 {
+		if reserve.CPUPercent < 0 {
 			return fmt.Errorf("invalid cpu percent %d", reserve.CPUPercent)
 		}
 
-		if _, err := reserve.Memory.ToSize(); err != nil {
+		if _, err := reserve.Memory.ToSize(); reserve.Memory != "" && err != nil {
 			return fmt.Errorf("invalid memory size: %s", err.Error())
 		}
 	}

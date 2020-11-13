@@ -73,7 +73,7 @@ func (r *TestResourceSpec) ValidateCreate() error {
 	}
 
 	for _, disk := range r.Disks {
-		if _, err := disk.Size.ToSize(); err != nil {
+		if _, err := disk.Size.ToSize(); disk.Size != "" && err != nil {
 			return fmt.Errorf("invalid disk size: %s", err.Error())
 		}
 	}

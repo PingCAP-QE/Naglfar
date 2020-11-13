@@ -109,7 +109,9 @@ type TiDBCluster struct {
 }
 
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
-	result := map[string]struct{}{}
+	result := map[string]struct{}{
+		c.Control: {},
+	}
 	for _, item := range c.TiDB {
 		result[item.Host] = struct{}{}
 	}

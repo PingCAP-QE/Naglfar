@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -108,8 +109,8 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		return
 	}
 
-	for _, item := range resources.Items {
-		resourceMap[item.Name] = &item
+	for idx, item := range resources.Items {
+		resourceMap[item.Name] = &resources.Items[idx]
 
 		if item.Status.State == naglfarv1.ResourceFail {
 			failedResources = append(failedResources, item.Name)
@@ -143,7 +144,7 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 
-			if err := r.Create(ctx, tr); err != nil {
+			if err := r.Create(ctx, tr); err != nil && !apierrors.IsAlreadyExists(err) {
 				log.Error(err, "unable to create a TestResource for TestResourceRequest", "testResource", tr)
 				return ctrl.Result{}, err
 			}
@@ -185,6 +186,7 @@ func (r *TestResourceRequestReconciler) SetupWithManager(mgr ctrl.Manager) error
 		if owner.APIVersion != apiGVStr || owner.Kind != "TestResourceRequest" {
 			return nil
 		}
+		r.Log.Info("find owner", "resource", resource.Name, "owner", owner.Name)
 		return []string{owner.Name}
 	}); err != nil {
 		return err
