@@ -14,7 +14,7 @@ spec:
     - name: n1
       spec:
         memory: 1GB
-        cpuPercent: 200
+        cores: 2
         disks:
           disk1:
             name: 
@@ -25,7 +25,7 @@ spec:
     - name: n2
       spec:
         memory: 10GB
-        cpuPercent: 400
+        cores: 4
         disks:
           disk1:
             name: 

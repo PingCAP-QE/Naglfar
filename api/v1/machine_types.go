@@ -37,9 +37,9 @@ const (
 type DiskKind string
 
 type ReserveResources struct {
-	// default 100
+	// default 1
 	// +optional
-	CPUPercent int32 `json:"cpuPercent"`
+	Cores int32 `json:"cores"`
 
 	// default 1 GiB
 	// +optional
@@ -69,7 +69,6 @@ type DiskResource struct {
 
 type AvailableResource struct {
 	Memory     BytesSize               `json:"memory"`
-	CPUPercent int32                   `json:"cpuPercent"`
 	IdleCPUSet []int                   `json:"idleCPUSet,omitempty"`
 	Disks      map[string]DiskResource `json:"disks,omitempty"`
 }
@@ -150,8 +149,7 @@ func (r *Machine) Available() *AvailableResource {
 
 	available := new(AvailableResource)
 	available.Memory = r.Status.Info.Memory.Sub(r.Spec.Reserve.Memory)
-	available.CPUPercent = r.Status.Info.Threads*100 - r.Spec.Reserve.CPUPercent
-	available.IdleCPUSet = makeCPUSet(r.Status.Info.Threads)
+	available.IdleCPUSet = deleteCPUSet(makeCPUSet(r.Status.Info.Threads), makeCPUSet(r.Spec.Reserve.Cores))
 	available.Disks = make(map[string]DiskResource)
 
 	exclusiveSet := make(map[string]bool)
@@ -223,7 +221,6 @@ func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
 	}
 
 	for _, refer := range resources {
-		rest.CPUPercent -= refer.Binding.CPUPercent
 		rest.IdleCPUSet = deleteCPUSet(rest.IdleCPUSet, refer.Binding.CPUSet)
 		rest.Memory = rest.Memory.Sub(refer.Binding.Memory)
 

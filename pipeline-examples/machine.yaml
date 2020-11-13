@@ -13,7 +13,7 @@ spec:
   dockerTLS: true
   reserve:
     memory: 2GB
-    cpuPercent: 200
+    cores: 2
   exclusiveDisks:
     - /dev/nvme0n1
     - /dev/nvme1n1

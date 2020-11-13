@@ -266,10 +266,9 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 	}
 
 	binding := &naglfarv1.ResourceBinding{
-		CPUPercent: newResource.Spec.CPUPercent,
-		CPUSet:     pickCpuSet(rest.IdleCPUSet, newResource.Spec.CPUPercent/100),
-		Memory:     newResource.Spec.Memory,
-		Disks:      make(map[string]naglfarv1.DiskBinding),
+		CPUSet: pickCpuSet(rest.IdleCPUSet, newResource.Spec.Cores),
+		Memory: newResource.Spec.Memory,
+		Disks:  make(map[string]naglfarv1.DiskBinding),
 	}
 
 	for name, disk := range newResource.Spec.Disks {
@@ -293,8 +292,7 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 
 	overflow := len(binding.Disks) < len(newResource.Spec.Disks) ||
 		rest.Memory.Unwrap() < newResource.Spec.Memory.Unwrap() ||
-		rest.CPUPercent < newResource.Spec.CPUPercent ||
-		len(rest.IdleCPUSet) < int(newResource.Spec.CPUPercent/100)
+		len(binding.CPUSet) < int(newResource.Spec.Cores)
 
 	if overflow {
 		return nil, overflow
@@ -317,10 +315,9 @@ func (r *TestResourceReconciler) requestResource(log logr.Logger, resource *nagl
 
 	if success {
 		err = r.Get(r.Ctx, machineRef.Namespaced(), machine)
-		if err != nil {
-			return
+		if err == nil {
+			hostIP = machine.Spec.Host
 		}
-		hostIP = machine.Spec.Host
 		return
 	}
 
