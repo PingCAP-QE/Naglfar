@@ -57,3 +57,27 @@ A host machine is the machine to allocate resources and execute job (cluster and
 The "resources" includes memery, cpu cores and exclusive disks.
 
 There are examples crds: [pipeline-examples](https://github.com/PingCAP-QE/Naglfar/tree/master/pipeline-examples).
+You can see `machine.yaml`:
+
+```yaml
+apiVersion: naglfar.pingcap.com/v1
+kind: Machine
+metadata:
+  name: 172.16.0.1
+  labels:
+    type: physical
+spec:
+  username: root
+  password: root
+  host: 172.16.0.1
+  sshPort: 22
+  dockerPort: 2376
+  dockerTLS: true
+  reserve:
+    memory: 2GB
+    cores: 2
+  exclusiveDisks:
+    - /dev/nvme0n1
+    - /dev/nvme1n1
+```
+
