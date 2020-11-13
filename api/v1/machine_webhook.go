@@ -66,8 +66,8 @@ func (r *Machine) Default() {
 		r.Spec.Reserve = new(ReserveResources)
 	}
 
-	if r.Spec.Reserve.CPUPercent == 0 {
-		r.Spec.Reserve.CPUPercent = 100
+	if r.Spec.Reserve.Cores == 0 {
+		r.Spec.Reserve.Cores = 1
 	}
 
 	if r.Spec.Reserve.Memory == "" {
@@ -94,8 +94,8 @@ func (r *Machine) ValidateCreate() error {
 	}
 
 	if reserve := r.Spec.Reserve; reserve != nil {
-		if reserve.CPUPercent < 0 {
-			return fmt.Errorf("invalid cpu percent %d", reserve.CPUPercent)
+		if reserve.Cores < 0 {
+			return fmt.Errorf("invalid cpu cores %d", reserve.Cores)
 		}
 
 		if _, err := reserve.Memory.ToSize(); reserve.Memory != "" && err != nil {

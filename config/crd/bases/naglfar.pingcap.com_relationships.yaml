@@ -48,6 +48,10 @@ spec:
                         cpuPercent:
                           format: int32
                           type: integer
+                        cpuSet:
+                          items:
+                            type: integer
+                          type: array
                         disks:
                           additionalProperties:
                             properties:
@@ -107,6 +111,10 @@ spec:
                       cpuPercent:
                         format: int32
                         type: integer
+                      cpuSet:
+                        items:
+                          type: integer
+                        type: array
                       disks:
                         additionalProperties:
                           properties:

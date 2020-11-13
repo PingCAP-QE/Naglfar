@@ -73,7 +73,7 @@ type TestResourceSpec struct {
 
 	Memory BytesSize `json:"memory"`
 
-	CPUPercent int32 `json:"cpuPercent"`
+	Cores int32 `json:"cores"`
 
 	// +optional
 	MachineSelector string `json:"machineSelector,omitempty"`
@@ -199,9 +199,8 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 		Mounts:          mounts,
 		PublishAllPorts: true,
 		Resources: container.Resources{
-			Memory:    binding.Memory.Unwrap(),
-			CPUQuota:  int64(binding.CPUPercent) * 10000,
-			CPUPeriod: 100 * 10000,
+			Memory:     binding.Memory.Unwrap(),
+			CpusetCpus: cpuSetStr(binding.CPUSet),
 		},
 		// set privilege
 		Privileged: r.Status.Privilege,

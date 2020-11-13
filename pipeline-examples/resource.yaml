@@ -5,7 +5,7 @@ metadata:
   namespace: naglfar-system
 spec:
   memory: 2GB
-  cpuPercent: 600
+  cores: 6
   machineSelector: physical
   disks:
     data1: 
