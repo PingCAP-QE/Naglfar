@@ -203,7 +203,7 @@ spec:
                   testResourceRequest:
                     description: TestResourceSpec defines the desired state of TestResource
                     properties:
-                      cpuPercent:
+                      cores:
                         format: int32
                         type: integer
                       disks:
@@ -229,7 +229,7 @@ spec:
                         description: If sets, it means the static machine is required
                         type: string
                     required:
-                    - cpuPercent
+                    - cores
                     - memory
                     type: object
                   testWorkload:

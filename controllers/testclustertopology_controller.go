@@ -154,14 +154,9 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 			if resource.Status.Image == "" {
 				// TODO fix hardcode
 				resource.Status.Image = tiup.ContainerImage
-				resource.Status.Privilege = true
+				//resource.Status.Privilege = true
+				resource.Status.CapAdd = []string{"SYS_ADMIN"}
 				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
-				//resource.Status.Mounts = []naglfarv1.TestResourceMount{{
-				//	Type:     mount.TypeBind,
-				//	Source:   "/sys/fs/cgroup",
-				//	Target:   "/sys/fs/cgroup",
-				//	ReadOnly: true,
-				//}}
 				err := r.Status().Update(ctx, resource)
 				if err != nil {
 					return false, err

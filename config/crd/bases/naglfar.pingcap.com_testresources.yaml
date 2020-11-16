@@ -36,7 +36,7 @@ spec:
         spec:
           description: TestResourceSpec defines the desired state of TestResource
           properties:
-            cpuPercent:
+            cores:
               format: int32
               type: integer
             disks:
@@ -62,13 +62,19 @@ spec:
               description: If sets, it means the static machine is required
               type: string
           required:
-          - cpuPercent
+          - cores
           - memory
           type: object
         status:
           description: TestResourceStatus defines the observed state of TestResource
           properties:
             binds:
+              description: List of volume bindings for this container
+              items:
+                type: string
+              type: array
+            capAdd:
+              description: List of kernel capabilities to add to the container
               items:
                 type: string
               type: array
@@ -90,6 +96,7 @@ spec:
             image:
               type: string
             mount:
+              description: Mounts specs used by the container
               items:
                 properties:
                   readOnly:
@@ -106,7 +113,7 @@ spec:
             password:
               type: string
             privilege:
-              description: Container configuration section default false
+              description: default false
               type: boolean
             sshPort:
               type: integer

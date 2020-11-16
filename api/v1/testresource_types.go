@@ -105,13 +105,18 @@ type TestResourceStatus struct {
 	State ResourceState `json:"state"`
 
 	// +optional
-	// Container configuration section
 	// default false
 	Privilege bool `json:"privilege,omitempty"`
 
+	// List of kernel capabilities to add to the container
+	// +optional
+	CapAdd []string `json:"capAdd,omitempty"`
+
+	// Mounts specs used by the container
 	// +optional
 	Mounts []TestResourceMount `json:"mount,omitempty"`
 
+	// List of volume bindings for this container
 	// +optional
 	Binds []string `json:"binds,omitempty"`
 
@@ -202,6 +207,7 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 			Memory:     binding.Memory.Unwrap(),
 			CpusetCpus: cpuSetStr(binding.CPUSet),
 		},
+		CapAdd: r.Status.CapAdd,
 		// set privilege
 		Privileged: r.Status.Privilege,
 	}
