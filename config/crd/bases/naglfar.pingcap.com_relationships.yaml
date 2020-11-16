@@ -45,9 +45,6 @@ spec:
                   properties:
                     binding:
                       properties:
-                        cpuPercent:
-                          format: int32
-                          type: integer
                         cpuSet:
                           items:
                             type: integer
@@ -79,7 +76,6 @@ spec:
                         memory:
                           type: string
                       required:
-                      - cpuPercent
                       - memory
                       type: object
                     name:
@@ -108,9 +104,6 @@ spec:
                 properties:
                   binding:
                     properties:
-                      cpuPercent:
-                        format: int32
-                        type: integer
                       cpuSet:
                         items:
                           type: integer
@@ -142,7 +135,6 @@ spec:
                       memory:
                         type: string
                     required:
-                    - cpuPercent
                     - memory
                     type: object
                   name:

@@ -18,6 +18,10 @@ RUN /usr/sbin/enable_insecure_key
 COPY insecure_key /root/insecure_key
 RUN chmod 600 /root/insecure_key
 
+# see https://github.com/moby/moby/issues/4040#issuecomment-339022455
+RUN cp /bin/true /sbin/agetty
+RUN rm -rf /lib/systemd/system/getty@.service
+
 # Install tiup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
 

@@ -55,8 +55,8 @@ spec:
               type: string
             reserve:
               properties:
-                cpuPercent:
-                  description: default 100
+                cores:
+                  description: default 1
                   format: int32
                   type: integer
                 memory:
