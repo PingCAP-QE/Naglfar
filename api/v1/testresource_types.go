@@ -19,6 +19,7 @@ package v1
 import (
 	"fmt"
 	"path"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -234,10 +235,11 @@ func (r *TestResource) ContainerCleanerConfig(binding *ResourceBinding) (*contai
 	}
 
 	if len(mounts) > 0 {
-		config.Cmd = []string{"rm", "-rf"}
+		var subCommand []string
 		for _, mnt := range mounts {
-			config.Cmd = append(config.Cmd, path.Join(mnt.Target, "*"))
+			subCommand = append(subCommand, fmt.Sprintf("rm -rf %s", path.Join(mnt.Target, "*")))
 		}
+		config.Cmd = []string{"sh", "-c", strings.Join(subCommand, ";")}
 	}
 
 	return config, hostConfig
