@@ -194,10 +194,10 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 				Namespace: ct.Namespace,
 				Name:      ct.Spec.ResourceRequest,
 			}, &rr); err != nil {
-				return err
+				return client.IgnoreNotFound(err)
 			}
 			if rr.Status.State != naglfarv1.TestResourceRequestReady {
-				return fmt.Errorf("testResourceRequest %s/%s isn't ready", rr.Namespace, rr.Name)
+				return nil
 			}
 			var resourceList naglfarv1.TestResourceList
 			var resources []*naglfarv1.TestResource
