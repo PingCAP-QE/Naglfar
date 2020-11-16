@@ -216,6 +216,7 @@ func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, mach
 	if err != nil {
 		return
 	}
+	defer dockerClient.Close()
 
 	if err = r.removeContainer(resource, dockerClient); err != nil {
 		err = client.IgnoreNotFound(err)
@@ -505,6 +506,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	if err != nil {
 		return
 	}
+	defer dockerClient.Close()
 
 	containerName := resource.ContainerName()
 	var stats dockerTypes.ContainerJSON
@@ -576,6 +578,7 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 	if err != nil {
 		return
 	}
+	defer dockerClient.Close()
 
 	containerName := resource.ContainerName()
 	stats, err := dockerClient.ContainerInspect(r.Ctx, containerName)
