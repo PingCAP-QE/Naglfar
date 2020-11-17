@@ -282,8 +282,6 @@ spec:
                                       type: array
                                     image:
                                       type: string
-                                    name:
-                                      type: string
                                     resourceRequest:
                                       properties:
                                         name:
@@ -296,7 +294,6 @@ spec:
                                       type: object
                                   required:
                                   - image
-                                  - name
                                   - resourceRequest
                                   type: object
                                 name:

@@ -137,7 +137,7 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized:
 			if workloadNode.Status.Image == "" {
-				workloadNode.Status.Image, workloadNode.Status.Command, workloadNode.Status.Envs = r.getContainerConfig(workload, item.DockerContainer)
+				workloadNode.Status.Image, workloadNode.Status.Command, workloadNode.Status.Envs = r.getContainerConfig(workload, &item)
 				topologyEnvs, err := r.buildTopologyEnvs(&workload.Spec, topologies, resourceList)
 				if err != nil {
 					r.Recorder.Event(workload, "Warning", "Precondition", err.Error())
@@ -214,8 +214,8 @@ func (r *TestWorkloadReconciler) reconcileFinish(workload *naglfarv1.TestWorkloa
 
 func (r *TestWorkloadReconciler) getContainerConfig(
 	testWorkload *naglfarv1.TestWorkload,
-	workloadSpec *naglfarv1.DockerContainerSpec) (image string, command []string, envs []string) {
-	image, command = workloadSpec.Image, workloadSpec.Command
+	workloadSpec *naglfarv1.TestWorkloadItemSpec) (image string, command []string, envs []string) {
+	image, command = workloadSpec.DockerContainer.Image, workloadSpec.DockerContainer.Command
 	envs = []string{}
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarClusterNs, testWorkload.Namespace))
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadName, testWorkload.Name))
