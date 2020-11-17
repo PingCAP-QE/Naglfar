@@ -57,7 +57,9 @@ type TestResourceRequestStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName="trr"
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="the state of resource request"
 
 // TestResourceRequest is the Schema for the testresourcerequests API
 type TestResourceRequest struct {

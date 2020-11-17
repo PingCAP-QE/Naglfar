@@ -10,14 +10,16 @@ metadata:
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.state
-    description: state of the cluster topology
-    name: STATE
+    description: the state of cluster topology
+    name: State
     type: string
   group: naglfar.pingcap.com
   names:
     kind: TestClusterTopology
     listKind: TestClusterTopologyList
     plural: testclustertopologies
+    shortNames:
+    - tct
     singular: testclustertopology
   scope: Namespaced
   subresources:

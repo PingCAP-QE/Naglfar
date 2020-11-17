@@ -10,19 +10,19 @@ metadata:
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.state
-    description: state of the resource
+    description: the state of resource
     name: State
     type: string
   - JSONPath: .status.hostIP
-    description: host ip of the resource
+    description: the host ip of resource
     name: HostIP
     type: string
   - JSONPath: .status.sshPort
-    description: ssh port of the resource
+    description: the ssh port of resource
     name: SSHPort
     type: integer
   - JSONPath: .status.clusterIP
-    description: ssh port of the resource
+    description: the cluster ip of resource
     name: ClusterIP
     type: string
   group: naglfar.pingcap.com
@@ -30,6 +30,8 @@ spec:
     kind: TestResource
     listKind: TestResourceList
     plural: testresources
+    shortNames:
+    - tr
     singular: testresource
   scope: Namespaced
   subresources:
