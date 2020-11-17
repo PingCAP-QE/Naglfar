@@ -525,6 +525,14 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	}
 
 	if timeIsZero(stats.State.StartedAt) {
+		_, ok := stats.NetworkSettings.Networks[clusterNetwork]
+		if !ok {
+			err = dockerClient.NetworkConnect(r.Ctx, clusterNetwork, containerName, nil)
+			if err == nil {
+				result.Requeue = true
+			}
+			return
+		}
 		err = dockerClient.ContainerStart(r.Ctx, containerName, dockerTypes.ContainerStartOptions{})
 		if err == nil {
 			result.Requeue = true
@@ -541,10 +549,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	if stats.State.Running {
 		network, ok := stats.NetworkSettings.Networks[clusterNetwork]
 		if !ok {
-			err = dockerClient.NetworkConnect(r.Ctx, clusterNetwork, containerName, nil)
-			if err == nil {
-				result.Requeue = true
-			}
+			err = fmt.Errorf("network configuration error, miss %s network", clusterNetwork)
 			return
 		}
 		resource.Status.ClusterIP = network.IPAddress
