@@ -8,11 +8,18 @@ metadata:
   creationTimestamp: null
   name: testresourcerequests.naglfar.pingcap.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.state
+    description: the state of resource request
+    name: State
+    type: string
   group: naglfar.pingcap.com
   names:
     kind: TestResourceRequest
     listKind: TestResourceRequestList
     plural: testresourcerequests
+    shortNames:
+    - trr
     singular: testresourcerequest
   scope: Namespaced
   subresources:

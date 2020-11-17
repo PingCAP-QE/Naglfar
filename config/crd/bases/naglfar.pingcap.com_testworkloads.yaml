@@ -8,11 +8,18 @@ metadata:
   creationTimestamp: null
   name: testworkloads.naglfar.pingcap.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.state
+    description: the state of workload
+    name: State
+    type: string
   group: naglfar.pingcap.com
   names:
     kind: TestWorkload
     listKind: TestWorkloadList
     plural: testworkloads
+    shortNames:
+    - tw
     singular: testworkload
   scope: Namespaced
   subresources:

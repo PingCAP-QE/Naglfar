@@ -8,11 +8,30 @@ metadata:
   creationTimestamp: null
   name: testresources.naglfar.pingcap.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.state
+    description: the state of resource
+    name: State
+    type: string
+  - JSONPath: .status.hostIP
+    description: the host ip of resource
+    name: HostIP
+    type: string
+  - JSONPath: .status.sshPort
+    description: the ssh port of resource
+    name: SSHPort
+    type: integer
+  - JSONPath: .status.clusterIP
+    description: the cluster ip of resource
+    name: ClusterIP
+    type: string
   group: naglfar.pingcap.com
   names:
     kind: TestResource
     listKind: TestResourceList
     plural: testresources
+    shortNames:
+    - tr
     singular: testresource
   scope: Namespaced
   subresources:
