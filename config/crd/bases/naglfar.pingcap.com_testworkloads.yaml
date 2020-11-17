@@ -45,7 +45,6 @@ spec:
                   name:
                     type: string
                 required:
-                - aliasName
                 - name
                 type: object
               type: array

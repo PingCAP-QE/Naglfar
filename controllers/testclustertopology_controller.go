@@ -219,3 +219,26 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 	}
 	return nil
 }
+
+func BuildInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (envs []string, err error) {
+	switch {
+	case t.Spec.TiDBCluster != nil:
+		return buildTiDBClusterInjectEnvs(t, resources)
+	default:
+		return
+	}
+}
+
+func buildTiDBClusterInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (envs []string, err error) {
+	spec, _, err := tiup.BuildSpecification(&t.Spec, resources)
+	if err != nil {
+		return
+	}
+	for idx, item := range spec.TiDBServers {
+		envs = append(envs, fmt.Sprintf("tidb%d=%s:%d", idx, item.Host, item.Port))
+	}
+	for idx, item := range spec.PDServers {
+		envs = append(envs, fmt.Sprintf("pd%d=%s:%d", idx, item.Host, item.ClientPort))
+	}
+	return
+}
