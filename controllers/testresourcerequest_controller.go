@@ -53,7 +53,6 @@ type TestResourceRequestReconciler struct {
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources/status,verbs=get
 
-// TODO: add finalizer
 // TODO: fail
 func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
 	ctx := context.Background()
@@ -186,7 +185,6 @@ func (r *TestResourceRequestReconciler) SetupWithManager(mgr ctrl.Manager) error
 		if owner.APIVersion != apiGVStr || owner.Kind != "TestResourceRequest" {
 			return nil
 		}
-		r.Log.Info("find owner", "resource", resource.Name, "owner", owner.Name)
 		return []string{owner.Name}
 	}); err != nil {
 		return err

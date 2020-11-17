@@ -30,8 +30,9 @@ const (
 )
 
 type ClusterTopologyRef struct {
-	Name      string `json:"name"`
-	AliasName string `json:"aliasName"`
+	Name string `json:"name"`
+	// +optional
+	AliasName string `json:"aliasName,omitempty"`
 }
 
 type ResourceRequestRef struct {
