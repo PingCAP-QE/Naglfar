@@ -8,6 +8,23 @@ metadata:
   creationTimestamp: null
   name: testresources.naglfar.pingcap.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.state
+    description: state of the resource
+    name: State
+    type: string
+  - JSONPath: .status.hostIP
+    description: host ip of the resource
+    name: HostIP
+    type: string
+  - JSONPath: .status.sshPort
+    description: ssh port of the resource
+    name: SSHPort
+    type: integer
+  - JSONPath: .status.clusterIP
+    description: ssh port of the resource
+    name: ClusterIP
+    type: string
   group: naglfar.pingcap.com
   names:
     kind: TestResource

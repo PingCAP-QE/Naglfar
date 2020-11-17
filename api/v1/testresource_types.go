@@ -149,6 +149,10 @@ type TestResourceStatus struct {
 
 // TestResource is the Schema for the testresources API
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="state of the resource"
+// +kubebuilder:printcolumn:name="HostIP",type="string",JSONPath=".status.hostIP",description="host ip of the resource"
+// +kubebuilder:printcolumn:name="SSHPort",type="integer",JSONPath=".status.sshPort",description="ssh port of the resource"
+// +kubebuilder:printcolumn:name="ClusterIP",type="string",JSONPath=".status.clusterIP",description="ssh port of the resource"
 type TestResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

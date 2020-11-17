@@ -11,11 +11,8 @@ spec:
   additionalPrinterColumns:
   - JSONPath: .status.state
     description: state of the cluster topology
-    name: State
+    name: STATE
     type: string
-  - JSONPath: .metadata.creationTimestamp
-    name: Age
-    type: date
   group: naglfar.pingcap.com
   names:
     kind: TestClusterTopology
