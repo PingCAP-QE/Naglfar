@@ -47,6 +47,6 @@ func (c *Client) RunCommand(command string) (stdout string, stderr string, err e
 	var bErr bytes.Buffer
 	session.Stdout = &bStd
 	session.Stderr = &bErr
-	session.Run(command)
+	err = session.Run(command)
 	return bStd.String(), bErr.String(), err
 }

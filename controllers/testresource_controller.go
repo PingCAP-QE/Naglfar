@@ -487,6 +487,9 @@ func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource,
 
 	config, hostConfig := resource.ContainerCleanerConfig(binding)
 
+	if err = r.pullImageByPolicy(resource, dockerClient, config); err != nil {
+		return
+	}
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
 	if err != nil {
 		r.Eventer.Event(resource, "Warning", "CleanerCreate", err.Error())

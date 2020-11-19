@@ -282,7 +282,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 		if strings.Contains(errStr, "specify another cluster name") {
 			return ErrClusterDuplicated{clusterName: clusterName}
 		}
-		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
+		return fmt.Errorf("deploy cluster %s failed(%s): %s", clusterName, err, errStr)
 	}
 	return nil
 }

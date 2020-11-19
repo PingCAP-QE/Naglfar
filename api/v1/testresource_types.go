@@ -40,7 +40,7 @@ const (
 	PullPolicyIfNotPresent                 = "IfNotPresent"
 )
 
-const cleanerImage = "alpine:latest"
+const cleanerImage = "docker.io/library/alpine:latest"
 
 const SSHPort = "22/tcp"
 
