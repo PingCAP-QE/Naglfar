@@ -427,15 +427,21 @@ func (r *TestResourceReconciler) getHostMachine(resourceRef ref.Ref) (*naglfarv1
 	return &machine, err
 }
 
-func (r *TestResourceReconciler) pullImageIfNotExist(dockerClient docker.APIClient, config *container.Config) error {
+func (r *TestResourceReconciler) pullImageByPolicy(resource *naglfarv1.TestResource, dockerClient docker.APIClient, config *container.Config) error {
+	imagePullPolicy := resource.Status.ImagePullPolicy
 	_, _, err := dockerClient.ImageInspectWithRaw(r.Ctx, config.Image)
-	if !docker.IsErrImageNotFound(err) {
+	if err == nil && imagePullPolicy != naglfarv1.PullPolicyAlways {
+		return nil
+	}
+	if err != nil && !docker.IsErrImageNotFound(err) {
 		return err
 	}
 	reader, err := dockerClient.ImagePull(r.Ctx, config.Image, dockerTypes.ImagePullOptions{})
 	if err != nil {
+		r.Eventer.Event(resource, "Warning", "pullImage", fmt.Sprintf("pulling image %s failed: %s", config.Image, err.Error()))
 		return err
 	}
+	r.Eventer.Event(resource, "Normal", "pullImage", fmt.Sprintf("pull image %s", config.Image))
 	defer reader.Close()
 	var b bytes.Buffer
 	_, err = io.Copy(&b, reader)
@@ -452,7 +458,7 @@ func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResourc
 	}
 
 	config, hostConfig := resource.ContainerConfig(binding)
-	if err = r.pullImageIfNotExist(dockerClient, config); err != nil {
+	if err = r.pullImageByPolicy(resource, dockerClient, config); err != nil {
 		return
 	}
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
@@ -632,10 +638,9 @@ func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource
 		return
 	}
 	r.Eventer.Event(resource, "Normal", "uninstall", "uninstall resource successfully")
-	// clear all status
-	resource.Status = naglfarv1.TestResourceStatus{
-		State: naglfarv1.ResourceUninitialized,
-	}
+	// clear all container spec
+	resource.Status.ResourceContainerSpec = naglfarv1.ResourceContainerSpec{}
+	resource.Status.State = naglfarv1.ResourceUninitialized
 	err = r.Status().Update(r.Ctx, resource)
 	return
 }

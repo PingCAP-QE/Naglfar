@@ -71,6 +71,11 @@ spec:
                         type: array
                       image:
                         type: string
+                      imagePullPolicy:
+                        enum:
+                        - Always
+                        - IfNotPresent
+                        type: string
                       resourceRequest:
                         properties:
                           name:

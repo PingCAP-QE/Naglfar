@@ -35,6 +35,9 @@ const (
 	ResourceReady                       = "ready"
 	ResourceFinish                      = "finish"
 	ResourceDestroy                     = "destroy"
+
+	PullPolicyAlways       PullImagePolicy = "Always"
+	PullPolicyIfNotPresent                 = "IfNotPresent"
 )
 
 const cleanerImage = "alpine:latest"
@@ -48,8 +51,13 @@ func (r ResourceState) IsRequired() bool {
 	return r != "" && r != ResourcePending && r != ResourceFail
 }
 
-func (r ResourceState) IsInstalled() bool {
-	return r == ResourceReady || r == ResourceFinish
+func (r ResourceState) ShouldUninstall() bool {
+	switch r {
+	case ResourceUninitialized, ResourceReady, ResourceFinish:
+		return true
+	default:
+		return false
+	}
 }
 
 type DiskSpec struct {
@@ -96,15 +104,10 @@ type TestResourceMount struct {
 	ReadOnly bool       `json:"readOnly,omitempty"`
 }
 
-// TestResourceStatus defines the observed state of TestResource
-type TestResourceStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+// +kubebuilder:validation:Enum=Always;IfNotPresent
+type PullImagePolicy string
 
-	// default pending
-	// +optional
-	State ResourceState `json:"state"`
-
+type ResourceContainerSpec struct {
 	// +optional
 	// default false
 	Privilege bool `json:"privilege,omitempty"`
@@ -125,6 +128,10 @@ type TestResourceStatus struct {
 	Image string `json:"image,omitempty"`
 
 	// +optional
+	// default IfNotPresent
+	ImagePullPolicy PullImagePolicy `json:"imagePullPolicy,omitempty"`
+
+	// +optional
 	Command []string `json:"command,omitempty"`
 
 	// +optional
@@ -133,6 +140,18 @@ type TestResourceStatus struct {
 	// ClusterIP is the ip address of the container in the overlay(or calico) network
 	// +optional
 	ClusterIP string `json:"clusterIP"`
+}
+
+// TestResourceStatus defines the observed state of TestResource
+type TestResourceStatus struct {
+	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+
+	// default pending
+	// +optional
+	State ResourceState `json:"state"`
+
+	ResourceContainerSpec `json:",inline"`
 
 	// HostIP is the ip address of the host machine
 	// +optional

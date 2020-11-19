@@ -114,6 +114,12 @@ spec:
               type: string
             image:
               type: string
+            imagePullPolicy:
+              description: default IfNotPresent
+              enum:
+              - Always
+              - IfNotPresent
+              type: string
             mount:
               description: Mounts specs used by the container
               items:

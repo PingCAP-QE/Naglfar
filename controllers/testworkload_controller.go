@@ -133,11 +133,13 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 			return ctrl.Result{}, err
 		}
 		switch workloadNode.Status.State {
+		case naglfarv1.ResourceDestroy:
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		case naglfarv1.ResourcePending, naglfarv1.ResourceFail:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized:
 			if workloadNode.Status.Image == "" {
-				workloadNode.Status.Image, workloadNode.Status.Command, workloadNode.Status.Envs = r.getContainerConfig(workload, &item)
+				r.setContainerSpec(&workloadNode.Status, workload, &item)
 				topologyEnvs, err := r.buildTopologyEnvs(&workload.Spec, topologies, resourceList)
 				if err != nil {
 					r.Recorder.Event(workload, "Warning", "Precondition", err.Error())
@@ -212,17 +214,17 @@ func (r *TestWorkloadReconciler) reconcileFinish(workload *naglfarv1.TestWorkloa
 	return ctrl.Result{}, nil
 }
 
-func (r *TestWorkloadReconciler) getContainerConfig(
-	testWorkload *naglfarv1.TestWorkload,
-	workloadSpec *naglfarv1.TestWorkloadItemSpec) (image string, command []string, envs []string) {
-	image, command = workloadSpec.DockerContainer.Image, workloadSpec.DockerContainer.Command
-	envs = []string{}
+func (r *TestWorkloadReconciler) setContainerSpec(containerSpec *naglfarv1.TestResourceStatus, testWorkload *naglfarv1.TestWorkload, workloadSpec *naglfarv1.TestWorkloadItemSpec) {
+	var envs []string
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarClusterNs, testWorkload.Namespace))
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadName, testWorkload.Name))
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadItem, workloadSpec.Name))
 	for _, item := range testWorkload.Spec.ClusterTopologiesRefs {
 		envs = append(envs, fmt.Sprintf("%s=%s", item.AliasName, item.Name))
 	}
+
+	containerSpec.Image, containerSpec.ImagePullPolicy = workloadSpec.DockerContainer.Image, workloadSpec.DockerContainer.ImagePullPolicy
+	containerSpec.Command, containerSpec.Envs = workloadSpec.DockerContainer.Command, envs
 	return
 }
 
@@ -275,7 +277,7 @@ func (r *TestWorkloadReconciler) uninstallWorkload(ctx context.Context, workload
 		if workloadNode == nil {
 			continue
 		}
-		if workloadNode.Status.State.IsInstalled() {
+		if workloadNode.Status.State.ShouldUninstall() {
 			workloadNode.Status.State = naglfarv1.ResourceDestroy
 			if r.Status().Update(ctx, workloadNode); err != nil {
 				return err
