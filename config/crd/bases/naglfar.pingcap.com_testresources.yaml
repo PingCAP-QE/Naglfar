@@ -109,6 +109,10 @@ spec:
               items:
                 type: string
               type: array
+            exposedPorts:
+              items:
+                type: string
+              type: array
             hostIP:
               description: HostIP is the ip address of the host machine
               type: string
@@ -136,6 +140,8 @@ spec:
                 type: object
               type: array
             password:
+              type: string
+            portBindings:
               type: string
             privilege:
               description: default false

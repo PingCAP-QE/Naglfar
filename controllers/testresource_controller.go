@@ -563,6 +563,13 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		if ports, ok := stats.NetworkSettings.Ports[naglfarv1.SSHPort]; ok && len(ports) > 0 {
 			resource.Status.SSHPort, _ = strconv.Atoi(ports[0].HostPort)
 		}
+		for port, hostPorts := range stats.NetworkSettings.Ports {
+			if len(resource.Status.PortBindings) == 0 {
+				resource.Status.PortBindings = fmt.Sprintf("%s:%s", port, hostPorts[0].HostPort)
+			} else {
+				resource.Status.PortBindings = fmt.Sprintf("%s,%s:%s", resource.Status.PortBindings, port, hostPorts[0].HostPort)
+			}
+		}
 	}
 
 	if !timeIsZero(stats.State.FinishedAt) {

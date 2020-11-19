@@ -65,7 +65,7 @@ func (c *Client) GetTiDBClusterTopology(ctx context.Context, clusterName string)
 	if err != nil {
 		return nil, err
 	}
-	spec, _, err := tiup.BuildSpecification(&topology.Spec, resources)
+	spec, _, err := tiup.BuildSpecification(&topology.Spec, resources, false)
 	return &spec, err
 }
 

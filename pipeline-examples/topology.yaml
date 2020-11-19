@@ -37,3 +37,11 @@ spec:
         deployDir: /disk1/deploy/pd-2379
         dataDir: /disk1/data/pd-2379
         logDir: /disk1/deploy/pd-2379/log
+    monitor:
+      - host: n1
+        deployDir: /disk1/deploy/prometheus-8249
+        dataDir: /disk1/deploy/prometheus-8249/data
+    grafana:
+      - host: n2
+        deployDir: /disk1/deploy/grafana-3000
+

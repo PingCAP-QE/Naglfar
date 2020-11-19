@@ -137,6 +137,12 @@ type ResourceContainerSpec struct {
 	// +optional
 	Envs []string `json:"envs,omitempty"`
 
+	// +optional
+	ExposedPorts []string `json:"exposedPorts,omitempty"`
+
+	// +optional
+	PortBindings string `json:"portBindings,omitempty"`
+
 	// ClusterIP is the ip address of the container in the overlay(or calico) network
 	// +optional
 	ClusterIP string `json:"clusterIP"`
@@ -162,6 +168,9 @@ type TestResourceStatus struct {
 
 	// +optional
 	SSHPort int `json:"sshPort"`
+
+	// +optional
+	PortBindings string `json:"portBindings,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -217,11 +226,16 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 			ReadOnly: m.ReadOnly,
 		})
 	}
+
+	exposedPorts := make(nat.PortSet)
+	for _, item := range r.Status.ExposedPorts {
+		exposedPorts[nat.Port(item)] = struct{}{}
+	}
 	config := &container.Config{
 		Image:        r.Status.Image,
 		Cmd:          r.Status.Command,
 		Env:          r.Status.Envs,
-		ExposedPorts: nat.PortSet{SSHPort: struct{}{}},
+		ExposedPorts: exposedPorts,
 	}
 
 	hostConfig := &container.HostConfig{

@@ -147,16 +147,20 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 		return result
 	}
 	resources = filterClusterResources()
+	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return false, fmt.Errorf("index exposed ports failed: %v", err)
+	}
 	for _, resource := range resources {
 		switch resource.Status.State {
 		case naglfarv1.ResourceUninitialized:
 			requeue = true
 			if resource.Status.Image == "" {
-				// TODO fix hardcode
 				resource.Status.Image = tiup.ContainerImage
-				//resource.Status.Privilege = true
 				resource.Status.CapAdd = []string{"SYS_ADMIN"}
 				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
+				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
+				resource.Status.ExposedPorts = append(resource.Status.ExposedPorts, naglfarv1.SSHPort)
 				err := r.Status().Update(ctx, resource)
 				if err != nil {
 					return false, err
@@ -229,8 +233,41 @@ func BuildInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*naglfarv1.Te
 	}
 }
 
+type strSet []string
+
+func (s strSet) add(elem string) strSet {
+	if stringsContains(s, elem) {
+		return s
+	}
+	return append(s, elem)
+}
+
+func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource) (indexes map[string]strSet, err error) {
+	spec, _, err := tiup.BuildSpecification(ctf, trs, true)
+	if err != nil {
+		return nil, err
+	}
+	indexes = make(map[string]strSet)
+	for _, item := range trs {
+		indexes[item.Name] = make(strSet, 0)
+	}
+	for _, item := range spec.TiDBServers {
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+	}
+	for _, item := range spec.PDServers {
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.ClientPort))
+	}
+	for _, item := range spec.Grafana {
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+	}
+	for _, item := range spec.Monitors {
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+	}
+	return
+}
+
 func buildTiDBClusterInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (envs []string, err error) {
-	spec, _, err := tiup.BuildSpecification(&t.Spec, resources)
+	spec, _, err := tiup.BuildSpecification(&t.Spec, resources, false)
 	if err != nil {
 		return
 	}
@@ -239,6 +276,9 @@ func buildTiDBClusterInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*n
 	}
 	for idx, item := range spec.PDServers {
 		envs = append(envs, fmt.Sprintf("pd%d=%s:%d", idx, item.Host, item.ClientPort))
+	}
+	for idx, item := range spec.Monitors {
+		envs = append(envs, fmt.Sprintf("prometheus%d=%s:%d", idx, item.Host, item.Port))
 	}
 	return
 }

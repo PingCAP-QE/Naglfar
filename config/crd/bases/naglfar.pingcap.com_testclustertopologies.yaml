@@ -60,6 +60,8 @@ spec:
                         type: string
                       host:
                         type: string
+                      port:
+                        type: integer
                     required:
                     - deployDir
                     - host
@@ -76,17 +78,20 @@ spec:
                         type: string
                       logDir:
                         type: string
+                      port:
+                        type: integer
                     required:
                     - dataDir
                     - deployDir
                     - host
-                    - logDir
                     type: object
                   type: array
                 pd:
                   description: PD machine hosts
                   items:
                     properties:
+                      clientPort:
+                        type: integer
                       dataDir:
                         type: string
                       deployDir:
@@ -95,11 +100,12 @@ spec:
                         type: string
                       logDir:
                         type: string
+                      peerPort:
+                        type: integer
                     required:
                     - dataDir
                     - deployDir
                     - host
-                    - logDir
                     type: object
                   type: array
                 serverConfigs:
@@ -123,10 +129,13 @@ spec:
                         type: string
                       logDir:
                         type: string
+                      port:
+                        type: integer
+                      statusPort:
+                        type: integer
                     required:
                     - deployDir
                     - host
-                    - logDir
                     type: object
                   type: array
                 tikv:
@@ -142,18 +151,13 @@ spec:
                       logDir:
                         type: string
                       port:
-                        description: default 20160
                         type: integer
                       statusPort:
-                        description: default 20180
                         type: integer
                     required:
                     - dataDir
                     - deployDir
                     - host
-                    - logDir
-                    - port
-                    - statusPort
                     type: object
                   type: array
                 version:
