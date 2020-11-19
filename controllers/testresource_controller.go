@@ -441,10 +441,12 @@ func (r *TestResourceReconciler) pullImageByPolicy(resource *naglfarv1.TestResou
 		r.Eventer.Event(resource, "Warning", "pullImage", fmt.Sprintf("pulling image %s failed: %s", config.Image, err.Error()))
 		return err
 	}
-	r.Eventer.Event(resource, "Normal", "pullImage", fmt.Sprintf("pull image %s", config.Image))
 	defer reader.Close()
 	var b bytes.Buffer
 	_, err = io.Copy(&b, reader)
+	if err != nil {
+		r.Eventer.Event(resource, "Normal", "pullImage", fmt.Sprintf("pull image %s", config.Image))
+	}
 	return err
 }
 

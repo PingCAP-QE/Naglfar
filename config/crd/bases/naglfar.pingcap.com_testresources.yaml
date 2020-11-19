@@ -25,6 +25,10 @@ spec:
     description: the cluster ip of resource
     name: ClusterIP
     type: string
+  - JSONPath: .status.portBindings
+    description: the port bindings of resource
+    name: PortBindings
+    type: string
   group: naglfar.pingcap.com
   names:
     kind: TestResource

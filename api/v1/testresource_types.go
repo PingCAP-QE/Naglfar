@@ -182,6 +182,7 @@ type TestResourceStatus struct {
 // +kubebuilder:printcolumn:name="HostIP",type="string",JSONPath=".status.hostIP",description="the host ip of resource"
 // +kubebuilder:printcolumn:name="SSHPort",type="integer",JSONPath=".status.sshPort",description="the ssh port of resource"
 // +kubebuilder:printcolumn:name="ClusterIP",type="string",JSONPath=".status.clusterIP",description="the cluster ip of resource"
+// +kubebuilder:printcolumn:name="PortBindings",type="string",JSONPath=".status.portBindings",description="the port bindings of resource"
 type TestResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
