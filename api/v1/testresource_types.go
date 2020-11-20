@@ -40,7 +40,8 @@ const (
 	PullPolicyIfNotPresent                 = "IfNotPresent"
 )
 
-const cleanerImage = "docker.io/library/alpine:latest"
+// TODO: make it configurable
+const cleanerImage = "hub.pingcap.net/mahjonp/alpine:latest"
 
 const SSHPort = "22/tcp"
 
