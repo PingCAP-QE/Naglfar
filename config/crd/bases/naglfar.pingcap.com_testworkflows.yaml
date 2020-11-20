@@ -182,6 +182,12 @@ spec:
                                   base version, component versions(for PR and self
                                   build version) etc.'
                                 properties:
+                                  pdDownloadURL:
+                                    type: string
+                                  tidbDownloadURL:
+                                    type: string
+                                  tikvDownloadURL:
+                                    type: string
                                   version:
                                     type: string
                                 required:

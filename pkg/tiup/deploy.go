@@ -225,7 +225,7 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 	if err := c.writeTopologyFileOnControl(outfile); err != nil {
 		return err
 	}
-	if err := c.deployCluster(log, clusterName, version.Version); err != nil {
+	if err := c.deployCluster(log, clusterName, version.Version); IgnoreClusterDuplicated(err) != nil {
 		return err
 	}
 	if err := c.startCluster(clusterName); err != nil {
@@ -234,6 +234,7 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 	if c.shouldPatch(version) {
 		return c.patch(clusterName, version)
 	}
+	return nil
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
@@ -289,7 +290,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 		if strings.Contains(errStr, "specify another cluster name") {
 			return ErrClusterDuplicated{clusterName: clusterName}
 		}
-		return fmt.Errorf("deploy cluster %s failed(%s): %s", clusterName, err, errStr)
+		return fmt.Errorf("deploy cluster failed(%s): %s", err, errStr)
 	}
 	return nil
 }
@@ -308,7 +309,7 @@ func (c *ClusterManager) startCluster(clusterName string) error {
 			"command", cmd,
 			"stdout", stdout,
 			"stderr", errStr)
-		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
+		return fmt.Errorf("start cluster failed: %s", err)
 	}
 	return nil
 }
@@ -329,27 +330,27 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 	defer client.Close()
 	commands := []string{"set -ex", "rm -rf components && mkdir components"}
 	var patchComponents []component
-	var patchComponentName []string
+	var patchComponentNames []string
 	if len(version.TiDBDownloadURL) != 0 {
 		patchComponents = append(patchComponents, component{
 			componentName: "tidb-server",
 			downloadURL:   version.TiDBDownloadURL,
 		})
-		patchComponentName = append(patchComponentName, "tidb-server")
+		patchComponentNames = append(patchComponentNames, "tidb-server")
 	}
 	if len(version.TiKVDownloadURL) != 0 {
 		patchComponents = append(patchComponents, component{
 			componentName: "tikv-server",
 			downloadURL:   version.TiKVDownloadURL,
 		})
-		patchComponentName = append(patchComponentName, "tikv-server")
+		patchComponentNames = append(patchComponentNames, "tikv-server")
 	}
 	if len(version.PDDownloadUrl) != 0 {
 		patchComponents = append(patchComponents, component{
 			componentName: "pd-server",
 			downloadURL:   version.PDDownloadUrl,
 		})
-		patchComponentName = append(patchComponentName, "pd-server")
+		patchComponentNames = append(patchComponentNames, "pd-server")
 	}
 	for _, component := range patchComponents {
 		downloadURL := component.downloadURL
@@ -358,16 +359,17 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 			return err
 		}
 		commands = append(commands,
-			fmt.Sprintf(`wget --tries 20 --waitretry 60 --retry-connrefused \
-						--dns-timeout 60 --connect-timeout 60 --read-timeout 60 \
-						--no-clobber --no-verbose --directory-prefix components %s`, downloadURL))
-		commands = append(commands, c.GenUnzipCommand(path.Join("components", path.Base(u.Path)), "components"))
+			fmt.Sprintf(`curl -O %s`, downloadURL))
+		commands = append(commands, c.GenUnzipCommand(path.Base(u.Path), "components"))
 		commands = append(commands, fmt.Sprintf("rm -rf components/%s", component.componentName))
 		commands = append(commands, fmt.Sprintf("mv components/bin/%s components/%s", component.componentName, component.componentName))
 	}
-	commands = append(commands, "cd components && tar zxf patch.tar.gz ")
-	cmd := fmt.Sprintf(`bash -c "%s"`, strings.Join(commands, "\n"))
-
+	commands = append(commands, "cd components && tar zcf patch.tar.gz "+strings.Join(patchComponentNames, " "))
+	for _, component := range patchComponentNames {
+		commands = append(commands, fmt.Sprintf("/root/.tiup/bin/tiup cluster patch %s patch.tar.gz -R %s",
+			clusterName, strings.Split(component, "-server")[0]))
+	}
+	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`, strings.Join(commands, "\n"))
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
@@ -375,7 +377,7 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 			"command", cmd,
 			"stdout", stdStr,
 			"stderr", errStr)
-		return fmt.Errorf("patch cluster error: %s", err)
+		return fmt.Errorf("patch cluster failed(%s): %s", err, errStr)
 	}
 	return nil
 }
