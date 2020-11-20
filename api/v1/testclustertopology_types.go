@@ -31,6 +31,12 @@ const (
 // TODO: add a deploy version spec: clusterName, base version, component versions(for PR and self build version) etc.
 type TiDBClusterVersion struct {
 	Version string `json:"version"`
+	// +optional
+	TiDBDownloadURL string `json:"tidbDownloadURL,omitempty"`
+	// +optional
+	TiKVDownloadURL string `json:"tikvDownloadURL,omitempty"`
+	// +optional
+	PDDownloadUrl string `json:"pdDownloadURL,omitempty"`
 }
 
 type ServerConfigs struct {

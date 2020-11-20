@@ -3,6 +3,8 @@ package tiup
 import (
 	"bytes"
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -226,7 +228,12 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 	if err := c.deployCluster(log, clusterName, version.Version); err != nil {
 		return err
 	}
-	return c.startCluster(clusterName)
+	if err := c.startCluster(clusterName); err != nil {
+		return err
+	}
+	if c.shouldPatch(version) {
+		return c.patch(clusterName, version)
+	}
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
@@ -304,4 +311,81 @@ func (c *ClusterManager) startCluster(clusterName string) error {
 		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
 	}
 	return nil
+}
+
+func (c *ClusterManager) shouldPatch(version naglfarv1.TiDBClusterVersion) bool {
+	return len(version.TiDBDownloadURL) != 0 || len(version.PDDownloadUrl) != 0 || len(version.TiKVDownloadURL) != 0
+}
+
+func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBClusterVersion) error {
+	type component struct {
+		componentName string
+		downloadURL   string
+	}
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	commands := []string{"set -ex", "rm -rf components && mkdir components"}
+	var patchComponents []component
+	var patchComponentName []string
+	if len(version.TiDBDownloadURL) != 0 {
+		patchComponents = append(patchComponents, component{
+			componentName: "tidb-server",
+			downloadURL:   version.TiDBDownloadURL,
+		})
+		patchComponentName = append(patchComponentName, "tidb-server")
+	}
+	if len(version.TiKVDownloadURL) != 0 {
+		patchComponents = append(patchComponents, component{
+			componentName: "tikv-server",
+			downloadURL:   version.TiKVDownloadURL,
+		})
+		patchComponentName = append(patchComponentName, "tikv-server")
+	}
+	if len(version.PDDownloadUrl) != 0 {
+		patchComponents = append(patchComponents, component{
+			componentName: "pd-server",
+			downloadURL:   version.PDDownloadUrl,
+		})
+		patchComponentName = append(patchComponentName, "pd-server")
+	}
+	for _, component := range patchComponents {
+		downloadURL := component.downloadURL
+		u, err := url.Parse(downloadURL)
+		if err != nil {
+			return err
+		}
+		commands = append(commands,
+			fmt.Sprintf(`wget --tries 20 --waitretry 60 --retry-connrefused \
+						--dns-timeout 60 --connect-timeout 60 --read-timeout 60 \
+						--no-clobber --no-verbose --directory-prefix components %s`, downloadURL))
+		commands = append(commands, c.GenUnzipCommand(path.Join("components", path.Base(u.Path)), "components"))
+		commands = append(commands, fmt.Sprintf("rm -rf components/%s", component.componentName))
+		commands = append(commands, fmt.Sprintf("mv components/bin/%s components/%s", component.componentName, component.componentName))
+	}
+	commands = append(commands, "cd components && tar zxf patch.tar.gz ")
+	cmd := fmt.Sprintf(`bash -c "%s"`, strings.Join(commands, "\n"))
+
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		c.log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return fmt.Errorf("patch cluster error: %s", err)
+	}
+	return nil
+}
+
+func (c *ClusterManager) GenUnzipCommand(filePath string, destDir string) string {
+	if strings.HasPrefix(filePath, ".zip") {
+		return "unzip -d " + destDir + " " + filePath
+	}
+	if strings.HasSuffix(filePath, ".tar.gz") {
+		return "tar -zxf " + filePath + " -C " + destDir
+	}
+	return "tar -xf " + filePath + " -C " + destDir
 }
