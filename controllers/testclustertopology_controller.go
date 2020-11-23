@@ -181,7 +181,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	if err != nil {
 		return false, err
 	}
-	return false, tiup.IgnoreClusterDuplicated(tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version))
+	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version)
 }
 
 func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *naglfarv1.TestClusterTopology) error {
