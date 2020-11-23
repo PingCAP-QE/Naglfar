@@ -43,40 +43,60 @@ type ServerConfigs struct {
 }
 
 type TiDBSpec struct {
-	Host      string `json:"host"`
+	Host string `json:"host"`
+
+	// +optional
+	Port int `json:"port,omitempty"`
+	// +optional
+	StatusPort int `json:"statusPort,omitempty"`
+
 	DeployDir string `json:"deployDir"`
 	// +optional
-	DataDir string `json:"dataDir"`
-	LogDir  string `json:"logDir"`
+	DataDir string `json:"dataDir,omitempty"`
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
 }
 
 type PDSpec struct {
-	Host      string `json:"host"`
+	Host string `json:"host"`
+
+	// +optional
+	ClientPort int `json:"clientPort,omitempty"`
+	// +optional
+	PeerPort int `json:"peerPort,omitempty"`
+
 	DeployDir string `json:"deployDir"`
 	DataDir   string `json:"dataDir"`
-	LogDir    string `json:"logDir"`
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
 }
 
 type TiKVSpec struct {
 	Host string `json:"host"`
-	// default 20160
-	Port int `json:"port"`
-	// default 20180
-	StatusPort int    `json:"statusPort"`
+	// +optional
+	Port int `json:"port,omitempty"`
+	// +optional
+	StatusPort int    `json:"statusPort,omitempty"`
 	DeployDir  string `json:"deployDir"`
 	DataDir    string `json:"dataDir"`
-	LogDir     string `json:"logDir"`
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
 }
 
 type PrometheusSpec struct {
-	Host      string `json:"host"`
+	Host string `json:"host"`
+	// +optional
+	Port      int    `json:"port,omitempty"`
 	DeployDir string `json:"deployDir"`
 	DataDir   string `json:"dataDir"`
-	LogDir    string `json:"logDir"`
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
 }
 
 type GrafanaSpec struct {
-	Host      string `json:"host"`
+	Host string `json:"host"`
+	// +optional
+	Port      int    `json:"port,omitempty"`
 	DeployDir string `json:"deployDir"`
 }
 

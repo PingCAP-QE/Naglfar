@@ -41,9 +41,10 @@ type ResourceRequestRef struct {
 }
 
 type DockerContainerSpec struct {
-	Name            string             `json:"name"`
 	ResourceRequest ResourceRequestRef `json:"resourceRequest"`
 	Image           string             `json:"image"`
+	// +optional
+	ImagePullPolicy PullImagePolicy `json:"imagePullPolicy,omitempty"`
 	// +optional
 	Command []string `json:"command,omitempty"`
 }

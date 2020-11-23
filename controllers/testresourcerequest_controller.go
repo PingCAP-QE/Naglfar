@@ -109,12 +109,16 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 	}
 
 	for idx, item := range resources.Items {
+		resourceOwner := metav1.GetControllerOf(&item)
+		// filter out resources that not owned by this request
+		if resourceOwner == nil || resourceOwner.UID != resourceRequest.UID {
+			continue
+		}
 		resourceMap[item.Name] = &resources.Items[idx]
-
 		if item.Status.State == naglfarv1.ResourceFail {
 			failedResources = append(failedResources, item.Name)
 		}
-
+		// Because the deletion is async, here need to decide whether the resource is owned by this request
 		if item.Status.State.IsRequired() {
 			requiredCount++
 		}
@@ -125,7 +129,6 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		err = r.removeAllResources(ctx, &resourceRequest)
 		return
 	}
-
 	// if all resources has been required, set the resource request's state to be ready
 	if requiredCount == len(resourceRequest.Spec.Items) {
 		log.Info("all resources are in ready state")
@@ -133,7 +136,6 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		err = r.Status().Update(ctx, &resourceRequest)
 		return
 	}
-
 	for idx, item := range resourceRequest.Spec.Items {
 		if _, e := resourceMap[item.Name]; !e {
 			tr := resourceRequest.ConstructTestResource(idx)
@@ -149,7 +151,7 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 			}
 		}
 	}
-	return ctrl.Result{RequeueAfter: time.Second}, nil
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
 func (r *TestResourceRequestReconciler) listResources(ctx context.Context, request *naglfarv1.TestResourceRequest) (naglfarv1.TestResourceList, error) {

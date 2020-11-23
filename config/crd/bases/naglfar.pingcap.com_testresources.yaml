@@ -25,6 +25,10 @@ spec:
     description: the cluster ip of resource
     name: ClusterIP
     type: string
+  - JSONPath: .status.portBindings
+    description: the port bindings of resource
+    name: PortBindings
+    type: string
   group: naglfar.pingcap.com
   names:
     kind: TestResource
@@ -109,10 +113,20 @@ spec:
               items:
                 type: string
               type: array
+            exposedPorts:
+              items:
+                type: string
+              type: array
             hostIP:
               description: HostIP is the ip address of the host machine
               type: string
             image:
+              type: string
+            imagePullPolicy:
+              description: default IfNotPresent
+              enum:
+              - Always
+              - IfNotPresent
               type: string
             mount:
               description: Mounts specs used by the container
@@ -130,6 +144,8 @@ spec:
                 type: object
               type: array
             password:
+              type: string
+            portBindings:
               type: string
             privilege:
               description: default false

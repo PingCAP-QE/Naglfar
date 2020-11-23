@@ -35,9 +35,13 @@ const (
 	ResourceReady                       = "ready"
 	ResourceFinish                      = "finish"
 	ResourceDestroy                     = "destroy"
+
+	PullPolicyAlways       PullImagePolicy = "Always"
+	PullPolicyIfNotPresent                 = "IfNotPresent"
 )
 
-const cleanerImage = "alpine:latest"
+// TODO: make it configurable
+const cleanerImage = "hub.pingcap.net/mahjonp/alpine:latest"
 
 const SSHPort = "22/tcp"
 
@@ -48,8 +52,13 @@ func (r ResourceState) IsRequired() bool {
 	return r != "" && r != ResourcePending && r != ResourceFail
 }
 
-func (r ResourceState) IsInstalled() bool {
-	return r == ResourceReady || r == ResourceFinish
+func (r ResourceState) ShouldUninstall() bool {
+	switch r {
+	case ResourceUninitialized, ResourceReady, ResourceFinish:
+		return true
+	default:
+		return false
+	}
 }
 
 type DiskSpec struct {
@@ -96,15 +105,10 @@ type TestResourceMount struct {
 	ReadOnly bool       `json:"readOnly,omitempty"`
 }
 
-// TestResourceStatus defines the observed state of TestResource
-type TestResourceStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+// +kubebuilder:validation:Enum=Always;IfNotPresent
+type PullImagePolicy string
 
-	// default pending
-	// +optional
-	State ResourceState `json:"state"`
-
+type ResourceContainerSpec struct {
 	// +optional
 	// default false
 	Privilege bool `json:"privilege,omitempty"`
@@ -125,14 +129,36 @@ type TestResourceStatus struct {
 	Image string `json:"image,omitempty"`
 
 	// +optional
+	// default IfNotPresent
+	ImagePullPolicy PullImagePolicy `json:"imagePullPolicy,omitempty"`
+
+	// +optional
 	Command []string `json:"command,omitempty"`
 
 	// +optional
 	Envs []string `json:"envs,omitempty"`
 
+	// +optional
+	ExposedPorts []string `json:"exposedPorts,omitempty"`
+
+	// +optional
+	PortBindings string `json:"portBindings,omitempty"`
+
 	// ClusterIP is the ip address of the container in the overlay(or calico) network
 	// +optional
 	ClusterIP string `json:"clusterIP"`
+}
+
+// TestResourceStatus defines the observed state of TestResource
+type TestResourceStatus struct {
+	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+
+	// default pending
+	// +optional
+	State ResourceState `json:"state"`
+
+	ResourceContainerSpec `json:",inline"`
 
 	// HostIP is the ip address of the host machine
 	// +optional
@@ -143,6 +169,9 @@ type TestResourceStatus struct {
 
 	// +optional
 	SSHPort int `json:"sshPort"`
+
+	// +optional
+	PortBindings string `json:"portBindings,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -154,6 +183,7 @@ type TestResourceStatus struct {
 // +kubebuilder:printcolumn:name="HostIP",type="string",JSONPath=".status.hostIP",description="the host ip of resource"
 // +kubebuilder:printcolumn:name="SSHPort",type="integer",JSONPath=".status.sshPort",description="the ssh port of resource"
 // +kubebuilder:printcolumn:name="ClusterIP",type="string",JSONPath=".status.clusterIP",description="the cluster ip of resource"
+// +kubebuilder:printcolumn:name="PortBindings",type="string",JSONPath=".status.portBindings",description="the port bindings of resource"
 type TestResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -198,11 +228,16 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 			ReadOnly: m.ReadOnly,
 		})
 	}
+
+	exposedPorts := make(nat.PortSet)
+	for _, item := range r.Status.ExposedPorts {
+		exposedPorts[nat.Port(item)] = struct{}{}
+	}
 	config := &container.Config{
 		Image:        r.Status.Image,
 		Cmd:          r.Status.Command,
 		Env:          r.Status.Envs,
-		ExposedPorts: nat.PortSet{SSHPort: struct{}{}},
+		ExposedPorts: exposedPorts,
 	}
 
 	hostConfig := &container.HostConfig{

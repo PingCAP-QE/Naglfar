@@ -92,7 +92,15 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 	return nil
 }
 
-func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource) (spec tiupSpec.Specification, control *naglfarv1.TestResourceStatus, err error) {
+// If dryRun is true, host uses the resource's name
+func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource, dryRun bool) (
+	spec tiupSpec.Specification, control *naglfarv1.TestResourceStatus, err error) {
+	hostName := func(resourceName, clusterIP string) string {
+		if dryRun {
+			return resourceName
+		}
+		return clusterIP
+	}
 	spec.GlobalOptions = tiupSpec.GlobalOptions{
 		User:    "root",
 		SSHPort: 22,
@@ -115,10 +123,10 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			return spec, nil, fmt.Errorf("tidb node not found: `%s`", item.Host)
 		}
 		spec.TiDBServers = append(spec.TiDBServers, tiupSpec.TiDBSpec{
-			Host:            node.ClusterIP,
+			Host:            hostName(item.Host, node.ClusterIP),
 			SSHPort:         22,
-			Port:            0,
-			StatusPort:      0,
+			Port:            item.Port,
+			StatusPort:      item.StatusPort,
 			DeployDir:       item.DeployDir,
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
@@ -130,10 +138,10 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			return spec, nil, fmt.Errorf("tikv node not found: `%s`", item.Host)
 		}
 		spec.TiKVServers = append(spec.TiKVServers, tiupSpec.TiKVSpec{
-			Host:            node.ClusterIP,
+			Host:            hostName(item.Host, node.ClusterIP),
 			SSHPort:         22,
-			Port:            0,
-			StatusPort:      0,
+			Port:            item.Port,
+			StatusPort:      item.StatusPort,
 			DeployDir:       item.DeployDir,
 			DataDir:         item.DataDir,
 			LogDir:          item.LogDir,
@@ -146,10 +154,10 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			return spec, nil, fmt.Errorf("pd node not found: `%s`", item.Host)
 		}
 		spec.PDServers = append(spec.PDServers, tiupSpec.PDSpec{
-			Host:            node.ClusterIP,
+			Host:            hostName(item.Host, node.ClusterIP),
 			SSHPort:         22,
-			ClientPort:      0,
-			PeerPort:        0,
+			ClientPort:      item.ClientPort,
+			PeerPort:        item.PeerPort,
 			DeployDir:       item.DeployDir,
 			DataDir:         item.DataDir,
 			LogDir:          item.LogDir,
@@ -162,9 +170,9 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			return spec, nil, fmt.Errorf("monitor node not found: `%s`", item.Host)
 		}
 		spec.Monitors = append(spec.Monitors, tiupSpec.PrometheusSpec{
-			Host:            node.ClusterIP,
+			Host:            hostName(item.Host, node.ClusterIP),
 			SSHPort:         22,
-			Port:            0,
+			Port:            item.Port,
 			DeployDir:       item.DeployDir,
 			DataDir:         item.DataDir,
 			LogDir:          item.LogDir,
@@ -177,9 +185,9 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			return spec, nil, fmt.Errorf("grafana node not found: `%s`", item.Host)
 		}
 		spec.Grafana = append(spec.Grafana, tiupSpec.GrafanaSpec{
-			Host:            node.ClusterIP,
+			Host:            hostName(item.Host, node.ClusterIP),
 			SSHPort:         22,
-			Port:            0,
+			Port:            item.Port,
 			DeployDir:       item.DeployDir,
 			ResourceControl: meta.ResourceControl{},
 		})
@@ -196,7 +204,7 @@ type ClusterManager struct {
 }
 
 func MakeClusterManager(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource) (*ClusterManager, error) {
-	specification, control, err := BuildSpecification(ctf, trs)
+	specification, control, err := BuildSpecification(ctf, trs, false)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +282,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 		if strings.Contains(errStr, "specify another cluster name") {
 			return ErrClusterDuplicated{clusterName: clusterName}
 		}
-		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
+		return fmt.Errorf("deploy cluster %s failed(%s): %s", clusterName, err, errStr)
 	}
 	return nil
 }
