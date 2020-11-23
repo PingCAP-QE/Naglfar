@@ -36,10 +36,13 @@ func (c *Client) SetTestWorkloadResult(ctx context.Context, text string) error {
 		return err
 	}
 	return retry(3, 1*time.Second, func() error {
+		if testWorkload.Status.Results == nil {
+			testWorkload.Status.Results = make(map[string]naglfarv1.TestWorkloadResult)
+		}
 		testWorkload.Status.Results[workloadItemName] = naglfarv1.TestWorkloadResult{
 			PlainText: text,
 		}
-		if err := c.Update(ctx, &testWorkload); err != nil {
+		if err := c.Status().Update(ctx, &testWorkload); err != nil {
 			return err
 		}
 		return nil
