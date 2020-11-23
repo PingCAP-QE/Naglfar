@@ -383,7 +383,7 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 }
 
 func (c *ClusterManager) GenUnzipCommand(filePath string, destDir string) string {
-	if strings.HasPrefix(filePath, ".zip") {
+	if strings.HasSuffix(filePath, ".zip") {
 		return "unzip -d " + destDir + " " + filePath
 	}
 	if strings.HasSuffix(filePath, ".tar.gz") {
