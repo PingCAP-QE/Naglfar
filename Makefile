@@ -13,7 +13,7 @@ endif
 
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 
-all: manager
+all: manager kubectl-naglfar
 
 # Run tests
 test: generate fmt vet manifests
@@ -22,6 +22,9 @@ test: generate fmt vet manifests
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager main.go
+
+kubectl-naglfar:
+	go build -o bin/naglfar cmd/kubectl-naglfar/main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
