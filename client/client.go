@@ -32,6 +32,7 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/controllers"
+	"github.com/PingCAP-QE/Naglfar/pkg/kubeutil"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
@@ -72,7 +73,7 @@ func (c *Client) GetTiDBClusterTopology(ctx context.Context, clusterName string)
 func (c *Client) getTestResources(ctx context.Context) ([]*naglfarv1.TestResource, error) {
 	var resourceList naglfarv1.TestResourceList
 	var resources []*naglfarv1.TestResource
-	err := retry(3, time.Second, func() error {
+	err := kubeutil.Retry(3, time.Second, func() error {
 		if err := c.List(ctx, &resourceList, client.InNamespace(namespace)); err != nil {
 			return err
 		}
@@ -95,7 +96,7 @@ func (c *Client) getClusterTopology(ctx context.Context, clusterName string) (*n
 	if err != nil {
 		return nil, err
 	}
-	err = retry(3, time.Second, func() error {
+	err = kubeutil.Retry(3, time.Second, func() error {
 		if err := c.Get(ctx, key, &ct); err != nil {
 			return err
 		}
@@ -112,7 +113,7 @@ func (c *Client) getTestWorkload(ctx context.Context) (*naglfarv1.TestWorkload, 
 	if err != nil {
 		return nil, err
 	}
-	err = retry(3, time.Second, func() error {
+	err = kubeutil.Retry(3, time.Second, func() error {
 		if err := c.Get(ctx, key, &workload); err != nil {
 			return err
 		}

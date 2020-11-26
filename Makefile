@@ -13,15 +13,18 @@ endif
 
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 
-all: manager
+all: manager kubectl-naglfar
 
 # Run tests
 test: generate fmt vet manifests
 	go test ./... -coverprofile cover.out
 
 # Build manager binary
-manager: generate fmt vet
+manager: mod generate fmt vet
 	go build -o bin/manager main.go
+
+kubectl-naglfar: mod generate fmt vet
+	go build -o bin/naglfar cmd/kubectl-naglfar/main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -50,6 +53,8 @@ upgrade: deploy
 manifests:
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
+format: vet fmt
+
 # Run go fmt against code
 fmt:
 	go fmt ./...
@@ -57,6 +62,11 @@ fmt:
 # Run go vet against code
 vet:
 	go vet ./...
+
+mod:
+	@echo "go mod tidy"
+	GO111MODULE=on go mod tidy
+	@git diff --exit-code -- go.sum go.mod
 
 # Generate code
 generate:
@@ -72,3 +82,16 @@ docker-push:
 
 log:
 	kubectl logs deployment/naglfar-controller-manager -n naglfar-system -c manager
+
+
+install-controller-gen:
+ifeq (, $(shell which controller-gen))
+	@{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+endif

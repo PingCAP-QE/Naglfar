@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/kubeutil"
 )
 
 func (c *Client) SetTestWorkloadResult(ctx context.Context, text string) error {
@@ -35,11 +36,14 @@ func (c *Client) SetTestWorkloadResult(ctx context.Context, text string) error {
 	if err := c.Get(ctx, key, &testWorkload); err != nil {
 		return err
 	}
-	return retry(3, 1*time.Second, func() error {
+	return kubeutil.Retry(3, 1*time.Second, func() error {
+		if testWorkload.Status.Results == nil {
+			testWorkload.Status.Results = make(map[string]naglfarv1.TestWorkloadResult)
+		}
 		testWorkload.Status.Results[workloadItemName] = naglfarv1.TestWorkloadResult{
 			PlainText: text,
 		}
-		if err := c.Update(ctx, &testWorkload); err != nil {
+		if err := c.Status().Update(ctx, &testWorkload); err != nil {
 			return err
 		}
 		return nil
