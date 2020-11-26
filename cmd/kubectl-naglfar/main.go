@@ -14,25 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package main
 
 import (
-	"fmt"
-	"time"
+	"os"
+
+	"go.uber.org/zap"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	_ "k8s.io/cli-runtime/pkg/genericclioptions"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/cmd"
 )
 
-func retry(attempts int, sleep time.Duration, f func() error) (err error) {
-	for i := 0; ; i++ {
-		err = f()
-		if err == nil {
-			return
-		}
-
-		if i >= (attempts - 1) {
-			break
-		}
-
-		time.Sleep(sleep)
+func main() {
+	logger, _ := zap.NewDevelopment()
+	rootCmd := cmd.NewNaglfarCmd(logger, genericclioptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr})
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
 	}
-	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
