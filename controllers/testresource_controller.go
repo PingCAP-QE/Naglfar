@@ -212,7 +212,7 @@ func (r *TestResourceReconciler) removeContainer(resource *naglfarv1.TestResourc
 }
 
 func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, machine *naglfarv1.Machine) (requeue bool, err error) {
-	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	dockerClient, err := machine.DockerClient()
 	if err != nil {
 		return
 	}
@@ -513,7 +513,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		return
 	}
 
-	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	dockerClient, err := machine.DockerClient()
 	if err != nil {
 		return
 	}
@@ -597,7 +597,7 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 		return
 	}
 
-	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	dockerClient, err := machine.DockerClient()
 	if err != nil {
 		return
 	}

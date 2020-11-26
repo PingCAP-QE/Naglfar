@@ -17,17 +17,23 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
 	"github.com/appleboy/easyssh-proxy"
+	dockerTypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -35,11 +41,16 @@ import (
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 )
 
+const machineLock = "naglfar.lock"
+const machineWorkerImage = "alpine:latest"
+
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
+	Ctx context.Context
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log     logr.Logger
+	Eventer record.EventRecorder
+	Scheme  *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get;list;watch;create;update;patch;delete
@@ -48,12 +59,11 @@ type MachineReconciler struct {
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships/status,verbs=get;update;patch
 
 func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
-	ctx := context.Background()
 	log := r.Log.WithValues("machine", req.NamespacedName)
 
 	machine := new(naglfarv1.Machine)
 
-	if err = r.Get(ctx, req.NamespacedName, machine); err != nil {
+	if err = r.Get(r.Ctx, req.NamespacedName, machine); err != nil {
 		log.Error(err, "unable to fetch Machine")
 
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -66,18 +76,31 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	log.Info("machine reconcile", "content", machine)
 
 	if machine.Status.Info == nil {
-		machine.Status.Info, err = fetchMachineInfo(machine)
+		var dockerClient *docker.Client
+		dockerClient, err = machine.DockerClient()
 		if err != nil {
 			return
 		}
+		defer dockerClient.Close()
 
-		if err = r.Status().Update(ctx, machine); err != nil {
+		if err = r.tryLock(machine, dockerClient); err != nil {
+			r.Eventer.Event(machine, "Warning", "Lock", err.Error())
+			return
+		}
+
+		machine.Status.Info, err = fetchMachineInfo(machine)
+		if err != nil {
+			r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
+			return
+		}
+
+		if err = r.Status().Update(r.Ctx, machine); err != nil {
 			log.Error(err, "unable to update Machine")
 			return
 		}
 	}
 
-	relation, err := r.getRelationship(ctx)
+	relation, err := r.getRelationship()
 	if err != nil {
 		return
 	}
@@ -93,15 +116,15 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 
 	if relation.Status.MachineToResources[machineKey] == nil {
 		relation.Status.MachineToResources[machineKey] = make(naglfarv1.ResourceRefList, 0)
-		err = r.Status().Update(ctx, relation)
+		err = r.Status().Update(r.Ctx, relation)
 	}
 
 	return
 }
 
-func (r *MachineReconciler) getRelationship(ctx context.Context) (*naglfarv1.Relationship, error) {
+func (r *MachineReconciler) getRelationship() (*naglfarv1.Relationship, error) {
 	var relation naglfarv1.Relationship
-	err := r.Get(ctx, relationshipName, &relation)
+	err := r.Get(r.Ctx, relationshipName, &relation)
 	if apierrors.IsNotFound(err) {
 		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
 		err = nil
@@ -188,4 +211,36 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 	}
 
 	return info, nil
+}
+
+func (r *MachineReconciler) tryPullImage(dockerClient docker.APIClient) error {
+	_, _, err := dockerClient.ImageInspectWithRaw(r.Ctx, machineWorkerImage)
+	if err == nil {
+		return nil
+	}
+	if !docker.IsErrImageNotFound(err) {
+		return err
+	}
+
+	reader, err := dockerClient.ImagePull(r.Ctx, machineWorkerImage, dockerTypes.ImagePullOptions{})
+	if err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
+		return err
+	}
+	defer reader.Close()
+	var b bytes.Buffer
+	_, err = io.Copy(&b, reader)
+	if err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
+	}
+	return err
+}
+
+func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) (err error) {
+	if err = r.tryPullImage(dockerClient); err != nil {
+		return
+	}
+
+	_, err = dockerClient.ContainerCreate(r.Ctx, &container.Config{Image: machineWorkerImage}, nil, nil, machineLock)
+	return
 }

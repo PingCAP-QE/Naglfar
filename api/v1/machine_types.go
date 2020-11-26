@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 
+	docker "github.com/docker/docker/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -241,12 +242,16 @@ func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
 	return
 }
 
-func (r *Machine) DockerURL() string {
+func (r *Machine) dockerURL() string {
 	scheme := "http"
 	if r.Spec.DockerTLS {
 		scheme = "https"
 	}
 	return fmt.Sprintf("%s://%s:%d", scheme, r.Spec.Host, r.Spec.DockerPort)
+}
+
+func (r *Machine) DockerClient() (*docker.Client, error) {
+	return docker.NewClient(r.dockerURL(), r.Spec.DockerVersion, nil, nil)
 }
 
 func init() {
