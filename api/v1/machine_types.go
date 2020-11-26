@@ -79,16 +79,7 @@ type MachineSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Username string `json:"username"`
-
-	Password string `json:"password"`
-
 	Host string `json:"host"`
-
-	// +kubebuilder:validation:Minimum=0
-	// default 22
-	// +optional
-	SSHPort int `json:"sshPort"`
 
 	// +kubebuilder:validation:Minimum=0
 	// default 2375 (unencrypted) or 2376(encrypted)

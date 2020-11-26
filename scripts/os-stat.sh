@@ -20,7 +20,7 @@ memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
 cpuThreads=$(grep processor /proc/cpuinfo | wc -l)
 
 # Disk
-disksJson=$(for d in $(df -P -x tmpfs -x devtmpfs -x ecryptfs -x nfs -x cifs -T \
+disksJson=$(for d in $(df -P -x tmpfs -x devtmpfs -x ecryptfs -x nfs -x cifs -x overlay -T \
 | tail -n+2 \
 | awk '{print "" "\""$1"\"" ": {\"filesystem\":" "\""$2"\"" ", \"total\":" "\""$3"KiB\"" ", \"used\":" "\""$4"KiB\"" ", \"mountPoint\":" "\""$7"\"" "},"}'); \
 do echo $d; done | sed '$s/.$//')

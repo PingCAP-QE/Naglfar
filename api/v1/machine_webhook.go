@@ -46,10 +46,6 @@ var _ webhook.Defaulter = &Machine{}
 func (r *Machine) Default() {
 	machinelog.Info("default", "name", r.Name)
 
-	if r.Spec.SSHPort == 0 {
-		r.Spec.SSHPort = 22
-	}
-
 	if r.Spec.DockerPort == 0 {
 		if r.Spec.DockerTLS {
 			r.Spec.DockerPort = 2376
@@ -84,10 +80,6 @@ var _ webhook.Validator = &Machine{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Machine) ValidateCreate() error {
 	machinelog.Info("validate create", "name", r.Name)
-
-	if r.Spec.SSHPort < 0 {
-		return fmt.Errorf("invalid port %d", r.Spec.SSHPort)
-	}
 
 	if r.Spec.DockerPort < 0 {
 		return fmt.Errorf("invalid port %d", r.Spec.DockerPort)

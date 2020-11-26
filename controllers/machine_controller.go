@@ -22,10 +22,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 
-	"github.com/appleboy/easyssh-proxy"
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	docker "github.com/docker/docker/client"
@@ -42,7 +40,7 @@ import (
 )
 
 const machineLock = "naglfar.lock"
-const machineWorkerImage = "alpine:latest"
+const machineWorkerImage = "alexeiled/nsenter"
 
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
@@ -138,27 +136,12 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
-	timeout, _ := spec.Timeout.Parse()
-	return &easyssh.MakeConfig{
-		User:     spec.Username,
-		Password: spec.Password,
-		Server:   spec.Host,
-		Port:     strconv.Itoa(spec.SSHPort),
-		Timeout:  timeout,
-	}
-}
-
-func fetchMachineInfo(machine *naglfarv1.Machine) (*naglfarv1.MachineInfo, error) {
+func fetchMachineInfo(machine *naglfarv1.Machine, dockerClient docker.APIClient) (*naglfarv1.MachineInfo, error) {
 	osStatScript, err := ScriptBox.FindString("os-stat.sh")
 
 	if err != nil {
 		return nil, err
 	}
-
-	ssh := MakeSSHConfig(&machine.Spec)
-
-	stdout, stderr, done, err := ssh.Run(osStatScript)
 
 	if err != nil {
 		log.Error(err, "error in executing os-stat")
