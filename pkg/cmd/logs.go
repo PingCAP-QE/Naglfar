@@ -61,8 +61,9 @@ func NewLogsCmd(logger *zap.Logger, configFlag *genericclioptions.ConfigFlags, r
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
 			if len(args) < 1 {
-				return fmt.Errorf("please specify test workload name")
+				return fmt.Errorf("should set the test workload name")
 			}
 			twName := args[0]
 
@@ -72,20 +73,20 @@ func NewLogsCmd(logger *zap.Logger, configFlag *genericclioptions.ConfigFlags, r
 					Namespace: kubeutil.GetNamespaceFromKubernetesFlags(configFlag, rbFlags),
 				},
 			}
-			if err := naglfarClient.GetObject(context.TODO(), &tw); err != nil {
+			if err := naglfarClient.GetObject(ctx, &tw); err != nil {
 				return err
 			}
-			return logTestWorkload(logger, &tw, streams)
+			return logTestWorkload(ctx, logger, &tw, streams)
 		},
 	}
 	flagsLog := pflag.NewFlagSet("kubectl-naglfar-log", pflag.ExitOnError)
-	flagsLog.StringVarP(&workloadItemName, "workload", "w", "", "specified the workload name")
+	flagsLog.StringVarP(&workloadItemName, "workload", "w", "", "set the workload name")
 	flagsLog.BoolVar(&follow, "follow", false, "follow the log")
 	logCmd.Flags().AddFlagSet(flagsLog)
 	return logCmd
 }
 
-func logTestWorkload(logger *zap.Logger, tw *naglfarv1.TestWorkload, streams genericclioptions.IOStreams) error {
+func logTestWorkload(ctx context.Context, logger *zap.Logger, tw *naglfarv1.TestWorkload, streams genericclioptions.IOStreams) error {
 	if tw.Status.State == naglfarv1.TestWorkloadStatePending {
 		return fmt.Errorf("workload %s/%s is pending, please wait it to run", tw.Namespace, tw.Name)
 	}
@@ -103,17 +104,16 @@ func logTestWorkload(logger *zap.Logger, tw *naglfarv1.TestWorkload, streams gen
 		return fmt.Errorf("there exist no item named %s", workloadItemName)
 	}
 
-	node, err := naglfarClient.GetResource(context.TODO(), tw.Namespace, targetItem.DockerContainer.ResourceRequest.Node)
+	node, err := naglfarClient.GetResource(ctx, tw.Namespace, targetItem.DockerContainer.ResourceRequest.Node)
 	if err != nil {
 		return err
 	}
-	// FIXME: find the machine according to host ip
-	machine, err := naglfarClient.GetMachine(context.TODO(), node.Status.HostIP)
+	machine, err := naglfarClient.GetMachineByHostIP(ctx, node.Status.HostIP)
 	if err != nil {
 		return err
 	}
 	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
-	responseBody, err := dockerClient.ContainerLogs(context.TODO(), fmt.Sprintf("%s.%s", tw.Namespace, node.Name), types.ContainerLogsOptions{
+	responseBody, err := dockerClient.ContainerLogs(ctx, fmt.Sprintf("%s.%s", tw.Namespace, node.Name), types.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
@@ -122,6 +122,6 @@ func logTestWorkload(logger *zap.Logger, tw *naglfarv1.TestWorkload, streams gen
 	if err != nil {
 		return err
 	}
-	_, err = stdcopy.StdCopy(streams.Out, streams.Out, responseBody)
+	_, err = stdcopy.StdCopy(streams.Out, streams.ErrOut, responseBody)
 	return err
 }

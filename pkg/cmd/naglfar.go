@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
@@ -64,6 +65,19 @@ func (c *NaglfarClient) GetMachine(ctx context.Context, name string) (*naglfarv1
 	}
 	err := c.GetObject(ctx, &machine)
 	return &machine, err
+}
+
+func (c *NaglfarClient) GetMachineByHostIP(ctx context.Context, hostIP string) (*naglfarv1.Machine, error) {
+	var machineList naglfarv1.MachineList
+	if err := c.List(ctx, &machineList, client.InNamespace("default")); err != nil {
+		return nil, err
+	}
+	for _, item := range machineList.Items {
+		if item.Spec.Host == hostIP {
+			return &item, nil
+		}
+	}
+	return nil, fmt.Errorf("machine host ip not found: %s", hostIP)
 }
 
 func NewNaglfarCmd(logger *zap.Logger, streams genericclioptions.IOStreams) *cobra.Command {
