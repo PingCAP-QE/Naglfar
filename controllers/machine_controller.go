@@ -22,10 +22,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"strings"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/strslice"
 	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
@@ -41,6 +44,7 @@ import (
 
 const machineLock = "naglfar.lock"
 const machineWorkerImage = "alexeiled/nsenter"
+const lockerLabel = "locker"
 
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
@@ -81,14 +85,13 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 		}
 		defer dockerClient.Close()
 
-		if err = r.tryLock(machine, dockerClient); err != nil {
-			r.Eventer.Event(machine, "Warning", "Lock", err.Error())
+		machine.Status.Info, result.Requeue, err = r.fetchMachineInfo(machine, dockerClient)
+		if err != nil {
+			r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
 			return
 		}
 
-		machine.Status.Info, err = fetchMachineInfo(machine)
-		if err != nil {
-			r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
+		if result.Requeue {
 			return
 		}
 
@@ -136,36 +139,72 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func fetchMachineInfo(machine *naglfarv1.Machine, dockerClient docker.APIClient) (*naglfarv1.MachineInfo, error) {
-	osStatScript, err := ScriptBox.FindString("os-stat.sh")
+func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient docker.APIClient) (info *naglfarv1.MachineInfo, requeue bool, err error) {
+	if err = r.tryLock(machine, dockerClient); err != nil {
+		r.Eventer.Event(machine, "Warning", "Lock", err.Error())
+		return
+	}
+
+	stat, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
 
 	if err != nil {
-		return nil, err
+		r.Eventer.Event(machine, "Warning", "Check", err.Error())
+		return
 	}
+
+	if timeIsZero(stat.State.StartedAt) {
+		err = dockerClient.ContainerStart(r.Ctx, machineLock, dockerTypes.ContainerStartOptions{})
+		requeue = true
+		return
+	}
+
+	if timeIsZero(stat.State.FinishedAt) {
+		requeue = true
+		return
+	}
+
+	if stat.State.ExitCode != 0 {
+		err = fmt.Errorf("container exit with %d", stat.State.ExitCode)
+		r.Eventer.Event(machine, "Warning", "Fetch", err.Error())
+		return
+	}
+
+	logs, err := dockerClient.ContainerLogs(r.Ctx, machineLock, dockerTypes.ContainerLogsOptions{
+		ShowStdout: true,
+		Follow:     true,
+	})
 
 	if err != nil {
-		log.Error(err, "error in executing os-stat")
-		return nil, err
+		return
 	}
 
-	if !done {
-		err = fmt.Errorf("script os-stat.sh not complete")
-		return nil, err
+	defer func() {
+		closeErr := logs.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
+
+	head := make([]byte, 8)
+	_, err = logs.Read(head)
+	if err != nil {
+		return
 	}
 
-	if stderr != "" {
-		err = fmt.Errorf(stderr)
-		log.Error(err, "command returns an error")
-		return nil, err
+	data, err := ioutil.ReadAll(logs)
+
+	if err != nil {
+		return
 	}
 
 	rawInfo := new(naglfarv1.MachineInfo)
 
-	if err = json.Unmarshal([]byte(stdout), rawInfo); err != nil {
-		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", stdout))
+	if err = json.NewDecoder(strings.NewReader(string(data))).Decode(&rawInfo); err != nil {
+		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", string(data)))
 	}
 
-	return makeMachineInfo(rawInfo)
+	info, err = makeMachineInfo(rawInfo)
+	return
 }
 
 func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, error) {
@@ -219,11 +258,66 @@ func (r *MachineReconciler) tryPullImage(dockerClient docker.APIClient) error {
 	return err
 }
 
-func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) (err error) {
-	if err = r.tryPullImage(dockerClient); err != nil {
-		return
+func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
+	if err := r.tryPullImage(dockerClient); err != nil {
+		return err
 	}
 
-	_, err = dockerClient.ContainerCreate(r.Ctx, &container.Config{Image: machineWorkerImage}, nil, nil, machineLock)
-	return
+	info, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
+
+	if err != nil {
+		if !docker.IsErrNotFound(err) {
+			return err
+		}
+
+		return r.createLock(machine, dockerClient)
+	}
+
+	if info.Config == nil || info.Config.Labels == nil {
+		return fmt.Errorf("invalid lock container")
+	}
+
+	uid, ok := info.Config.Labels[lockerLabel]
+	if !ok {
+		return fmt.Errorf("lock container has no label `%s`", lockerLabel)
+	}
+
+	if uid != string(machine.UID) {
+		return fmt.Errorf("machine locked by other naglfar system: UID(%s)", uid)
+	}
+
+	return nil
+}
+
+func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
+	osStatScript, err := ScriptBox.FindString("os-stat.sh")
+
+	if err != nil {
+		return err
+	}
+
+	config := &container.Config{
+		Labels: map[string]string{
+			lockerLabel: string(machine.UID),
+		},
+		Cmd: strslice.StrSlice{"-m", "--target", "1", "--", "sh", "-c", osStatScript},
+	}
+
+	hostConfig := &container.HostConfig{
+		Privileged: true,
+		PidMode:    "host",
+	}
+
+	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, machineLock)
+	if err != nil {
+		return err
+	}
+
+	if len(resp.Warnings) != 0 {
+		for _, warning := range resp.Warnings {
+			r.Eventer.Event(machine, "Warning", "CreateLock", warning)
+		}
+	}
+
+	return nil
 }
