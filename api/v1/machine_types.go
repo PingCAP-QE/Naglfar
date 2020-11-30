@@ -55,7 +55,6 @@ type StorageDevice struct {
 }
 
 type MachineInfo struct {
-	Hostname       string                   `json:"hostname"`
 	Architecture   string                   `json:"architecture"`
 	Threads        int32                    `json:"threads"`
 	Memory         BytesSize                `json:"memory"`
@@ -92,10 +91,6 @@ type MachineSpec struct {
 	// default false
 	// +optional
 	DockerTLS bool `json:"dockerTLS"`
-
-	// default 10s
-	// +optional
-	Timeout Duration `json:"timeout"`
 
 	// +optional
 	Reserve *ReserveResources `json:"reserve"`
@@ -233,16 +228,15 @@ func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
 	return
 }
 
-func (r *Machine) dockerURL() string {
-	scheme := "http"
-	if r.Spec.DockerTLS {
-		scheme = "https"
-	}
-	return fmt.Sprintf("%s://%s:%d", scheme, r.Spec.Host, r.Spec.DockerPort)
+func (r *Machine) DockerURL() string {
+	return fmt.Sprintf("tcp://%s:%d", r.Spec.Host, r.Spec.DockerPort)
 }
 
 func (r *Machine) DockerClient() (*docker.Client, error) {
-	return docker.NewClient(r.dockerURL(), r.Spec.DockerVersion, nil, nil)
+	if r.Spec.DockerTLS {
+		return nil, fmt.Errorf("docker tls is unimplemented")
+	}
+	return docker.NewClient(r.DockerURL(), r.Spec.DockerVersion, nil, nil)
 }
 
 func init() {

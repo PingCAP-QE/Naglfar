@@ -22,14 +22,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"strings"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	docker "github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -185,22 +184,16 @@ func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerC
 		}
 	}()
 
-	head := make([]byte, 8)
-	_, err = logs.Read(head)
-	if err != nil {
-		return
-	}
-
-	data, err := ioutil.ReadAll(logs)
-
+	var stdout, stderr bytes.Buffer
+	_, err = stdcopy.StdCopy(&stdout, &stderr, logs)
 	if err != nil {
 		return
 	}
 
 	rawInfo := new(naglfarv1.MachineInfo)
 
-	if err = json.NewDecoder(strings.NewReader(string(data))).Decode(&rawInfo); err != nil {
-		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", string(data)))
+	if err = json.Unmarshal(stdout.Bytes(), &rawInfo); err != nil {
+		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", stdout.String()))
 	}
 
 	info, err = makeMachineInfo(rawInfo)
@@ -297,6 +290,7 @@ func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient 
 	}
 
 	config := &container.Config{
+		Image: machineWorkerImage,
 		Labels: map[string]string{
 			lockerLabel: string(machine.UID),
 		},

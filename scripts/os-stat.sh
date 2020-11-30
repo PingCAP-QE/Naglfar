@@ -9,7 +9,6 @@ set -e
 
 
 # General OS props
-HOST=$HOSTNAME
 ARCHITECTURE=$(uname -m)
 
 
@@ -33,7 +32,6 @@ do echo $d; done | sed '$s/.$//')
 # Final result in JSON
 JSON="
 {
-  \"hostname\": \"$HOST\",
   \"architecture\": \"$ARCHITECTURE\",
   \"memory\": \""$memTotal"KiB\",
   \"threads\": $cpuThreads,

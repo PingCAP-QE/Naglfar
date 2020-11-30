@@ -61,9 +61,6 @@ spec:
                   description: default 1 GiB
                   type: string
               type: object
-            timeout:
-              description: default 10s
-              type: string
           required:
           - host
           type: object
@@ -92,8 +89,6 @@ spec:
                     - used
                     type: object
                   type: object
-                hostname:
-                  type: string
                 memory:
                   type: string
                 threads:
@@ -101,7 +96,6 @@ spec:
                   type: integer
               required:
               - architecture
-              - hostname
               - memory
               - threads
               type: object

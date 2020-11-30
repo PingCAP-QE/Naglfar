@@ -20,7 +20,7 @@ test: generate fmt vet manifests
 	go test ./... -coverprofile cover.out
 
 # Build manager binary
-manager: mod generate fmt vet
+manager: generate fmt vet
 	go build -o bin/manager main.go
 
 kubectl-naglfar: mod generate fmt vet

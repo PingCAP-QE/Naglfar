@@ -18,7 +18,6 @@ package v1
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/docker/go-units"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,10 +51,6 @@ func (r *Machine) Default() {
 		} else {
 			r.Spec.DockerPort = 2375
 		}
-	}
-
-	if r.Spec.Timeout == "" {
-		r.Spec.Timeout = HumanDuration(10 * time.Second)
 	}
 
 	if r.Spec.Reserve == nil {
@@ -93,10 +88,6 @@ func (r *Machine) ValidateCreate() error {
 		if _, err := reserve.Memory.ToSize(); reserve.Memory != "" && err != nil {
 			return fmt.Errorf("invalid memory size: %s", err.Error())
 		}
-	}
-
-	if _, err := r.Spec.Timeout.Parse(); err != nil {
-		return fmt.Errorf("fail to parse timeout(%s): %s", r.Spec.Timeout, err.Error())
 	}
 
 	// TODO(user): fill in your validation logic upon object creation.
