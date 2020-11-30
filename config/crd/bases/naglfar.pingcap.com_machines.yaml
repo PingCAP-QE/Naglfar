@@ -51,8 +51,6 @@ spec:
               type: array
             host:
               type: string
-            password:
-              type: string
             reserve:
               properties:
                 cores:
@@ -63,19 +61,11 @@ spec:
                   description: default 1 GiB
                   type: string
               type: object
-            sshPort:
-              description: default 22
-              minimum: 0
-              type: integer
             timeout:
               description: default 10s
               type: string
-            username:
-              type: string
           required:
           - host
-          - password
-          - username
           type: object
         status:
           description: MachineStatus defines the observed state of Machine
