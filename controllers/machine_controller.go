@@ -17,18 +17,15 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	docker "github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,7 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	dockerutil "github.com/PingCAP-QE/Naglfar/pkg/docker-util"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/script"
 )
 
 const machineLock = "naglfar.lock"
@@ -77,8 +76,8 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	log.Info("machine reconcile", "content", machine)
 
 	if machine.Status.Info == nil {
-		var dockerClient *docker.Client
-		dockerClient, err = machine.DockerClient()
+		var dockerClient *dockerutil.Client
+		dockerClient, err = dockerutil.MakeClient(r.Ctx, machine)
 		if err != nil {
 			return
 		}
@@ -138,7 +137,7 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient docker.APIClient) (info *naglfarv1.MachineInfo, requeue bool, err error) {
+func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (info *naglfarv1.MachineInfo, requeue bool, err error) {
 	if err = r.tryLock(machine, dockerClient); err != nil {
 		r.Eventer.Event(machine, "Warning", "Lock", err.Error())
 		return
@@ -168,23 +167,10 @@ func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerC
 		return
 	}
 
-	logs, err := dockerClient.ContainerLogs(r.Ctx, machineLock, dockerTypes.ContainerLogsOptions{
+	stdout, _, err := dockerClient.Logs(machineLock, dockerTypes.ContainerLogsOptions{
 		ShowStdout: true,
 	})
 
-	if err != nil {
-		return
-	}
-
-	defer func() {
-		closeErr := logs.Close()
-		if err == nil {
-			err = closeErr
-		}
-	}()
-
-	var stdout, stderr bytes.Buffer
-	_, err = stdcopy.StdCopy(&stdout, &stderr, logs)
 	if err != nil {
 		return
 	}
@@ -227,31 +213,9 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 	return info, nil
 }
 
-func (r *MachineReconciler) tryPullImage(dockerClient docker.APIClient) error {
-	_, _, err := dockerClient.ImageInspectWithRaw(r.Ctx, machineWorkerImage)
-	if err == nil {
-		return nil
-	}
-	if !docker.IsErrImageNotFound(err) {
-		return err
-	}
-
-	reader, err := dockerClient.ImagePull(r.Ctx, machineWorkerImage, dockerTypes.ImagePullOptions{})
-	if err != nil {
+func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
+	if err := dockerClient.PullImageByPolicy(machineWorkerImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
 		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
-		return err
-	}
-	defer reader.Close()
-	var b bytes.Buffer
-	_, err = io.Copy(&b, reader)
-	if err != nil {
-		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
-	}
-	return err
-}
-
-func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
-	if err := r.tryPullImage(dockerClient); err != nil {
 		return err
 	}
 
@@ -282,7 +246,7 @@ func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient doc
 }
 
 func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
-	osStatScript, err := ScriptBox.FindString("os-stat.sh")
+	osStatScript, err := script.ScriptBox.FindString("os-stat.sh")
 
 	if err != nil {
 		return err

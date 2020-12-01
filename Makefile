@@ -12,6 +12,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 CONTROLLER_GEN=$(GOBIN)/controller-gen
+PACKR=$(GOBIN)/packr
 
 all: manager kubectl-naglfar
 
@@ -22,6 +23,9 @@ test: generate fmt vet manifests
 # Build manager binary
 manager: mod generate fmt vet
 	go build -o bin/manager main.go
+
+pack: mod generate fmt vet
+	$(PACKR) build -o bin/manager main.go
 
 kubectl-naglfar: mod generate fmt vet
 	go build -o bin/naglfar cmd/kubectl-naglfar/main.go
@@ -93,5 +97,18 @@ ifeq (, $(shell which controller-gen))
 	go mod init tmp ;\
 	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+endif
+
+
+install-packr:
+ifeq (, $(shell which packr))
+	@{ \
+	set -e ;\
+	PACKER_TMP_DIR=$$(mktemp -d) ;\
+	cd $$PACKER_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/gobuffalo/packr/packr@v0.2.5 ;\
+	rm -rf $$PACKER_TMP_DIR ;\
 	}
 endif
