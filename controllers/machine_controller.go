@@ -170,7 +170,6 @@ func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerC
 
 	logs, err := dockerClient.ContainerLogs(r.Ctx, machineLock, dockerTypes.ContainerLogsOptions{
 		ShowStdout: true,
-		Follow:     true,
 	})
 
 	if err != nil {
