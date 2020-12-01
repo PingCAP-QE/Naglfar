@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/Microsoft/go-winio v0.4.15 // indirect
-	github.com/appleboy/easyssh-proxy v1.3.7
 	github.com/bramvdbogaerde/go-scp v0.0.0-20200820121624-ded9ee94aef5
 	github.com/creasty/defaults v1.3.0
 	github.com/docker/distribution v2.7.1+incompatible // indirect

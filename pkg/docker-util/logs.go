@@ -14,11 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package dockerutil
 
-import "encoding/json"
+import (
+	"bytes"
 
-func sprintIdent(object interface{}) string {
-	data, _ := json.MarshalIndent(&object, "", "	")
-	return string(data)
+	dockerTypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/pkg/stdcopy"
+)
+
+func (client *Client) Logs(container string, options dockerTypes.ContainerLogsOptions) (stdout, stderr bytes.Buffer, err error) {
+	logs, err := client.ContainerLogs(client.Ctx, container, options)
+
+	if err != nil {
+		return
+	}
+
+	defer func() {
+		closeErr := logs.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
+
+	_, err = stdcopy.StdCopy(&stdout, &stderr, logs)
+	return
 }

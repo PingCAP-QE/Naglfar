@@ -20,26 +20,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
-	"github.com/appleboy/easyssh-proxy"
+	dockerTypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/strslice"
+	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	dockerutil "github.com/PingCAP-QE/Naglfar/pkg/docker-util"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/script"
 )
+
+const machineLock = "naglfar.lock"
+const machineWorkerImage = "alexeiled/nsenter"
+const lockerLabel = "locker"
 
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
+	Ctx context.Context
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log     logr.Logger
+	Eventer record.EventRecorder
+	Scheme  *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get;list;watch;create;update;patch;delete
@@ -48,12 +59,11 @@ type MachineReconciler struct {
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships/status,verbs=get;update;patch
 
 func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
-	ctx := context.Background()
 	log := r.Log.WithValues("machine", req.NamespacedName)
 
 	machine := new(naglfarv1.Machine)
 
-	if err = r.Get(ctx, req.NamespacedName, machine); err != nil {
+	if err = r.Get(r.Ctx, req.NamespacedName, machine); err != nil {
 		log.Error(err, "unable to fetch Machine")
 
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -66,18 +76,30 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	log.Info("machine reconcile", "content", machine)
 
 	if machine.Status.Info == nil {
-		machine.Status.Info, err = fetchMachineInfo(machine)
+		var dockerClient *dockerutil.Client
+		dockerClient, err = dockerutil.MakeClient(r.Ctx, machine)
 		if err != nil {
 			return
 		}
+		defer dockerClient.Close()
 
-		if err = r.Status().Update(ctx, machine); err != nil {
+		machine.Status.Info, result.Requeue, err = r.fetchMachineInfo(machine, dockerClient)
+		if err != nil {
+			r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
+			return
+		}
+
+		if result.Requeue {
+			return
+		}
+
+		if err = r.Status().Update(r.Ctx, machine); err != nil {
 			log.Error(err, "unable to update Machine")
 			return
 		}
 	}
 
-	relation, err := r.getRelationship(ctx)
+	relation, err := r.getRelationship()
 	if err != nil {
 		return
 	}
@@ -93,15 +115,15 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 
 	if relation.Status.MachineToResources[machineKey] == nil {
 		relation.Status.MachineToResources[machineKey] = make(naglfarv1.ResourceRefList, 0)
-		err = r.Status().Update(ctx, relation)
+		err = r.Status().Update(r.Ctx, relation)
 	}
 
 	return
 }
 
-func (r *MachineReconciler) getRelationship(ctx context.Context) (*naglfarv1.Relationship, error) {
+func (r *MachineReconciler) getRelationship() (*naglfarv1.Relationship, error) {
 	var relation naglfarv1.Relationship
-	err := r.Get(ctx, relationshipName, &relation)
+	err := r.Get(r.Ctx, relationshipName, &relation)
 	if apierrors.IsNotFound(err) {
 		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
 		err = nil
@@ -115,51 +137,52 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func MakeSSHConfig(spec *naglfarv1.MachineSpec) *easyssh.MakeConfig {
-	timeout, _ := spec.Timeout.Parse()
-	return &easyssh.MakeConfig{
-		User:     spec.Username,
-		Password: spec.Password,
-		Server:   spec.Host,
-		Port:     strconv.Itoa(spec.SSHPort),
-		Timeout:  timeout,
+func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (info *naglfarv1.MachineInfo, requeue bool, err error) {
+	if err = r.tryLock(machine, dockerClient); err != nil {
+		r.Eventer.Event(machine, "Warning", "Lock", err.Error())
+		return
 	}
-}
 
-func fetchMachineInfo(machine *naglfarv1.Machine) (*naglfarv1.MachineInfo, error) {
-	osStatScript, err := ScriptBox.FindString("os-stat.sh")
+	stat, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
 
 	if err != nil {
-		return nil, err
+		r.Eventer.Event(machine, "Warning", "Check", err.Error())
+		return
 	}
 
-	ssh := MakeSSHConfig(&machine.Spec)
+	if timeIsZero(stat.State.StartedAt) {
+		err = dockerClient.ContainerStart(r.Ctx, machineLock, dockerTypes.ContainerStartOptions{})
+		requeue = true
+		return
+	}
 
-	stdout, stderr, done, err := ssh.Run(osStatScript)
+	if timeIsZero(stat.State.FinishedAt) {
+		requeue = true
+		return
+	}
+
+	if stat.State.ExitCode != 0 {
+		err = fmt.Errorf("container exit with %d", stat.State.ExitCode)
+		r.Eventer.Event(machine, "Warning", "Fetch", err.Error())
+		return
+	}
+
+	stdout, _, err := dockerClient.Logs(machineLock, dockerTypes.ContainerLogsOptions{
+		ShowStdout: true,
+	})
 
 	if err != nil {
-		log.Error(err, "error in executing os-stat")
-		return nil, err
-	}
-
-	if !done {
-		err = fmt.Errorf("script os-stat.sh not complete")
-		return nil, err
-	}
-
-	if stderr != "" {
-		err = fmt.Errorf(stderr)
-		log.Error(err, "command returns an error")
-		return nil, err
+		return
 	}
 
 	rawInfo := new(naglfarv1.MachineInfo)
 
-	if err = json.Unmarshal([]byte(stdout), rawInfo); err != nil {
-		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", stdout))
+	if err = json.Unmarshal(stdout.Bytes(), &rawInfo); err != nil {
+		log.Error(err, fmt.Sprintf("fail to unmarshal os-stat result: \"%s\"", stdout.String()))
 	}
 
-	return makeMachineInfo(rawInfo)
+	info, err = makeMachineInfo(rawInfo)
+	return
 }
 
 func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, error) {
@@ -188,4 +211,70 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 	}
 
 	return info, nil
+}
+
+func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
+	if err := dockerClient.PullImageByPolicy(machineWorkerImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
+		return err
+	}
+
+	info, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
+
+	if err != nil {
+		if !docker.IsErrNotFound(err) {
+			return err
+		}
+
+		return r.createLock(machine, dockerClient)
+	}
+
+	if info.Config == nil || info.Config.Labels == nil {
+		return fmt.Errorf("invalid lock container")
+	}
+
+	uid, ok := info.Config.Labels[lockerLabel]
+	if !ok {
+		return fmt.Errorf("lock container has no label `%s`", lockerLabel)
+	}
+
+	if uid != string(machine.UID) {
+		return fmt.Errorf("machine locked by other naglfar system: UID(%s)", uid)
+	}
+
+	return nil
+}
+
+func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
+	osStatScript, err := script.ScriptBox.FindString("os-stat.sh")
+
+	if err != nil {
+		return err
+	}
+
+	config := &container.Config{
+		Image: machineWorkerImage,
+		Labels: map[string]string{
+			lockerLabel: string(machine.UID),
+		},
+		Cmd: strslice.StrSlice{"-m", "--target", "1", "--", "sh", "-c", osStatScript},
+	}
+
+	hostConfig := &container.HostConfig{
+		Privileged: true,
+		PidMode:    "host",
+	}
+
+	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, machineLock)
+	if err != nil {
+		return err
+	}
+
+	if len(resp.Warnings) != 0 {
+		for _, warning := range resp.Warnings {
+			r.Eventer.Event(machine, "Warning", "CreateLock", warning)
+		}
+	}
+
+	return nil
 }

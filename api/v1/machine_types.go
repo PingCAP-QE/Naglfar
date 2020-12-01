@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 
+	docker "github.com/docker/docker/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -54,7 +55,6 @@ type StorageDevice struct {
 }
 
 type MachineInfo struct {
-	Hostname       string                   `json:"hostname"`
 	Architecture   string                   `json:"architecture"`
 	Threads        int32                    `json:"threads"`
 	Memory         BytesSize                `json:"memory"`
@@ -78,16 +78,7 @@ type MachineSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Username string `json:"username"`
-
-	Password string `json:"password"`
-
 	Host string `json:"host"`
-
-	// +kubebuilder:validation:Minimum=0
-	// default 22
-	// +optional
-	SSHPort int `json:"sshPort"`
 
 	// +kubebuilder:validation:Minimum=0
 	// default 2375 (unencrypted) or 2376(encrypted)
@@ -100,10 +91,6 @@ type MachineSpec struct {
 	// default false
 	// +optional
 	DockerTLS bool `json:"dockerTLS"`
-
-	// default 10s
-	// +optional
-	Timeout Duration `json:"timeout"`
 
 	// +optional
 	Reserve *ReserveResources `json:"reserve"`
@@ -242,11 +229,14 @@ func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
 }
 
 func (r *Machine) DockerURL() string {
-	scheme := "http"
+	return fmt.Sprintf("tcp://%s:%d", r.Spec.Host, r.Spec.DockerPort)
+}
+
+func (r *Machine) DockerClient() (*docker.Client, error) {
 	if r.Spec.DockerTLS {
-		scheme = "https"
+		return nil, fmt.Errorf("docker tls is unimplemented")
 	}
-	return fmt.Sprintf("%s://%s:%d", scheme, r.Spec.Host, r.Spec.DockerPort)
+	return docker.NewClient(r.DockerURL(), r.Spec.DockerVersion, nil, nil)
 }
 
 func init() {
