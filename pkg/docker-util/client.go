@@ -14,8 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package dockerutil
 
-import "github.com/gobuffalo/packr"
+import (
+	"context"
 
-var ScriptBox = packr.NewBox("../scripts")
+	docker "github.com/docker/docker/client"
+
+	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+)
+
+type Client struct {
+	*docker.Client
+	Ctx context.Context
+}
+
+func MakeClient(ctx context.Context, machine *naglfarv1.Machine) (*Client, error) {
+	rawClient, err := machine.DockerClient()
+	if err != nil {
+		return nil, err
+	}
+
+	client := &Client{
+		Client: rawClient,
+		Ctx:    ctx,
+	}
+
+	return client, nil
+}

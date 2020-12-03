@@ -18,7 +18,6 @@ package v1
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/docker/go-units"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,20 +45,12 @@ var _ webhook.Defaulter = &Machine{}
 func (r *Machine) Default() {
 	machinelog.Info("default", "name", r.Name)
 
-	if r.Spec.SSHPort == 0 {
-		r.Spec.SSHPort = 22
-	}
-
 	if r.Spec.DockerPort == 0 {
 		if r.Spec.DockerTLS {
 			r.Spec.DockerPort = 2376
 		} else {
 			r.Spec.DockerPort = 2375
 		}
-	}
-
-	if r.Spec.Timeout == "" {
-		r.Spec.Timeout = HumanDuration(10 * time.Second)
 	}
 
 	if r.Spec.Reserve == nil {
@@ -85,10 +76,6 @@ var _ webhook.Validator = &Machine{}
 func (r *Machine) ValidateCreate() error {
 	machinelog.Info("validate create", "name", r.Name)
 
-	if r.Spec.SSHPort < 0 {
-		return fmt.Errorf("invalid port %d", r.Spec.SSHPort)
-	}
-
 	if r.Spec.DockerPort < 0 {
 		return fmt.Errorf("invalid port %d", r.Spec.DockerPort)
 	}
@@ -101,10 +88,6 @@ func (r *Machine) ValidateCreate() error {
 		if _, err := reserve.Memory.ToSize(); reserve.Memory != "" && err != nil {
 			return fmt.Errorf("invalid memory size: %s", err.Error())
 		}
-	}
-
-	if _, err := r.Spec.Timeout.Parse(); err != nil {
-		return fmt.Errorf("fail to parse timeout(%s): %s", r.Spec.Timeout, err.Error())
 	}
 
 	// TODO(user): fill in your validation logic upon object creation.
