@@ -62,7 +62,7 @@ spec:
                   type: string
               type: object
           required:
-            - host
+          - host
           type: object
         status:
           description: MachineStatus defines the observed state of Machine
@@ -83,10 +83,10 @@ spec:
                       used:
                         type: string
                     required:
-                      - filesystem
-                      - mountPoint
-                      - total
-                      - used
+                    - filesystem
+                    - mountPoint
+                    - total
+                    - used
                     type: object
                   type: object
                 memory:
@@ -95,17 +95,17 @@ spec:
                   format: int32
                   type: integer
               required:
-                - architecture
-                - memory
-                - threads
+              - architecture
+              - memory
+              - threads
               type: object
           type: object
       type: object
   version: v1
   versions:
-    - name: v1
-      served: true
-      storage: true
+  - name: v1
+    served: true
+    storage: true
 status:
   acceptedNames:
     kind: ""
