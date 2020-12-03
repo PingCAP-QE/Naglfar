@@ -24,8 +24,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	ClusterTopologyStatePending ClusterTopologyState = "pending"
-	ClusterTopologyStateReady   ClusterTopologyState = "ready"
+	ClusterTopologyStatePending  ClusterTopologyState = "pending"
+	ClusterTopologyStateReady    ClusterTopologyState = "ready"
+	ClusterTopologyStateUpdating ClusterTopologyState = "updating"
 )
 
 // TODO: add a deploy version spec: clusterName, base version, component versions(for PR and self build version) etc.
@@ -169,7 +170,7 @@ type TestClusterTopologySpec struct {
 	TiDBCluster *TiDBCluster `json:"tidbCluster,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=pending;ready
+// +kubebuilder:validation:Enum=pending;ready;updating
 type ClusterTopologyState string
 
 // TestClusterTopologyStatus defines the observed state of TestClusterTopology
@@ -177,6 +178,8 @@ type TestClusterTopologyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	PreServerConfigs *ServerConfigs      `json:"preServerConfigs,omitempty"`
+	PreVersion       *TiDBClusterVersion `json:"preVersion,omitempty"`
 	// default Pending
 	State ClusterTopologyState `json:"state,omitempty"`
 }

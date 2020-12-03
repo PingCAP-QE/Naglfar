@@ -1,10 +1,10 @@
 
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.5
+    controller-gen.kubebuilder.io/version: v0.4.0
   creationTimestamp: null
   name: relationships.naglfar.pingcap.com
 spec:
@@ -15,33 +15,92 @@ spec:
     plural: relationships
     singular: relationship
   scope: Namespaced
-  subresources:
-    status: {}
-  validation:
-    openAPIV3Schema:
-      description: Relationship is the Schema for the relationships API
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-          type: string
-        kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        spec:
-          description: RelationshipSpec defines the desired state of Relationship
-          type: object
-        status:
-          description: RelationshipStatus defines the observed state of Relationship
-          properties:
-            machineToResources:
-              additionalProperties:
-                items:
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Relationship is the Schema for the relationships API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RelationshipSpec defines the desired state of Relationship
+            type: object
+          status:
+            description: RelationshipStatus defines the observed state of Relationship
+            properties:
+              machineToResources:
+                additionalProperties:
+                  items:
+                    properties:
+                      binding:
+                        properties:
+                          cpuSet:
+                            items:
+                              type: integer
+                            type: array
+                          disks:
+                            additionalProperties:
+                              properties:
+                                device:
+                                  type: string
+                                kind:
+                                  enum:
+                                  - nvme
+                                  - other
+                                  type: string
+                                mountPath:
+                                  type: string
+                                originPath:
+                                  type: string
+                                size:
+                                  type: string
+                              required:
+                              - device
+                              - kind
+                              - mountPath
+                              - originPath
+                              - size
+                              type: object
+                            type: object
+                          memory:
+                            type: string
+                        required:
+                        - memory
+                        type: object
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      uid:
+                        description: UID is a type that holds unique ID values, including
+                          UUIDs.  Because we don't ONLY use UUIDs, this is an alias
+                          to string.  Being a type captures intent and helps make
+                          sure that UIDs and names do not get conflated.
+                        type: string
+                    required:
+                    - binding
+                    - name
+                    - namespace
+                    - uid
+                    type: object
+                  type: array
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file'
+                type: object
+              resourceToMachine:
+                additionalProperties:
                   properties:
                     binding:
                       properties:
@@ -94,76 +153,16 @@ spec:
                   - namespace
                   - uid
                   type: object
-                type: array
-              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                of cluster Important: Run "make" to regenerate code after modifying
-                this file'
-              type: object
-            resourceToMachine:
-              additionalProperties:
-                properties:
-                  binding:
-                    properties:
-                      cpuSet:
-                        items:
-                          type: integer
-                        type: array
-                      disks:
-                        additionalProperties:
-                          properties:
-                            device:
-                              type: string
-                            kind:
-                              enum:
-                              - nvme
-                              - other
-                              type: string
-                            mountPath:
-                              type: string
-                            originPath:
-                              type: string
-                            size:
-                              type: string
-                          required:
-                          - device
-                          - kind
-                          - mountPath
-                          - originPath
-                          - size
-                          type: object
-                        type: object
-                      memory:
-                        type: string
-                    required:
-                    - memory
-                    type: object
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                  uid:
-                    description: UID is a type that holds unique ID values, including
-                      UUIDs.  Because we don't ONLY use UUIDs, this is an alias to
-                      string.  Being a type captures intent and helps make sure that
-                      UIDs and names do not get conflated.
-                    type: string
-                required:
-                - binding
-                - name
-                - namespace
-                - uid
                 type: object
-              type: object
-          required:
-          - machineToResources
-          - resourceToMachine
-          type: object
-      type: object
-  version: v1
-  versions:
-  - name: v1
+            required:
+            - machineToResources
+            - resourceToMachine
+            type: object
+        type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 status:
   acceptedNames:
     kind: ""

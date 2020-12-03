@@ -1,34 +1,13 @@
 
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.5
+    controller-gen.kubebuilder.io/version: v0.4.0
   creationTimestamp: null
   name: testresources.naglfar.pingcap.com
 spec:
-  additionalPrinterColumns:
-  - JSONPath: .status.state
-    description: the state of resource
-    name: State
-    type: string
-  - JSONPath: .status.hostIP
-    description: the host ip of resource
-    name: HostIP
-    type: string
-  - JSONPath: .status.sshPort
-    description: the ssh port of resource
-    name: SSHPort
-    type: integer
-  - JSONPath: .status.clusterIP
-    description: the cluster ip of resource
-    name: ClusterIP
-    type: string
-  - JSONPath: .status.portBindings
-    description: the port bindings of resource
-    name: PortBindings
-    type: string
   group: naglfar.pingcap.com
   names:
     kind: TestResource
@@ -38,137 +17,157 @@ spec:
     - tr
     singular: testresource
   scope: Namespaced
-  subresources:
-    status: {}
-  validation:
-    openAPIV3Schema:
-      description: TestResource is the Schema for the testresources API
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-          type: string
-        kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        spec:
-          description: TestResourceSpec defines the desired state of TestResource
-          properties:
-            cores:
-              format: int32
-              type: integer
-            disks:
-              additionalProperties:
-                properties:
-                  kind:
-                    enum:
-                    - nvme
-                    - other
-                    type: string
-                  mountPath:
-                    description: default /mnt/<name>
-                    type: string
-                  size:
-                    type: string
-                type: object
-              type: object
-            machineSelector:
-              type: string
-            memory:
-              type: string
-            testMachineResource:
-              description: If sets, it means the static machine is required
-              type: string
-          required:
-          - cores
-          - memory
-          type: object
-        status:
-          description: TestResourceStatus defines the observed state of TestResource
-          properties:
-            binds:
-              description: List of volume bindings for this container
-              items:
-                type: string
-              type: array
-            capAdd:
-              description: List of kernel capabilities to add to the container
-              items:
-                type: string
-              type: array
-            clusterIP:
-              description: ClusterIP is the ip address of the container in the overlay(or
-                calico) network
-              type: string
-            command:
-              items:
-                type: string
-              type: array
-            envs:
-              items:
-                type: string
-              type: array
-            exposedPorts:
-              items:
-                type: string
-              type: array
-            hostIP:
-              description: HostIP is the ip address of the host machine
-              type: string
-            image:
-              type: string
-            imagePullPolicy:
-              description: default IfNotPresent
-              enum:
-              - Always
-              - IfNotPresent
-              type: string
-            mount:
-              description: Mounts specs used by the container
-              items:
-                properties:
-                  readOnly:
-                    type: boolean
-                  source:
-                    type: string
-                  target:
-                    type: string
-                  type:
-                    description: Type represents the type of a mount.
-                    type: string
-                type: object
-              type: array
-            password:
-              type: string
-            portBindings:
-              type: string
-            privilege:
-              description: default false
-              type: boolean
-            sshPort:
-              type: integer
-            state:
-              description: default pending
-              enum:
-              - pending
-              - fail
-              - uninitialized
-              - ready
-              - finish
-              - destroy
-              type: string
-          type: object
-      type: object
-  version: v1
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - description: the state of resource
+      jsonPath: .status.state
+      name: State
+      type: string
+    - description: the host ip of resource
+      jsonPath: .status.hostIP
+      name: HostIP
+      type: string
+    - description: the ssh port of resource
+      jsonPath: .status.sshPort
+      name: SSHPort
+      type: integer
+    - description: the cluster ip of resource
+      jsonPath: .status.clusterIP
+      name: ClusterIP
+      type: string
+    - description: the port bindings of resource
+      jsonPath: .status.portBindings
+      name: PortBindings
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: TestResource is the Schema for the testresources API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TestResourceSpec defines the desired state of TestResource
+            properties:
+              cores:
+                format: int32
+                type: integer
+              disks:
+                additionalProperties:
+                  properties:
+                    kind:
+                      enum:
+                      - nvme
+                      - other
+                      type: string
+                    mountPath:
+                      description: default /mnt/<name>
+                      type: string
+                    size:
+                      type: string
+                  type: object
+                type: object
+              machineSelector:
+                type: string
+              memory:
+                type: string
+              testMachineResource:
+                description: If sets, it means the static machine is required
+                type: string
+            required:
+            - cores
+            - memory
+            type: object
+          status:
+            description: TestResourceStatus defines the observed state of TestResource
+            properties:
+              binds:
+                description: List of volume bindings for this container
+                items:
+                  type: string
+                type: array
+              capAdd:
+                description: List of kernel capabilities to add to the container
+                items:
+                  type: string
+                type: array
+              clusterIP:
+                description: ClusterIP is the ip address of the container in the overlay(or
+                  calico) network
+                type: string
+              command:
+                items:
+                  type: string
+                type: array
+              envs:
+                items:
+                  type: string
+                type: array
+              exposedPorts:
+                items:
+                  type: string
+                type: array
+              hostIP:
+                description: HostIP is the ip address of the host machine
+                type: string
+              image:
+                type: string
+              imagePullPolicy:
+                description: default IfNotPresent
+                enum:
+                - Always
+                - IfNotPresent
+                type: string
+              mount:
+                description: Mounts specs used by the container
+                items:
+                  properties:
+                    readOnly:
+                      type: boolean
+                    source:
+                      type: string
+                    target:
+                      type: string
+                    type:
+                      description: Type represents the type of a mount.
+                      type: string
+                  type: object
+                type: array
+              password:
+                type: string
+              portBindings:
+                type: string
+              privilege:
+                description: default false
+                type: boolean
+              sshPort:
+                type: integer
+              state:
+                description: default pending
+                enum:
+                - pending
+                - fail
+                - uninitialized
+                - ready
+                - finish
+                - destroy
+                type: string
+            type: object
+        type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 status:
   acceptedNames:
     kind: ""

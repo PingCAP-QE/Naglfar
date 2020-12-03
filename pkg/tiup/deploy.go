@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -92,6 +93,15 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 	}
 	spec.ServerConfigs = tiupSpec.ServerConfigs{TiDB: tidbConfigs, TiKV: tikvConfigs, PD: pdConfigs}
 	return nil
+}
+
+func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) bool {
+	// TODO tidbcluster can't be null,check in webhook
+	return !reflect.DeepEqual(pre, cur)
+}
+
+func IsVersionModified(pre naglfarv1.TiDBClusterVersion, cur naglfarv1.TiDBClusterVersion) bool {
+	return !reflect.DeepEqual(pre, cur)
 }
 
 // If dryRun is true, host uses the resource's name
@@ -237,6 +247,34 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 	return nil
 }
 
+func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology) error {
+	type Meta struct {
+		User        string `json:"user,omitempty"`
+		TiDBVersion string `yaml:"tidb_version" json:"tidb_version,omitempty"`
+		Topology    *tiupSpec.Specification
+	}
+	var meta Meta
+	meta.User = "root"
+	meta.TiDBVersion = ct.Spec.TiDBCluster.Version.Version
+	meta.Topology = c.spec
+	outfile, err := yaml.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if err := c.writeTopologyMetaOnControl(outfile, clusterName); err != nil {
+		return err
+	}
+
+	roles := c.diffTopology(*ct.Status.PreServerConfigs, ct.Spec.TiDBCluster.ServerConfigs)
+
+	log.Info("RequestTopology is modified.", "changed roles", roles)
+
+	if err := c.reloadCluster(clusterName, []string{}, roles); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
 	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
@@ -260,6 +298,20 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 	return nil
 }
 
+func (c *ClusterManager) diffTopology(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) []string {
+	var roles []string
+	if !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
+		roles = append(roles, "tidb")
+	}
+	if !reflect.DeepEqual(pre.PD, cur.PD) {
+		roles = append(roles, "pd")
+	}
+	if !reflect.DeepEqual(pre.TiKV, cur.TiKV) {
+		roles = append(roles, "tikv")
+	}
+	return roles
+}
+
 func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
@@ -268,6 +320,20 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
 	}
 	if err := client.Copy(bytes.NewReader(out), "/root/topology.yaml", "0655", int64(len(out))); err != nil {
+		return fmt.Errorf("error while copying file: %s", err)
+	}
+	return nil
+}
+
+func (c *ClusterManager) writeTopologyMetaOnControl(out []byte, clusterName string) error {
+	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
+	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
+	err := client.Connect()
+	if err != nil {
+		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
+	}
+
+	if err := client.Copy(bytes.NewReader(out), "/root/.tiup/storage/cluster/clusters/"+clusterName+"/meta.yaml", "0655", int64(len(out))); err != nil {
 		return fmt.Errorf("error while copying file: %s", err)
 	}
 	return nil
@@ -310,6 +376,30 @@ func (c *ClusterManager) startCluster(clusterName string) error {
 			"stdout", stdout,
 			"stderr", errStr)
 		return fmt.Errorf("start cluster failed: %s", err)
+	}
+	return nil
+}
+
+func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles []string) error {
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	var roleStr string
+	for i := 0; i < len(roles); i++ {
+		roleStr += " -R " + roles[i]
+	}
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload %s %s --ignore-config-check", clusterName, roleStr)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		c.log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdStr", stdStr,
+			"stderr", errStr)
+		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
 	}
 	return nil
 }
