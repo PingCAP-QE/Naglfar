@@ -35,10 +35,23 @@ type ResourceRequestItem struct {
 	Spec TestResourceSpec `json:"spec"`
 }
 
+type MachineRequest struct {
+	Name string `json:"name"`
+
+	// +optional
+	// Specify a machine
+	TestMachineResource string `json:"TestMachineResource,omitempty"`
+
+	// default false
+	Exclusive bool `json:"exclusive"`
+}
+
 // TestResourceRequestSpec defines the desired state of TestResourceRequest
 type TestResourceRequestSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	Machines []*MachineRequest `json:"machines,omitempty"`
 
 	// +optional
 	Items []*ResourceRequestItem `json:"items,omitempty"`

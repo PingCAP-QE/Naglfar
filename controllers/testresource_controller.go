@@ -300,7 +300,7 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 	return binding, false
 }
 
-func (r *TestResourceReconciler) requestResource(log logr.Logger, resource *naglfarv1.TestResource) (hostIP string, err error) {
+func (r *TestResourceReconciler) requestResource(resource *naglfarv1.TestResource) (hostIP string, err error) {
 	relation, err := r.getRelationship()
 	if err != nil {
 		return
@@ -320,66 +320,11 @@ func (r *TestResourceReconciler) requestResource(log logr.Logger, resource *nagl
 		return
 	}
 
-	var machines []naglfarv1.Machine
-	if resource.Spec.TestMachineResource != "" {
-		if err = r.Get(r.Ctx, types.NamespacedName{Namespace: "default", Name: resource.Spec.TestMachineResource}, machine); err != nil {
-			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", resource.Spec.TestMachineResource))
-			return
-		}
-
-		machines = append(machines, *machine)
-	} else {
-		var machineList naglfarv1.MachineList
-		options := make([]client.ListOption, 0)
-		if resource.Spec.MachineSelector != "" {
-			options = append(options, client.MatchingLabels{"type": resource.Spec.MachineSelector})
-		}
-
-		if err = r.List(r.Ctx, &machineList, options...); err != nil {
-			log.Error(err, "unable to list machines")
-			return
-		}
-
-		machines = machineList.Items
-	}
-
-	for _, *machine = range machines {
-		machineRef := ref.CreateRef(&machine.ObjectMeta)
-		machineKey := machineRef.Key()
-		resources, ok := relation.Status.MachineToResources[machineKey]
-		if !ok {
-			continue
-		}
-
-		binding, overflow := r.resourceOverflow(machine.Rest(resources), resource)
-		if overflow {
-			continue
-		}
-
-		relation.Status.ResourceToMachine[resourceKey] = naglfarv1.MachineRef{
-			Ref:     machineRef,
-			Binding: *binding,
-		}
-
-		relation.Status.MachineToResources[machineKey] = append(
-			relation.Status.MachineToResources[machineKey],
-			naglfarv1.ResourceRef{
-				Ref:     resourceRef,
-				Binding: *binding,
-			},
-		)
-
-		if err = r.Status().Update(r.Ctx, relation); err != nil {
-			return
-		}
-		hostIP = machine.Spec.Host
-		break
-	}
 	return
 }
 
-func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	ip, err := r.requestResource(log, resource)
+func (r *TestResourceReconciler) reconcileStatePending(_ logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	ip, err := r.requestResource(resource)
 	if err != nil {
 		return
 	}
@@ -387,12 +332,10 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 	if ip != "" {
 		resource.Status.HostIP = ip
 		resource.Status.State = naglfarv1.ResourceUninitialized
-	} else {
-		resource.Status.State = naglfarv1.ResourceFail
+		err = r.Status().Update(r.Ctx, resource)
+		return
 	}
-
-	err = r.Status().Update(r.Ctx, resource)
-	return
+	return ctrl.Result{RequeueAfter: time.Second}, nil
 }
 
 func (r *TestResourceReconciler) getResourceBinding(resourceRef ref.Ref) (binding *naglfarv1.ResourceBinding, err error) {
