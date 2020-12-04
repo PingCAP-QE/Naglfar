@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -56,8 +58,9 @@ func (r *TestResourceRequest) ValidateCreate() error {
 			return err
 		}
 	}
-	// TODO(user): fill in your validation logic upon object creation.
-	return nil
+	// check items
+	err := r.checkItems()
+	return err
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
@@ -65,6 +68,21 @@ func (r *TestResourceRequest) ValidateUpdate(old runtime.Object) error {
 	testresourcerequestlog.Info("validate update", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object update.
+	return nil
+}
+
+func (r *TestResourceRequest) checkItems() error {
+	machinesLogicNames := make(map[string]struct{})
+	for _, item := range r.Spec.Machines {
+		machinesLogicNames[item.Name] = struct{}{}
+	}
+	for _, item := range r.Spec.Items {
+		if item.Spec.Machine != "" {
+			if _, exist := machinesLogicNames[item.Spec.Machine]; !exist {
+				return fmt.Errorf("no exist machine item: %s", item.Spec.Machine)
+			}
+		}
+	}
 	return nil
 }
 

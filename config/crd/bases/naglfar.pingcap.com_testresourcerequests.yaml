@@ -72,12 +72,12 @@ spec:
                               type: string
                           type: object
                         type: object
+                      machine:
+                        description: If sets, it means the static machine is required
+                        type: string
                       machineSelector:
                         type: string
                       memory:
-                        type: string
-                      testMachineResource:
-                        description: If sets, it means the static machine is required
                         type: string
                     required:
                     - cores
@@ -86,6 +86,22 @@ spec:
                 required:
                 - name
                 - spec
+                type: object
+              type: array
+            machines:
+              items:
+                properties:
+                  exclusive:
+                    description: default false
+                    type: boolean
+                  machine:
+                    description: Specify a static machine name
+                    type: string
+                  name:
+                    type: string
+                required:
+                - exclusive
+                - name
                 type: object
               type: array
           type: object

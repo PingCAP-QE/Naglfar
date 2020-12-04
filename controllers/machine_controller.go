@@ -41,7 +41,7 @@ import (
 )
 
 const machineLock = "naglfar.lock"
-const machineWorkerImage = "alexeiled/nsenter"
+const machineWorkerImage = "docker.io/alexeiled/nsenter"
 const lockerLabel = "locker"
 
 // MachineReconciler reconciles a Machine object

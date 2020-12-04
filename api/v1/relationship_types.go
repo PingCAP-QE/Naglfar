@@ -70,6 +70,14 @@ func (a *AcceptResources) Remove(r ref.Ref) {
 
 type ResourceRefList []ResourceRef
 
+func (r ResourceRefList) Clone() ResourceRefList {
+	resources := make(ResourceRefList, 0)
+	for _, ref := range r {
+		resources = append(resources, ref)
+	}
+	return resources
+}
+
 type MachineRef struct {
 	ref.Ref `json:",inline"`
 	Binding ResourceBinding `json:"binding"`

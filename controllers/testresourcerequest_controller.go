@@ -52,10 +52,10 @@ type TestResourceRequestReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
-// ItemGroup groups item according to machine name
+// ItemGroup groups item according to ExplicitMachine name
 type ItemGroup struct {
-	machine string
-	items   []*naglfarv1.TestResource
+	ExplicitMachine string
+	Items           []*naglfarv1.TestResource
 }
 
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresourcerequests,verbs=get;list;watch;create;update;patch;delete
@@ -126,6 +126,10 @@ func (r *TestResourceRequestReconciler) reconcilePending(request *naglfarv1.Test
 			requiredCount++
 		}
 	}
+	resources, err = r.listOwnedResources(r.Ctx, request)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	// build uncreated resources
 	if len(resourceMap) != len(request.Spec.Items) {
 		for idx, item := range request.Spec.Items {
@@ -175,7 +179,7 @@ func (r *TestResourceRequestReconciler) reconcileReady(request *naglfarv1.TestRe
 // 3. unlock machines
 // 4. remove finalizer
 func (r *TestResourceRequestReconciler) reconcileDeletion(resourceRequest *naglfarv1.TestResourceRequest) (ctrl.Result, error) {
-	resources, err := r.listResources(r.Ctx, resourceRequest)
+	resources, err := r.listOwnedResources(r.Ctx, resourceRequest)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -215,44 +219,49 @@ func (r *TestResourceRequestReconciler) tryRequest(
 	rel *naglfarv1.Relationship,
 	request *naglfarv1.TestResourceRequest,
 	resourceMap map[string]*naglfarv1.TestResource) (ctrl.Result, error) {
-	// record exclusive machines
-	toLockMachines := make(map[string]*naglfarv1.Machine)
+	requeueResult := ctrl.Result{RequeueAfter: 10 * time.Second}
+
 	machines, err := r.getMachines()
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	machineAliasNameMap := make(map[string]*naglfarv1.MachineRequest)
-	requeueResult := ctrl.Result{RequeueAfter: 10 * time.Second}
 
-	// wait all exclusive machines idle
+	machineRequestsMap := make(map[string]*naglfarv1.MachineRequest)
+	explicitRequestMachines := make(map[string]*naglfarv1.Machine)
 	for idx, machineRequest := range request.Spec.Machines {
+		machineRequestsMap[machineRequest.Name] = request.Spec.Machines[idx]
 		if machineRequest.TestMachineResource != "" {
 			machine, ok := machines[machineRequest.TestMachineResource]
 			if !ok {
-				return ctrl.Result{}, fmt.Errorf("no ready machine %s", machineRequest.TestMachineResource)
+				return ctrl.Result{}, fmt.Errorf("no ready ExplicitMachine %s", machineRequest.TestMachineResource)
 			}
-			// if the request machine is already locked by another request, requeue
-			if lockRequest, exist := rel.Status.MachineLocks[machineRequest.TestMachineResource]; exist {
-				r.Eventer.Eventf(request, "Warning", "Request",
-					"the machine %s is locked by another request %s",
-					machineRequest.TestMachineResource,
-					lockRequest.Key())
-				return requeueResult, nil
-			}
-			toLockMachines[machineRequest.TestMachineResource] = machine
-			machineAliasNameMap[machineRequest.Name] = request.Spec.Machines[idx]
+			explicitRequestMachines[machineRequest.TestMachineResource] = machine
 		}
 	}
-	// find suit nodes for request items
-	nonLockMachines := r.selectNonLockMachines(machines, rel)
-	itemGroups := r.groupCoLocatedItems(request.Spec.Items, resourceMap)
-	sortedMachineList := r.sortMachines(nonLockMachines, toLockMachines, rel)
+	var (
+		// all candidate machines
+		candidateMachines = r.selectNonLockMachines(machines, rel)
+		// to add lock machines
+		toLockMachines = make([]string, 0)
+		// request item groups, sort by machine
+		itemGroups = r.groupCoLocatedItems(request.Spec.Items, resourceMap)
+		// sorted machine list, put all explicit request machines in the front
+		sortedMachineList = r.sortMachines(candidateMachines, explicitRequestMachines, rel)
+	)
+	r.Log.Info("debug", "itemGroups", itemGroups)
+	r.Log.Info("debug", "machineRequestsMap", machineRequestsMap)
+	r.Log.Info("debug", "sortedMachineList", sortedMachineList)
 	for _, itemGroup := range itemGroups {
 		candidateMachineList := sortedMachineList
-		if itemGroup.machine != "" {
-			machineRequest := machineAliasNameMap[itemGroup.machine]
+		if itemGroup.ExplicitMachine != "" {
+			machineRequest := machineRequestsMap[itemGroup.ExplicitMachine]
 			if machineRequest.TestMachineResource != "" {
-				candidateMachineList = []*naglfarv1.Machine{nonLockMachines[machineRequest.TestMachineResource]}
+				explicitMachine, exist := candidateMachines[machineRequest.TestMachineResource]
+				if !exist {
+					r.Eventer.Eventf(request, "Warning", "Request", "no ready machine %s", machineRequest.TestMachineResource)
+					return requeueResult, nil
+				}
+				candidateMachineList = []*naglfarv1.Machine{explicitMachine}
 			}
 			if machineRequest.Exclusive {
 				candidateMachineList = r.filterMachines(candidateMachineList, func(m *naglfarv1.Machine) bool {
@@ -260,44 +269,53 @@ func (r *TestResourceRequestReconciler) tryRequest(
 				})
 			}
 		}
-		if !r.tryBindResource(rel, candidateMachineList, itemGroup) {
+		bindMachine := r.tryBindResource(rel, candidateMachineList, itemGroup)
+		if bindMachine == nil {
 			r.Eventer.Eventf(request, "Warning", "Request", "fail to find suitable machines")
 			return requeueResult, nil
 		}
+		if itemGroup.ExplicitMachine != "" {
+			machineRequest := machineRequestsMap[itemGroup.ExplicitMachine]
+			if machineRequest.Exclusive {
+				toLockMachines = append(toLockMachines, bindMachine.Name)
+			}
+		}
 	}
-	for _, item := range toLockMachines {
-		rel.Status.MachineLocks[item.Name] = ref.CreateRef(&request.ObjectMeta)
+	for _, machine := range toLockMachines {
+		rel.Status.MachineLocks[machine] = ref.CreateRef(&request.ObjectMeta)
 	}
+	rel.Status.AcceptedRequests = append(rel.Status.AcceptedRequests, ref.CreateRef(&request.ObjectMeta))
 	err = r.Status().Update(r.Ctx, rel)
 	return ctrl.Result{}, err
 }
 
-func (r *TestResourceRequestReconciler) tryBindResource(rel *naglfarv1.Relationship, candidateMachines []*naglfarv1.Machine, group ItemGroup) bool {
+func (r *TestResourceRequestReconciler) tryBindResource(rel *naglfarv1.Relationship, candidateMachines []*naglfarv1.Machine, group ItemGroup) *naglfarv1.Machine {
 FindMachines:
 	for _, machine := range candidateMachines {
-		resources := rel.Status.MachineToResources[ref.CreateRef(&machine.ObjectMeta).Key()]
+		allocatedResources := rel.Status.MachineToResources[ref.CreateRef(&machine.ObjectMeta).Key()].Clone()
 		bindings := make(map[string]*naglfarv1.ResourceBinding)
-		for _, item := range group.items {
-			binding, overflow := r.resourceOverflow(machine.Rest(resources), &item.Spec)
+
+		for _, item := range group.Items {
+			binding, overflow := r.resourceOverflow(machine.Rest(allocatedResources), &item.Spec)
 			if overflow {
 				continue FindMachines
 			}
-			resources = append(resources, naglfarv1.ResourceRef{
+			allocatedResources = append(allocatedResources, naglfarv1.ResourceRef{
 				Ref:     ref.CreateRef(&item.ObjectMeta),
 				Binding: *binding,
 			})
 			bindings[item.Name] = binding
 		}
-		rel.Status.MachineToResources[ref.CreateRef(&machine.ObjectMeta).Key()] = resources
-		for _, item := range group.items {
+		rel.Status.MachineToResources[ref.CreateRef(&machine.ObjectMeta).Key()] = allocatedResources
+		for _, item := range group.Items {
 			rel.Status.ResourceToMachine[ref.CreateRef(&item.ObjectMeta).Key()] = naglfarv1.MachineRef{
 				Ref:     ref.CreateRef(&machine.ObjectMeta),
 				Binding: *bindings[item.Name],
 			}
 		}
-		return true
+		return machine
 	}
-	return false
+	return nil
 }
 
 func (r *TestResourceRequestReconciler) resourceOverflow(rest *naglfarv1.AvailableResource, newResource *naglfarv1.TestResourceSpec) (*naglfarv1.ResourceBinding, bool) {
@@ -341,7 +359,7 @@ func (r *TestResourceRequestReconciler) resourceOverflow(rest *naglfarv1.Availab
 	return binding, false
 }
 
-// groupCoLocatedItems groups request items, and put explicit specified machines to front
+// groupCoLocatedItems groups request Items, and put explicit specified machines to front
 func (r *TestResourceRequestReconciler) groupCoLocatedItems(
 	items []*naglfarv1.ResourceRequestItem,
 	resourceMap map[string]*naglfarv1.TestResource) []ItemGroup {
@@ -351,30 +369,30 @@ func (r *TestResourceRequestReconciler) groupCoLocatedItems(
 	result := make([]ItemGroup, 0)
 
 	for _, item := range items {
-		if item.Spec.TestMachineResource != "" {
-			namedMachineItem[item.Spec.TestMachineResource] = append(namedMachineItem[item.Spec.TestMachineResource],
+		if item.Spec.Machine != "" {
+			namedMachineItem[item.Spec.Machine] = append(namedMachineItem[item.Spec.Machine],
 				resourceMap[item.Name])
 		} else {
 			noNamedMachineItemGroup = append(noNamedMachineItemGroup, ItemGroup{
-				items: []*naglfarv1.TestResource{resourceMap[item.Name]},
+				Items: []*naglfarv1.TestResource{resourceMap[item.Name]},
 			})
 		}
 	}
 	for machine := range namedMachineItem {
 		result = append(result, ItemGroup{
-			machine: machine,
-			items:   namedMachineItem[machine],
+			ExplicitMachine: machine,
+			Items:           namedMachineItem[machine],
 		})
 	}
 	return append(result, noNamedMachineItemGroup...)
 }
 
-func (r *TestResourceRequestReconciler) sortMachines(machines map[string]*naglfarv1.Machine,
-	toLockMachine map[string]*naglfarv1.Machine,
+func (r *TestResourceRequestReconciler) sortMachines(allMachines map[string]*naglfarv1.Machine,
+	explicitMachines map[string]*naglfarv1.Machine,
 	rel *naglfarv1.Relationship) []*naglfarv1.Machine {
 	result := make([]*naglfarv1.Machine, 0)
-	for idx := range machines {
-		result = append(result, machines[idx])
+	for idx := range allMachines {
+		result = append(result, allMachines[idx])
 	}
 	rand.Shuffle(len(result), func(i, j int) {
 		result[i], result[j] = result[j], result[i]
@@ -382,8 +400,8 @@ func (r *TestResourceRequestReconciler) sortMachines(machines map[string]*naglfa
 	sort.Slice(result, func(i, j int) bool {
 		m1 := result[i]
 		m2 := result[j]
-		_, m1ok := toLockMachine[m1.Name]
-		_, m2ok := toLockMachine[m2.Name]
+		_, m1ok := explicitMachines[m1.Name]
+		_, m2ok := explicitMachines[m2.Name]
 		if m1ok && !m2ok {
 			return true
 		}
@@ -438,6 +456,13 @@ func (r *TestResourceRequestReconciler) getRelationship() (*naglfarv1.Relationsh
 }
 
 func (r *TestResourceRequestReconciler) listResources(ctx context.Context, request *naglfarv1.TestResourceRequest) (naglfarv1.TestResourceList, error) {
+	var resources naglfarv1.TestResourceList
+	// we need list all resources to avoid exist resources with the same name
+	err := r.List(ctx, &resources, client.InNamespace(request.Namespace))
+	return resources, err
+}
+
+func (r *TestResourceRequestReconciler) listOwnedResources(ctx context.Context, request *naglfarv1.TestResourceRequest) (naglfarv1.TestResourceList, error) {
 	var resources naglfarv1.TestResourceList
 	err := r.List(ctx, &resources, client.InNamespace(request.Namespace), client.MatchingFields{resourceOwnerKey: request.Name})
 	return resources, err

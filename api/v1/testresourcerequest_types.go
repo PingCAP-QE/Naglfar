@@ -39,8 +39,8 @@ type MachineRequest struct {
 	Name string `json:"name"`
 
 	// +optional
-	// Specify a machine
-	TestMachineResource string `json:"TestMachineResource,omitempty"`
+	// Specify a static machine name
+	TestMachineResource string `json:"machine,omitempty"`
 
 	// default false
 	Exclusive bool `json:"exclusive"`

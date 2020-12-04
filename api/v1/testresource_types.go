@@ -93,7 +93,7 @@ type TestResourceSpec struct {
 
 	// If sets, it means the static machine is required
 	// +optional
-	TestMachineResource string `json:"testMachineResource,omitempty"`
+	Machine string `json:"machine,omitempty"`
 }
 
 // https://github.com/moby/moby/blob/master/api/types/mount/mount.go#L23
