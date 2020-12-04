@@ -84,13 +84,7 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 	}
 
 	if !resourceRequest.ObjectMeta.DeletionTimestamp.IsZero() && stringsContains(resourceRequest.ObjectMeta.Finalizers, requestFinalizer) {
-		if err = r.removeAllResources(r.Ctx, &resourceRequest); err != nil {
-			return
-		}
-
-		resourceRequest.ObjectMeta.Finalizers = stringsRemove(resourceRequest.ObjectMeta.Finalizers, requestFinalizer)
-		err = r.Update(r.Ctx, &resourceRequest)
-		return
+		return r.reconcileDeletion(&resourceRequest)
 	}
 
 	switch resourceRequest.Status.State {
@@ -176,12 +170,53 @@ func (r *TestResourceRequestReconciler) reconcileReady(request *naglfarv1.TestRe
 	return ctrl.Result{}, nil
 }
 
+// 1. remove resources
+// 2. remove self from accept requests list
+// 3. unlock machines
+// 4. remove finalizer
+func (r *TestResourceRequestReconciler) reconcileDeletion(resourceRequest *naglfarv1.TestResourceRequest) (ctrl.Result, error) {
+	resources, err := r.listResources(r.Ctx, resourceRequest)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if err = r.removeAllResources(r.Ctx, resources); err != nil {
+		return ctrl.Result{}, err
+	}
+	if len(resources.Items) != 0 {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+	rel, err := r.getRelationship()
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	// remove accept requests list
+	rel.Status.AcceptedRequests.Remove(ref.CreateRef(&resourceRequest.ObjectMeta))
+
+	selfRef := ref.CreateRef(&resourceRequest.ObjectMeta)
+	toCleanMachineKeys := make([]string, 0)
+	for machine, requestRef := range rel.Status.MachineLocks {
+		if requestRef == selfRef {
+			toCleanMachineKeys = append(toCleanMachineKeys, machine)
+		}
+	}
+	for _, machineKey := range toCleanMachineKeys {
+		delete(rel.Status.MachineLocks, machineKey)
+	}
+	err = r.Status().Update(r.Ctx, rel)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	resourceRequest.ObjectMeta.Finalizers = stringsRemove(resourceRequest.ObjectMeta.Finalizers, requestFinalizer)
+	err = r.Update(r.Ctx, resourceRequest)
+	return ctrl.Result{}, err
+}
+
 func (r *TestResourceRequestReconciler) tryRequest(
 	rel *naglfarv1.Relationship,
 	request *naglfarv1.TestResourceRequest,
 	resourceMap map[string]*naglfarv1.TestResource) (ctrl.Result, error) {
 	// record exclusive machines
-	toLockMachines := make(map[ref.Ref]*naglfarv1.Machine)
+	toLockMachines := make(map[string]*naglfarv1.Machine)
 	machines, err := r.getMachines()
 	if err != nil {
 		return ctrl.Result{}, err
@@ -197,18 +232,17 @@ func (r *TestResourceRequestReconciler) tryRequest(
 				return ctrl.Result{}, fmt.Errorf("no ready machine %s", machineRequest.TestMachineResource)
 			}
 			// if the request machine is already locked by another request, requeue
-			if lockRequest, exist := rel.Status.MachineLock[machineRequest.TestMachineResource]; exist {
+			if lockRequest, exist := rel.Status.MachineLocks[machineRequest.TestMachineResource]; exist {
 				r.Eventer.Eventf(request, "Warning", "Request",
 					"the machine %s is locked by another request %s",
 					machineRequest.TestMachineResource,
 					lockRequest.Key())
 				return requeueResult, nil
 			}
-			toLockMachines[ref.CreateRef(&machine.ObjectMeta)] = machine
+			toLockMachines[machineRequest.TestMachineResource] = machine
 			machineAliasNameMap[machineRequest.Name] = request.Spec.Machines[idx]
 		}
 	}
-
 	// find suit nodes for request items
 	nonLockMachines := r.selectNonLockMachines(machines, rel)
 	itemGroups := r.groupCoLocatedItems(request.Spec.Items, resourceMap)
@@ -230,6 +264,9 @@ func (r *TestResourceRequestReconciler) tryRequest(
 			r.Eventer.Eventf(request, "Warning", "Request", "fail to find suitable machines")
 			return requeueResult, nil
 		}
+	}
+	for _, item := range toLockMachines {
+		rel.Status.MachineLocks[item.Name] = ref.CreateRef(&request.ObjectMeta)
 	}
 	err = r.Status().Update(r.Ctx, rel)
 	return ctrl.Result{}, err
@@ -333,7 +370,7 @@ func (r *TestResourceRequestReconciler) groupCoLocatedItems(
 }
 
 func (r *TestResourceRequestReconciler) sortMachines(machines map[string]*naglfarv1.Machine,
-	toLockMachine map[ref.Ref]*naglfarv1.Machine,
+	toLockMachine map[string]*naglfarv1.Machine,
 	rel *naglfarv1.Relationship) []*naglfarv1.Machine {
 	result := make([]*naglfarv1.Machine, 0)
 	for idx := range machines {
@@ -345,8 +382,8 @@ func (r *TestResourceRequestReconciler) sortMachines(machines map[string]*naglfa
 	sort.Slice(result, func(i, j int) bool {
 		m1 := result[i]
 		m2 := result[j]
-		_, m1ok := toLockMachine[ref.CreateRef(&m1.ObjectMeta)]
-		_, m2ok := toLockMachine[ref.CreateRef(&m2.ObjectMeta)]
+		_, m1ok := toLockMachine[m1.Name]
+		_, m2ok := toLockMachine[m2.Name]
 		if m1ok && !m2ok {
 			return true
 		}
@@ -361,7 +398,7 @@ func (r *TestResourceRequestReconciler) sortMachines(machines map[string]*naglfa
 func (r *TestResourceRequestReconciler) selectNonLockMachines(machines map[string]*naglfarv1.Machine, relations *naglfarv1.Relationship) map[string]*naglfarv1.Machine {
 	result := make(map[string]*naglfarv1.Machine)
 	for key := range machines {
-		if _, exist := relations.Status.MachineLock[key]; !exist {
+		if _, exist := relations.Status.MachineLocks[key]; !exist {
 			result[key] = machines[key]
 		}
 	}
@@ -406,19 +443,13 @@ func (r *TestResourceRequestReconciler) listResources(ctx context.Context, reque
 	return resources, err
 }
 
-func (r *TestResourceRequestReconciler) removeAllResources(ctx context.Context, request *naglfarv1.TestResourceRequest) error {
-	resources, err := r.listResources(ctx, request)
-	if err != nil {
-		return err
-	}
-
-	for _, resource := range resources.Items {
-		err = r.Delete(ctx, &resource)
+func (r *TestResourceRequestReconciler) removeAllResources(ctx context.Context, resourceList naglfarv1.TestResourceList) error {
+	for _, resource := range resourceList.Items {
+		err := r.Delete(ctx, &resource)
 		if client.IgnoreNotFound(err) != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 

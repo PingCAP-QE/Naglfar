@@ -459,8 +459,8 @@ func (in *RelationshipStatus) DeepCopyInto(out *RelationshipStatus) {
 		*out = make(AcceptResources, len(*in))
 		copy(*out, *in)
 	}
-	if in.MachineLock != nil {
-		in, out := &in.MachineLock, &out.MachineLock
+	if in.MachineLocks != nil {
+		in, out := &in.MachineLocks, &out.MachineLocks
 		*out = make(map[string]ref.Ref, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val

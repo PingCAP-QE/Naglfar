@@ -58,7 +58,7 @@ func (r *RelationshipReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 	if relation.Status.MachineToResources == nil ||
 		relation.Status.ResourceToMachine == nil ||
 		relation.Status.AcceptedRequests == nil ||
-		relation.Status.MachineLock == nil {
+		relation.Status.MachineLocks == nil {
 		if relation.Status.MachineToResources == nil {
 			log.Info("initialize MachineToResources")
 			relation.Status.MachineToResources = make(map[string]naglfarv1.ResourceRefList)
@@ -71,9 +71,9 @@ func (r *RelationshipReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 			log.Info("initialize AcceptedRequests")
 			relation.Status.AcceptedRequests = make(naglfarv1.AcceptResources, 0)
 		}
-		if relation.Status.MachineLock == nil {
+		if relation.Status.MachineLocks == nil {
 			log.Info("initialize machineLock")
-			relation.Status.MachineLock = make(map[string]ref.Ref)
+			relation.Status.MachineLocks = make(map[string]ref.Ref)
 		}
 		err = r.Status().Update(ctx, relation)
 	}

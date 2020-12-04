@@ -40,7 +40,7 @@ type RelationshipStatus struct {
 	AcceptedRequests AcceptResources `json:"acceptedRequests"`
 
 	// exclusive lock: machine name -> request ref
-	MachineLock map[string]ref.Ref `json:"machineLock"`
+	MachineLocks map[string]ref.Ref `json:"machineLock"`
 }
 
 type AcceptResources []ref.Ref
@@ -56,6 +56,16 @@ func (a *AcceptResources) IfExist(r ref.Ref) bool {
 		}
 	}
 	return false
+}
+
+func (a *AcceptResources) Remove(r ref.Ref) {
+	newA := make(AcceptResources, 0)
+	for _, item := range *a {
+		if item != r {
+			newA = append(newA, item)
+		}
+	}
+	*a = newA
 }
 
 type ResourceRefList []ResourceRef
