@@ -29,6 +29,24 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /mutate-naglfar-pingcap-com-v1-testclustertopology
+  failurePolicy: Fail
+  name: mtestclustertopology.kb.io
+  rules:
+  - apiGroups:
+    - naglfar.pingcap.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - testclustertopologies
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
       path: /mutate-naglfar-pingcap-com-v1-testresource
   failurePolicy: Fail
   name: mtestresource.kb.io
@@ -86,6 +104,24 @@ webhooks:
     - UPDATE
     resources:
     - machines
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-naglfar-pingcap-com-v1-testclustertopology
+  failurePolicy: Fail
+  name: vtestclustertopology.kb.io
+  rules:
+  - apiGroups:
+    - naglfar.pingcap.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - testclustertopologies
 - clientConfig:
     caBundle: Cg==
     service:

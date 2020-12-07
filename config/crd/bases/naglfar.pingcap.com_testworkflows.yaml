@@ -202,11 +202,37 @@ spec:
                         description: TestClusterTopologyStatus defines the observed
                           state of TestClusterTopology
                         properties:
+                          preServerConfigs:
+                            properties:
+                              pd:
+                                type: string
+                              tidb:
+                                type: string
+                              tikv:
+                                type: string
+                            type: object
+                          preVersion:
+                            description: 'TODO: add a deploy version spec: clusterName,
+                              base version, component versions(for PR and self build
+                              version) etc.'
+                            properties:
+                              pdDownloadURL:
+                                type: string
+                              tidbDownloadURL:
+                                type: string
+                              tikvDownloadURL:
+                                type: string
+                              version:
+                                type: string
+                            required:
+                            - version
+                            type: object
                           state:
                             description: default Pending
                             enum:
                             - pending
                             - ready
+                            - updating
                             type: string
                         type: object
                     type: object
