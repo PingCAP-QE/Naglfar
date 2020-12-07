@@ -85,7 +85,7 @@ docker-push:
 	docker push ${IMG}
 
 log:
-	kubectl logs deployment/naglfar-controller-manager -n naglfar-system -c manager
+	kubectl logs -f deployment/naglfar-controller-manager -n naglfar-system -c manager
 
 
 install-controller-gen:

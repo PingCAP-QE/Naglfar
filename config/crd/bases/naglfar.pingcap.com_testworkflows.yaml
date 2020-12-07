@@ -231,12 +231,12 @@ spec:
                               type: string
                           type: object
                         type: object
+                      machine:
+                        description: If sets, it means the static machine is required
+                        type: string
                       machineSelector:
                         type: string
                       memory:
-                        type: string
-                      testMachineResource:
-                        description: If sets, it means the static machine is required
                         type: string
                     required:
                     - cores
