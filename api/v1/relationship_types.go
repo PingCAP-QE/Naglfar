@@ -35,9 +35,48 @@ type RelationshipStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	MachineToResources map[string]ResourceRefList `json:"machineToResources"`
 	ResourceToMachine  map[string]MachineRef      `json:"resourceToMachine"`
+
+	// accepted requests(satisfied and not deployed)
+	AcceptedRequests AcceptResources `json:"acceptedRequests"`
+
+	// exclusive lock: machine name -> request ref
+	MachineLocks map[string]ref.Ref `json:"machineLock"`
+}
+
+type AcceptResources []ref.Ref
+
+// IfExist predicates whether r is exist
+func (a *AcceptResources) IfExist(r ref.Ref) bool {
+	if a == nil {
+		return false
+	}
+	for _, item := range *a {
+		if item == r {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *AcceptResources) Remove(r ref.Ref) {
+	newA := make(AcceptResources, 0)
+	for _, item := range *a {
+		if item != r {
+			newA = append(newA, item)
+		}
+	}
+	*a = newA
 }
 
 type ResourceRefList []ResourceRef
+
+func (r ResourceRefList) Clone() ResourceRefList {
+	resources := make(ResourceRefList, 0)
+	for _, ref := range r {
+		resources = append(resources, ref)
+	}
+	return resources
+}
 
 type MachineRef struct {
 	ref.Ref `json:",inline"`

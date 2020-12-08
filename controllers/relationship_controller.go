@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 )
 
 // RelationshipReconciler reconciles a relationship object
@@ -54,7 +55,10 @@ func (r *RelationshipReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return
 	}
 
-	if relation.Status.MachineToResources == nil || relation.Status.ResourceToMachine == nil {
+	if relation.Status.MachineToResources == nil ||
+		relation.Status.ResourceToMachine == nil ||
+		relation.Status.AcceptedRequests == nil ||
+		relation.Status.MachineLocks == nil {
 		if relation.Status.MachineToResources == nil {
 			log.Info("initialize MachineToResources")
 			relation.Status.MachineToResources = make(map[string]naglfarv1.ResourceRefList)
@@ -63,7 +67,14 @@ func (r *RelationshipReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 			log.Info("initialize ResourceToMachine")
 			relation.Status.ResourceToMachine = make(map[string]naglfarv1.MachineRef)
 		}
-
+		if relation.Status.AcceptedRequests == nil {
+			log.Info("initialize AcceptedRequests")
+			relation.Status.AcceptedRequests = make(naglfarv1.AcceptResources, 0)
+		}
+		if relation.Status.MachineLocks == nil {
+			log.Info("initialize machineLock")
+			relation.Status.MachineLocks = make(map[string]ref.Ref)
+		}
 		err = r.Status().Update(ctx, relation)
 	}
 
