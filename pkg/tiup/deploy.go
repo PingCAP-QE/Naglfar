@@ -261,11 +261,11 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 	if err != nil {
 		return err
 	}
-	if err := c.writeTopologyMetaOnControl(outfile, clusterName); err != nil {
+	if err := c.writeTemporaryTopologyMetaOnControl(outfile, clusterName); err != nil {
 		return err
 	}
 
-	roles := c.diffTopology(*ct.Status.PreServerConfigs, ct.Spec.TiDBCluster.ServerConfigs)
+	roles := c.diffServerConfigs(*ct.Status.PreServerConfigs, ct.Spec.TiDBCluster.ServerConfigs)
 
 	log.Info("RequestTopology is modified.", "changed roles", roles)
 
@@ -298,7 +298,7 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 	return nil
 }
 
-func (c *ClusterManager) diffTopology(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) []string {
+func (c *ClusterManager) diffServerConfigs(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) []string {
 	var roles []string
 	if !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
 		roles = append(roles, "tidb")
@@ -325,7 +325,7 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 	return nil
 }
 
-func (c *ClusterManager) writeTopologyMetaOnControl(out []byte, clusterName string) error {
+func (c *ClusterManager) writeTemporaryTopologyMetaOnControl(out []byte, clusterName string) error {
 	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
@@ -333,7 +333,7 @@ func (c *ClusterManager) writeTopologyMetaOnControl(out []byte, clusterName stri
 		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
 	}
 
-	if err := client.Copy(bytes.NewReader(out), "/root/.tiup/storage/cluster/clusters/"+clusterName+"/meta.yaml", "0655", int64(len(out))); err != nil {
+	if err := client.Copy(bytes.NewReader(out), "/tmp/meta.yaml", "0655", int64(len(out))); err != nil {
 		return fmt.Errorf("error while copying file: %s", err)
 	}
 	return nil
@@ -391,7 +391,10 @@ func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles
 	for i := 0; i < len(roles); i++ {
 		roleStr += " -R " + roles[i]
 	}
-	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload %s %s --ignore-config-check", clusterName, roleStr)
+	moveCmd := fmt.Sprintf("mv /tmp/meta.yaml /root/.tiup/storage/cluster/clusters/"+clusterName+"/meta.yaml")
+	reloadCmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload %s %s --ignore-config-check", clusterName, roleStr)
+	combineCmd := moveCmd+";"+reloadCmd
+	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`,combineCmd )
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",
