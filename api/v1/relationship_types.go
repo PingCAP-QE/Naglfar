@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -89,17 +90,17 @@ type ResourceRef struct {
 }
 
 type ResourceBinding struct {
-	Memory BytesSize              `json:"memory"`
+	Memory util.BytesSize         `json:"memory"`
 	CPUSet []int                  `json:"cpuSet,omitempty"`
 	Disks  map[string]DiskBinding `json:"disks,omitempty"`
 }
 
 type DiskBinding struct {
-	Kind       DiskKind  `json:"kind"`
-	Size       BytesSize `json:"size"`
-	Device     string    `json:"device"`
-	OriginPath string    `json:"originPath"`
-	MountPath  string    `json:"mountPath"`
+	Kind       DiskKind       `json:"kind"`
+	Size       util.BytesSize `json:"size"`
+	Device     string         `json:"device"`
+	OriginPath string         `json:"originPath"`
+	MountPath  string         `json:"mountPath"`
 }
 
 // +kubebuilder:object:root=true

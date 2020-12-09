@@ -38,11 +38,13 @@ import (
 	dockerutil "github.com/PingCAP-QE/Naglfar/pkg/docker-util"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/PingCAP-QE/Naglfar/pkg/script"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 const machineLock = "naglfar.lock"
 const machineWorkerImage = "docker.io/alexeiled/nsenter"
 const lockerLabel = "locker"
+const machineFinalizer = "machine.naglfar.pingcap.com"
 
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
@@ -75,30 +77,50 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 
 	log.Info("machine reconcile", "content", machine)
 
-	if machine.Status.Info == nil {
-		var dockerClient *dockerutil.Client
-		dockerClient, err = dockerutil.MakeClient(r.Ctx, machine)
-		if err != nil {
-			return
+	switch machine.Status.State {
+	case naglfarv1.MachineStarting:
+		return r.reconcileStarting(log, machine)
+	case naglfarv1.MachineRunning:
+		return r.reconcileRunning(log, machine)
+	case naglfarv1.MachineShutdown:
+		return r.reconcileShutdown(log, machine)
+	default:
+		machine.Status.State = naglfarv1.MachineStarting
+		err = r.Status().Update(r.Ctx, machine)
+		if err == nil {
+			result.Requeue = true
 		}
-		defer dockerClient.Close()
+		return
+	}
+}
 
-		machine.Status.Info, result.Requeue, err = r.fetchMachineInfo(machine, dockerClient)
-		if err != nil {
-			r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
-			return
-		}
+func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
+	var dockerClient *dockerutil.Client
+	dockerClient, err = dockerutil.MakeClient(r.Ctx, machine)
+	if err != nil {
+		return
+	}
+	defer dockerClient.Close()
 
-		if result.Requeue {
-			return
-		}
-
-		if err = r.Status().Update(r.Ctx, machine); err != nil {
-			log.Error(err, "unable to update Machine")
-			return
-		}
+	machine.Status.Info, result.Requeue, err = r.fetchMachineInfo(machine, dockerClient)
+	if err != nil {
+		r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
+		return
 	}
 
+	if result.Requeue {
+		return
+	}
+
+	machine.Status.State = naglfarv1.MachineRunning
+
+	if err = r.Status().Update(r.Ctx, machine); err != nil {
+		log.Error(err, "unable to update Machine")
+	}
+	return
+}
+
+func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
 	relation, err := r.getRelationship()
 	if err != nil {
 		return
@@ -118,6 +140,10 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 		err = r.Status().Update(r.Ctx, relation)
 	}
 
+	return
+}
+
+func (r *MachineReconciler) reconcileShutdown(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
 	return
 }
 
@@ -192,20 +218,20 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 		return nil, err
 	}
 
-	info.Memory = naglfarv1.Size(float64(memory))
+	info.Memory = util.Size(float64(memory))
 
 	for path, device := range info.StorageDevices {
 		totalSize, err := device.Total.ToSize()
 		if err != nil {
 			return nil, err
 		}
-		device.Total = naglfarv1.Size(float64(totalSize))
+		device.Total = util.Size(float64(totalSize))
 
 		usedSize, err := device.Used.ToSize()
 		if err != nil {
 			return nil, err
 		}
-		device.Used = naglfarv1.Size(float64(usedSize))
+		device.Used = util.Size(float64(usedSize))
 
 		info.StorageDevices[path] = device
 	}

@@ -24,6 +24,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // log is for logging in this package.
@@ -62,7 +64,7 @@ func (r *Machine) Default() {
 	}
 
 	if r.Spec.Reserve.Memory == "" {
-		r.Spec.Reserve.Memory = Size(1 * units.GiB)
+		r.Spec.Reserve.Memory = util.Size(1 * units.GiB)
 	}
 	// TODO(user): fill in your defaulting logic.
 }
