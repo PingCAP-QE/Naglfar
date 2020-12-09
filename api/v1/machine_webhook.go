@@ -100,20 +100,6 @@ func (r *Machine) ValidateCreate() error {
 func (r *Machine) ValidateUpdate(old runtime.Object) error {
 	machinelog.Info("validate update", "name", r.Name)
 
-	if _, err := r.Status.Info.Memory.ToSize(); err != nil {
-		return fmt.Errorf("invalid memory size: %s", err.Error())
-	}
-
-	for _, device := range r.Status.Info.StorageDevices {
-		if _, err := device.Total.ToSize(); err != nil {
-			return fmt.Errorf("invalid storage size: %s", err.Error())
-		}
-
-		if _, err := device.Used.ToSize(); err != nil {
-			return fmt.Errorf("invalid storage size: %s", err.Error())
-		}
-	}
-
 	return nil
 }
 

@@ -439,7 +439,9 @@ func (r *TestResourceRequestReconciler) getMachines() (map[string]*naglfarv1.Mac
 	}
 	book := make(map[string]*naglfarv1.Machine)
 	for idx, machine := range machineList.Items {
-		book[machine.Name] = &machineList.Items[idx]
+		if machine.Status.State == naglfarv1.MachineReady {
+			book[machine.Name] = &machineList.Items[idx]
+		}
 	}
 	return book, nil
 }

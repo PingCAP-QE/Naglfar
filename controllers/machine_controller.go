@@ -106,7 +106,7 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	switch machine.Status.State {
 	case naglfarv1.MachineStarting:
 		return r.reconcileStarting(log, machine)
-	case naglfarv1.MachineRunning:
+	case naglfarv1.MachineReady:
 		return r.reconcileRunning(log, machine)
 	case naglfarv1.MachineShutdown:
 		return r.reconcileShutdown(log, machine)
@@ -134,7 +134,7 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 		return
 	}
 
-	machine.Status.State = naglfarv1.MachineRunning
+	machine.Status.State = naglfarv1.MachineReady
 
 	if err = r.Status().Update(r.Ctx, machine); err != nil {
 		log.Error(err, "unable to update Machine")

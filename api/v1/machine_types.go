@@ -39,13 +39,13 @@ const (
 const (
 	MachineShutdown MachineState = "shutdown"
 	MachineStarting              = "starting"
-	MachineRunning               = "running"
+	MachineReady                 = "ready"
 )
 
 // +kubebuilder:validation:Enum=nvme;other
 type DiskKind string
 
-// +kubebuilder:validation:Enum=shutdown;starting;running
+// +kubebuilder:validation:Enum=shutdown;starting;ready
 type MachineState string
 
 type ReserveResources struct {
@@ -115,6 +115,7 @@ type MachineStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// +optional
 	State MachineState `json:"state"`
 
 	// +optional
