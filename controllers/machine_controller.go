@@ -63,6 +63,18 @@ type MachineReconciler struct {
 func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("machine", req.NamespacedName)
 
+	relation, err := r.getRelationship()
+	if err != nil {
+		return
+	}
+
+	if relation.Status.MachineToResources == nil {
+		result.Requeue = true
+		result.RequeueAfter = time.Second
+		log.Info("relationship not ready")
+		return
+	}
+
 	machine := new(naglfarv1.Machine)
 
 	if err = r.Get(r.Ctx, req.NamespacedName, machine); err != nil {
@@ -77,6 +89,20 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 
 	log.Info("machine reconcile", "content", machine)
 
+	if machine.ObjectMeta.DeletionTimestamp.IsZero() && !util.StringsContains(machine.ObjectMeta.Finalizers, machineFinalizer) {
+		machine.ObjectMeta.Finalizers = append(machine.ObjectMeta.Finalizers, machineFinalizer)
+		err = r.Update(r.Ctx, machine)
+		return
+	}
+
+	if !machine.ObjectMeta.DeletionTimestamp.IsZero() && util.StringsContains(machine.ObjectMeta.Finalizers, machineFinalizer) {
+		if machine.Status.State != naglfarv1.MachineShutdown {
+			machine.Status.State = naglfarv1.MachineShutdown
+			err = r.Status().Update(r.Ctx, machine)
+			return
+		}
+	}
+
 	switch machine.Status.State {
 	case naglfarv1.MachineStarting:
 		return r.reconcileStarting(log, machine)
@@ -87,16 +113,12 @@ func (r *MachineReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	default:
 		machine.Status.State = naglfarv1.MachineStarting
 		err = r.Status().Update(r.Ctx, machine)
-		if err == nil {
-			result.Requeue = true
-		}
 		return
 	}
 }
 
 func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
-	var dockerClient *dockerutil.Client
-	dockerClient, err = dockerutil.MakeClient(r.Ctx, machine)
+	dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
 	if err != nil {
 		return
 	}
@@ -128,13 +150,6 @@ func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1
 
 	machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
 
-	if relation.Status.MachineToResources == nil {
-		result.Requeue = true
-		result.RequeueAfter = time.Second
-		log.Info("relationship not ready")
-		return
-	}
-
 	if relation.Status.MachineToResources[machineKey] == nil {
 		relation.Status.MachineToResources[machineKey] = make(naglfarv1.ResourceRefList, 0)
 		err = r.Status().Update(r.Ctx, relation)
@@ -144,6 +159,39 @@ func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1
 }
 
 func (r *MachineReconciler) reconcileShutdown(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
+	relation, err := r.getRelationship()
+	if err != nil {
+		return
+	}
+
+	machineRef := ref.CreateRef(&machine.ObjectMeta)
+	machineKey := machineRef.Key()
+
+	if resourceList := relation.Status.MachineToResources[machineKey]; len(resourceList) != 0 {
+		result.Requeue = true
+		result.RequeueAfter = time.Duration(10 * time.Second)
+		return
+	}
+
+	dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
+	if err != nil {
+		return
+	}
+	defer dockerClient.Close()
+
+	err = r.Unlock(machine, dockerClient)
+	if err != nil {
+		return
+	}
+
+	delete(relation.Status.MachineToResources, machineKey)
+	err = r.Status().Update(r.Ctx, relation)
+	if err != nil {
+		return
+	}
+
+	machine.ObjectMeta.Finalizers = util.StringsRemove(machine.ObjectMeta.Finalizers, machineFinalizer)
+	err = r.Update(r.Ctx, machine)
 	return
 }
 
@@ -269,6 +317,31 @@ func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *do
 	}
 
 	return nil
+}
+
+func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
+	if err := dockerClient.PullImageByPolicy(machineWorkerImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
+		return err
+	}
+
+	info, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
+
+	if err != nil {
+		if !docker.IsErrNotFound(err) {
+			return err
+		}
+
+		// locker not found
+		return nil
+	}
+
+	if info.Config == nil || info.Config.Labels == nil || info.Config.Labels[lockerLabel] != string(machine.UID) {
+		// locker released
+		return nil
+	}
+
+	return dockerClient.ContainerRemove(r.Ctx, machineLock, dockerTypes.ContainerRemoveOptions{Force: true})
 }
 
 func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
