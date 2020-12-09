@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 const (
@@ -63,19 +64,19 @@ func (r *TestWorkloadReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	if workload.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !stringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
+		if !util.StringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
 			workload.ObjectMeta.Finalizers = append(workload.ObjectMeta.Finalizers, testWorkloadFinalizer)
 			if err := r.Update(ctx, workload); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 	} else {
-		if stringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
+		if util.StringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
 			if err := r.uninstallWorkload(ctx, workload); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
-		workload.Finalizers = stringsRemove(workload.Finalizers, testWorkloadFinalizer)
+		workload.Finalizers = util.StringsRemove(workload.Finalizers, testWorkloadFinalizer)
 		if err := r.Update(ctx, workload); err != nil {
 			return ctrl.Result{}, err
 		}

@@ -28,6 +28,7 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // TestClusterTopologyReconciler reconciles a TestClusterTopology object
@@ -54,19 +55,19 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 
 	finalizerName := req.Name
 	if ct.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !stringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
+		if !util.StringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
 			ct.ObjectMeta.Finalizers = append(ct.ObjectMeta.Finalizers, finalizerName)
 			if err := r.Update(ctx, &ct); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 	} else {
-		if stringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
+		if util.StringsContains(ct.ObjectMeta.Finalizers, finalizerName) {
 			if err := r.deleteTopology(ctx, &ct); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
-		ct.Finalizers = stringsRemove(ct.Finalizers, finalizerName)
+		ct.Finalizers = util.StringsRemove(ct.Finalizers, finalizerName)
 		if err := r.Update(ctx, &ct); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -309,7 +310,7 @@ func BuildInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*naglfarv1.Te
 type strSet []string
 
 func (s strSet) add(elem string) strSet {
-	if stringsContains(s, elem) {
+	if util.StringsContains(s, elem) {
 		return s
 	}
 	return append(s, elem)

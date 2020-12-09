@@ -22,6 +22,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // log is for logging in this package.
@@ -60,7 +62,7 @@ func (r *Machine) Default() {
 	}
 
 	if r.Spec.Reserve.Memory == "" {
-		r.Spec.Reserve.Memory = Size(1 * units.GiB)
+		r.Spec.Reserve.Memory = util.Size(1 * units.GiB)
 	}
 	// TODO(user): fill in your defaulting logic.
 }
@@ -95,20 +97,6 @@ func (r *Machine) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Machine) ValidateUpdate(old runtime.Object) error {
 	machinelog.Info("validate update", "name", r.Name)
-
-	if _, err := r.Status.Info.Memory.ToSize(); err != nil {
-		return fmt.Errorf("invalid memory size: %s", err.Error())
-	}
-
-	for _, device := range r.Status.Info.StorageDevices {
-		if _, err := device.Total.ToSize(); err != nil {
-			return fmt.Errorf("invalid storage size: %s", err.Error())
-		}
-
-		if _, err := device.Used.ToSize(); err != nil {
-			return fmt.Errorf("invalid storage size: %s", err.Error())
-		}
-	}
 
 	return nil
 }

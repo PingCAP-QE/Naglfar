@@ -21,9 +21,10 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
-
 	"github.com/docker/go-connections/nat"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 const (
@@ -68,7 +69,7 @@ type DiskSpec struct {
 	Kind DiskKind `json:"kind"`
 
 	// +optional
-	Size BytesSize `json:"size"`
+	Size util.BytesSize `json:"size"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -79,7 +80,7 @@ type TestResourceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Memory BytesSize `json:"memory"`
+	Memory util.BytesSize `json:"memory"`
 
 	Cores int32 `json:"cores"`
 

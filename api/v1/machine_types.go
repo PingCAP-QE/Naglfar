@@ -22,6 +22,8 @@ import (
 
 	docker "github.com/docker/docker/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -32,8 +34,17 @@ const (
 	OtherKind          = "other"
 )
 
+const (
+	MachineShutdown MachineState = "shutdown"
+	MachineStarting              = "starting"
+	MachineReady                 = "ready"
+)
+
 // +kubebuilder:validation:Enum=nvme;other
 type DiskKind string
+
+// +kubebuilder:validation:Enum=shutdown;starting;ready
+type MachineState string
 
 type ReserveResources struct {
 	// default 1
@@ -42,31 +53,31 @@ type ReserveResources struct {
 
 	// default 1 GiB
 	// +optional
-	Memory BytesSize `json:"memory"`
+	Memory util.BytesSize `json:"memory"`
 }
 
 type StorageDevice struct {
-	Filesystem string    `json:"filesystem"`
-	Total      BytesSize `json:"total"`
-	Used       BytesSize `json:"used"`
-	MountPoint string    `json:"mountPoint"`
+	Filesystem string         `json:"filesystem"`
+	Total      util.BytesSize `json:"total"`
+	Used       util.BytesSize `json:"used"`
+	MountPoint string         `json:"mountPoint"`
 }
 
 type MachineInfo struct {
 	Architecture   string                   `json:"architecture"`
 	Threads        int32                    `json:"threads"`
-	Memory         BytesSize                `json:"memory"`
+	Memory         util.BytesSize           `json:"memory"`
 	StorageDevices map[string]StorageDevice `json:"devices,omitempty"`
 }
 
 type DiskResource struct {
-	Size      BytesSize `json:"size"`
-	Kind      DiskKind  `json:"kind"`
-	MountPath string    `json:"mountPath"`
+	Size      util.BytesSize `json:"size"`
+	Kind      DiskKind       `json:"kind"`
+	MountPath string         `json:"mountPath"`
 }
 
 type AvailableResource struct {
-	Memory     BytesSize               `json:"memory"`
+	Memory     util.BytesSize          `json:"memory"`
 	IdleCPUSet []int                   `json:"idleCPUSet,omitempty"`
 	Disks      map[string]DiskResource `json:"disks,omitempty"`
 }
@@ -101,6 +112,9 @@ type MachineSpec struct {
 type MachineStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// +optional
+	State MachineState `json:"state"`
 
 	// +optional
 	Info *MachineInfo `json:"info,omitempty"`

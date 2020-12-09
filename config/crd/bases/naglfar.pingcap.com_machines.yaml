@@ -99,6 +99,12 @@ spec:
               - memory
               - threads
               type: object
+            state:
+              enum:
+              - shutdown
+              - starting
+              - ready
+              type: string
           type: object
       type: object
   version: v1
