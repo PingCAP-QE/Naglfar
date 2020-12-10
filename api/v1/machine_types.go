@@ -177,41 +177,6 @@ func (r *Machine) Available() *AvailableResource {
 	return available
 }
 
-func makeCPUSet(threads int32) (cpuSet []int) {
-	for i := 0; i < int(threads); i++ {
-		cpuSet = append(cpuSet, i)
-	}
-	return
-}
-
-func deleteCPUSet(cpuSet []int, allocSet []int) (idleCPUSet []int) {
-	set := make(map[int]struct{})
-	for _, core := range cpuSet {
-		set[core] = struct{}{}
-	}
-	for _, core := range allocSet {
-		delete(set, core)
-	}
-	for core := range set {
-		idleCPUSet = append(idleCPUSet, core)
-	}
-	sort.Slice(idleCPUSet, func(i, j int) bool {
-		return idleCPUSet[i] < idleCPUSet[j]
-	})
-	return
-}
-
-func cpuSetStr(cpuSet []int) (str string) {
-	for i, core := range cpuSet {
-		if i == 0 {
-			str = fmt.Sprintf("%d", core)
-		} else {
-			str = fmt.Sprintf("%s,%d", str, core)
-		}
-	}
-	return
-}
-
 func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
 	rest = r.Available()
 

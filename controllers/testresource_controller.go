@@ -61,16 +61,6 @@ func timeIsZero(timeStr string) bool {
 	return err == nil && datatime.IsZero()
 }
 
-func pickCpuSet(cpuSet []int, i int32) (set []int) {
-	if len(cpuSet) < int(i) {
-		return
-	}
-	for index := 0; index < int(i); index++ {
-		set = append(set, cpuSet[index])
-	}
-	return
-}
-
 // TestResourceReconciler reconciles a TestResource object
 type TestResourceReconciler struct {
 	client.Client
