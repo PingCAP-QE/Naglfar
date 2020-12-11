@@ -15,7 +15,6 @@
 package v1
 
 import (
-	"errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -60,11 +59,7 @@ func (r *TestClusterTopology) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *TestClusterTopology) ValidateUpdate(old runtime.Object) error {
 	testclustertopologylog.Info("validate update", "name", r.Name)
-	topology := old.(*TestClusterTopology)
 
-	if topology.Status.State == "updating" {
-		return errors.New("cluster is updating")
-	}
 	// TODO(user): fill in your validation logic upon object update.
 	return nil
 }

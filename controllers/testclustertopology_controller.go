@@ -120,21 +120,23 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			ct.Status.PreVersion = ct.Spec.TiDBCluster.Version.DeepCopy()
 			if err := r.Status().Update(ctx, &ct); err != nil {
 				log.Error(err, "unable to update TestClusterTopology")
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
-		// no change
+
+		// cluster configs no change
 		if !tiup.IsServerConfigModified(*ct.Status.PreServerConfigs, ct.Spec.TiDBCluster.ServerConfigs) {
-			log.Info("Cluster no change")
 			return ctrl.Result{}, nil
 		}
+
 		log.Info("Cluster is updating", "clusterName", ct.Name)
 		ct.Status.State = naglfarv1.ClusterTopologyStateUpdating
 		if err := r.Status().Update(ctx, &ct); err != nil {
 			log.Error(err, "unable to update TestClusterTopology")
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, nil
 	case naglfarv1.ClusterTopologyStateUpdating:
 		var rr naglfarv1.TestResourceRequest
 		if err := r.Get(ctx, types.NamespacedName{
@@ -151,7 +153,6 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		if requeue {
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		//log.Info("Cluster is updated")
 
 		ct.Status.PreServerConfigs = ct.Spec.TiDBCluster.ServerConfigs.DeepCopy()
 		ct.Status.PreVersion = ct.Spec.TiDBCluster.Version.DeepCopy()
