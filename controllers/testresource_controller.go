@@ -1,18 +1,16 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package controllers
 
@@ -35,6 +33,7 @@ import (
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	dockerutil "github.com/PingCAP-QE/Naglfar/pkg/docker-util"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 const resourceFinalizer = "testresource.naglfar.pingcap.com"
@@ -44,25 +43,6 @@ const clusterNetwork = "naglfar-overlay"
 var relationshipName = types.NamespacedName{
 	Namespace: "default",
 	Name:      "machine-testresource",
-}
-
-func stringsContains(list []string, target string) bool {
-	for _, elem := range list {
-		if elem == target {
-			return true
-		}
-	}
-	return false
-}
-
-func stringsRemove(list []string, target string) []string {
-	newList := make([]string, 0, len(list)-1)
-	for _, elem := range list {
-		if target != elem {
-			newList = append(newList, elem)
-		}
-	}
-	return newList
 }
 
 func refsRemove(list naglfarv1.ResourceRefList, resource ref.Ref) naglfarv1.ResourceRefList {
@@ -119,13 +99,13 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		err = client.IgnoreNotFound(err)
 		return
 	}
-	if resource.ObjectMeta.DeletionTimestamp.IsZero() && !stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
+	if resource.ObjectMeta.DeletionTimestamp.IsZero() && !util.StringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
 		resource.ObjectMeta.Finalizers = append(resource.ObjectMeta.Finalizers, resourceFinalizer)
 		err = r.Update(r.Ctx, resource)
 		return
 	}
 
-	if !resource.ObjectMeta.DeletionTimestamp.IsZero() && stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
+	if !resource.ObjectMeta.DeletionTimestamp.IsZero() && util.StringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
 		var relation *naglfarv1.Relationship
 
 		if relation, err = r.getRelationship(); err != nil {
@@ -156,7 +136,7 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 			}
 		}
 
-		resource.ObjectMeta.Finalizers = stringsRemove(resource.ObjectMeta.Finalizers, resourceFinalizer)
+		resource.ObjectMeta.Finalizers = util.StringsRemove(resource.ObjectMeta.Finalizers, resourceFinalizer)
 		err = r.Update(r.Ctx, resource)
 		return
 	}

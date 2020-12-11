@@ -14,27 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package util
 
-import (
-	"fmt"
-	"time"
-)
-
-type Duration string
-
-func (r Duration) Parse() (time.Duration, error) {
-	return time.ParseDuration(string(r))
-}
-
-func (r Duration) Unwrap() time.Duration {
-	d, err := r.Parse()
-	if err != nil {
-		panic(fmt.Sprintf("Duration(%s) is invalid", r))
+func StringsContains(list []string, target string) bool {
+	for _, elem := range list {
+		if elem == target {
+			return true
+		}
 	}
-	return d
+	return false
 }
 
-func HumanDuration(d time.Duration) Duration {
-	return Duration(d.String())
+func StringsRemove(list []string, target string) []string {
+	newList := make([]string, 0, len(list)-1)
+	for _, elem := range list {
+		if target != elem {
+			newList = append(newList, elem)
+		}
+	}
+	return newList
 }

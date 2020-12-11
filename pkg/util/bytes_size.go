@@ -12,22 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package util
 
 import (
-	"os"
+	"fmt"
 
-	"go.uber.org/zap"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	_ "k8s.io/cli-runtime/pkg/genericclioptions"
-
-	"github.com/PingCAP-QE/Naglfar/pkg/cmd"
+	"github.com/docker/go-units"
 )
 
-func main() {
-	logger, _ := zap.NewDevelopment()
-	rootCmd := cmd.NewNaglfarCmd(logger, genericclioptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr})
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+type BytesSize string
+
+func (b BytesSize) ToSize() (int64, error) {
+	return units.RAMInBytes(string(b))
+}
+
+func (b BytesSize) Unwrap() int64 {
+	size, err := b.ToSize()
+	if err != nil {
+		panic(fmt.Sprintf("BytesSize(%s) is invalid", b))
 	}
+	return size
+}
+
+func (b BytesSize) Zero() BytesSize {
+	return Size(0)
+}
+
+func (b BytesSize) Sub(other BytesSize) BytesSize {
+	return Size(float64(b.Unwrap() - other.Unwrap()))
+}
+
+func Size(size float64) BytesSize {
+	return BytesSize(units.BytesSize(size))
 }

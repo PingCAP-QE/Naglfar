@@ -1,18 +1,16 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package controllers
 
@@ -34,6 +32,7 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 const requestFinalizer = "testresourcerequest.naglfar.pingcap.com"
@@ -77,13 +76,13 @@ func (r *TestResourceRequestReconciler) Reconcile(req ctrl.Request) (result ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if resourceRequest.ObjectMeta.DeletionTimestamp.IsZero() && !stringsContains(resourceRequest.ObjectMeta.Finalizers, requestFinalizer) {
+	if resourceRequest.ObjectMeta.DeletionTimestamp.IsZero() && !util.StringsContains(resourceRequest.ObjectMeta.Finalizers, requestFinalizer) {
 		resourceRequest.ObjectMeta.Finalizers = append(resourceRequest.ObjectMeta.Finalizers, requestFinalizer)
 		err = r.Update(r.Ctx, &resourceRequest)
 		return
 	}
 
-	if !resourceRequest.ObjectMeta.DeletionTimestamp.IsZero() && stringsContains(resourceRequest.ObjectMeta.Finalizers, requestFinalizer) {
+	if !resourceRequest.ObjectMeta.DeletionTimestamp.IsZero() && util.StringsContains(resourceRequest.ObjectMeta.Finalizers, requestFinalizer) {
 		return r.reconcileDeletion(&resourceRequest)
 	}
 
@@ -210,7 +209,7 @@ func (r *TestResourceRequestReconciler) reconcileDeletion(resourceRequest *naglf
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	resourceRequest.ObjectMeta.Finalizers = stringsRemove(resourceRequest.ObjectMeta.Finalizers, requestFinalizer)
+	resourceRequest.ObjectMeta.Finalizers = util.StringsRemove(resourceRequest.ObjectMeta.Finalizers, requestFinalizer)
 	err = r.Update(r.Ctx, resourceRequest)
 	return ctrl.Result{}, err
 }
@@ -219,6 +218,7 @@ func (r *TestResourceRequestReconciler) tryRequest(
 	rel *naglfarv1.Relationship,
 	request *naglfarv1.TestResourceRequest,
 	resourceMap map[string]*naglfarv1.TestResource) (ctrl.Result, error) {
+
 	requeueResult := ctrl.Result{RequeueAfter: 10 * time.Second}
 
 	machines, err := r.getMachines()
@@ -248,9 +248,6 @@ func (r *TestResourceRequestReconciler) tryRequest(
 		// sorted machine list, put all explicit request machines in the front
 		sortedMachineList = r.sortMachines(candidateMachines, explicitRequestMachines, rel)
 	)
-	r.Log.Info("debug", "itemGroups", itemGroups)
-	r.Log.Info("debug", "machineRequestsMap", machineRequestsMap)
-	r.Log.Info("debug", "sortedMachineList", sortedMachineList)
 	for _, itemGroup := range itemGroups {
 		candidateMachineList := sortedMachineList
 		if itemGroup.ExplicitMachine != "" {
@@ -440,7 +437,9 @@ func (r *TestResourceRequestReconciler) getMachines() (map[string]*naglfarv1.Mac
 	}
 	book := make(map[string]*naglfarv1.Machine)
 	for idx, machine := range machineList.Items {
-		book[machine.Name] = &machineList.Items[idx]
+		if machine.Status.State == naglfarv1.MachineReady {
+			book[machine.Name] = &machineList.Items[idx]
+		}
 	}
 	return book, nil
 }

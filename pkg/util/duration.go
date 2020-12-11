@@ -12,22 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package util
 
 import (
-	"os"
-
-	"go.uber.org/zap"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	_ "k8s.io/cli-runtime/pkg/genericclioptions"
-
-	"github.com/PingCAP-QE/Naglfar/pkg/cmd"
+	"fmt"
+	"time"
 )
 
-func main() {
-	logger, _ := zap.NewDevelopment()
-	rootCmd := cmd.NewNaglfarCmd(logger, genericclioptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr})
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+type Duration string
+
+func (r Duration) Parse() (time.Duration, error) {
+	return time.ParseDuration(string(r))
+}
+
+func (r Duration) Unwrap() time.Duration {
+	d, err := r.Parse()
+	if err != nil {
+		panic(fmt.Sprintf("Duration(%s) is invalid", r))
 	}
+	return d
+}
+
+func HumanDuration(d time.Duration) Duration {
+	return Duration(d.String())
 }
