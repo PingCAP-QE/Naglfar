@@ -63,6 +63,54 @@ func IgnoreClusterNotExist(err error) error {
 	return err
 }
 
+func setPumpConfig(spec *tiupSpec.Specification,pumpConfig string,index int) error {
+	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{}, 0)
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		pumpConfig,
+	}} {
+		err := unmarshalPumpConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.PumpServers[index].Config = config
+	return nil
+}
+
+func setDrainerConfig(spec *tiupSpec.Specification,drainerConfig string,index int) error {
+	unmarshalDrainerConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{}, 0)
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		drainerConfig,
+	}} {
+		err := unmarshalDrainerConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.Drainers[index].Config = config
+	return nil
+}
+
 func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.ServerConfigs) error {
 	unmarshalServerConfigToMaps := func(data []byte, object *map[string]interface{}) error {
 		err := yaml.Unmarshal(data, object)
@@ -176,6 +224,35 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
+	for index,item := range ctf.TiDBCluster.Pump {
+		node, exist := resourceMaps[item.Host]
+		if !exist {
+			return spec, nil, fmt.Errorf("pump node not found: `%s`", item.Host)
+		}
+		spec.PumpServers = append(spec.PumpServers, tiupSpec.PumpSpec{
+			Host:            hostName(item.Host, node.ClusterIP),
+			Port:            item.Port,
+			SSHPort:         item.SSHPort,
+			DeployDir:       item.DeployDir,
+			DataDir:         item.DataDir,
+		})
+		setPumpConfig(&spec,ctf.TiDBCluster.Pump[index].Config,index)
+	}
+	for index, item := range ctf.TiDBCluster.Drainer {
+		node, exist := resourceMaps[item.Host]
+		if !exist {
+			return spec, nil, fmt.Errorf("drainer node not found: `%s`", item.Host)
+		}
+		spec.Drainers = append(spec.Drainers, tiupSpec.DrainerSpec{
+			Host:            hostName(item.Host, node.ClusterIP),
+			Port:            item.Port,
+			SSHPort:         item.SSHPort,
+			CommitTS:        item.CommitTS,
+			DeployDir:       item.DeployDir,
+			DataDir:         item.DataDir,
+		})
+		setDrainerConfig(&spec,ctf.TiDBCluster.Drainer[index].Config,index)
+	}
 	for _, item := range ctf.TiDBCluster.Monitor {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
@@ -204,6 +281,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
+	fmt.Println(spec.PDServers[0])
+	fmt.Println(spec.PumpServers[0])
+	fmt.Println(spec.Drainers[0])
+	fmt.Println(spec.PDServers[0].Host)
+	fmt.Println(spec.PumpServers[0].Config)
+	fmt.Println(spec.Drainers[0].Config)
 	// set default values from tag
 	defaults.Set(&spec)
 	return

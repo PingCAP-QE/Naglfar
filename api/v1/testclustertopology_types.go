@@ -88,6 +88,32 @@ type TiKVSpec struct {
 	LogDir string `json:"logDir,omitempty"`
 }
 
+type PumpSpec struct {
+	Host string `json:"host"`
+	SSHPort int `json:"sshPort,omitempty"`
+	// +optional
+	Port int `json:"port,omitempty"`
+	// +optional
+	DeployDir  string `json:"deployDir"`
+	DataDir    string `json:"dataDir"`
+	Config     string  `json:"config,omitempty"`
+}
+
+type DrainerSpec struct {
+	Host string `json:"host"`
+	Config     string  `json:"config"`
+
+	// +optional
+	SSHPort int `json:"sshPort,omitempty"`
+	// +optional
+	Port int `json:"port,omitempty"`
+	// +optional
+	CommitTS int64 `json:"commitTS,omitempty"`
+	// +optional
+	DeployDir  string `json:"deployDir"`
+	DataDir    string `json:"dataDir"`
+}
+
 type PrometheusSpec struct {
 	Host string `json:"host"`
 	// +optional
@@ -125,6 +151,12 @@ type TiDBCluster struct {
 	// PD machine hosts
 	// +optional
 	PD []PDSpec `json:"pd"`
+
+	// +optional
+	Pump []PumpSpec `json:"pump,omitempty"`
+
+	// +optional
+	Drainer []DrainerSpec `json:"drainer,omitempty"`
 
 	// +optional
 	Monitor []PrometheusSpec `json:"monitor,omitempty"`
