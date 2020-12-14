@@ -21,8 +21,6 @@ import (
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/strslice"
 	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
 	"github.com/ngaut/log"
@@ -33,15 +31,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/container"
 	dockerutil "github.com/PingCAP-QE/Naglfar/pkg/docker-util"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
-	"github.com/PingCAP-QE/Naglfar/pkg/script"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
-const machineLock = "naglfar.lock"
-const machineWorkerImage = "docker.io/alexeiled/nsenter"
-const lockerLabel = "locker"
 const machineFinalizer = "machine.naglfar.pingcap.com"
 
 // MachineReconciler reconciles a Machine object
@@ -215,7 +210,7 @@ func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerC
 		return
 	}
 
-	stat, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
+	stat, err := dockerClient.ContainerInspect(r.Ctx, container.MachineLock)
 
 	if err != nil {
 		r.Eventer.Event(machine, "Warning", "Check", err.Error())
@@ -223,7 +218,7 @@ func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerC
 	}
 
 	if timeIsZero(stat.State.StartedAt) {
-		err = dockerClient.ContainerStart(r.Ctx, machineLock, dockerTypes.ContainerStartOptions{})
+		err = dockerClient.ContainerStart(r.Ctx, container.MachineLock, dockerTypes.ContainerStartOptions{})
 		requeue = true
 		return
 	}
@@ -239,7 +234,7 @@ func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerC
 		return
 	}
 
-	stdout, _, err := dockerClient.Logs(machineLock, dockerTypes.ContainerLogsOptions{
+	stdout, _, err := dockerClient.Logs(container.MachineLock, dockerTypes.ContainerLogsOptions{
 		ShowStdout: true,
 	})
 
@@ -286,12 +281,12 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 }
 
 func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
-	if err := dockerClient.PullImageByPolicy(machineWorkerImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
-		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
+	if err := dockerClient.PullImageByPolicy(container.MachineLockImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineLockImage))
 		return err
 	}
 
-	info, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
+	info, err := dockerClient.ContainerInspect(r.Ctx, container.MachineLock)
 
 	if err != nil {
 		if !docker.IsErrNotFound(err) {
@@ -305,9 +300,9 @@ func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *do
 		return fmt.Errorf("invalid lock container")
 	}
 
-	uid, ok := info.Config.Labels[lockerLabel]
+	uid, ok := info.Config.Labels[container.LockerLabel]
 	if !ok {
-		return fmt.Errorf("lock container has no label `%s`", lockerLabel)
+		return fmt.Errorf("lock container has no label `%s`", container.LockerLabel)
 	}
 
 	if uid != string(machine.UID) {
@@ -318,12 +313,12 @@ func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *do
 }
 
 func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
-	if err := dockerClient.PullImageByPolicy(machineWorkerImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
-		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", machineWorkerImage))
+	if err := dockerClient.PullImageByPolicy(container.MachineLockImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineLockImage))
 		return err
 	}
 
-	info, err := dockerClient.ContainerInspect(r.Ctx, machineLock)
+	info, err := dockerClient.ContainerInspect(r.Ctx, container.MachineLock)
 
 	if err != nil {
 		if !docker.IsErrNotFound(err) {
@@ -334,35 +329,18 @@ func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *doc
 		return nil
 	}
 
-	if info.Config == nil || info.Config.Labels == nil || info.Config.Labels[lockerLabel] != string(machine.UID) {
+	if info.Config == nil || info.Config.Labels == nil || info.Config.Labels[container.LockerLabel] != string(machine.UID) {
 		// locker released
 		return nil
 	}
 
-	return dockerClient.ContainerRemove(r.Ctx, machineLock, dockerTypes.ContainerRemoveOptions{Force: true})
+	return dockerClient.ContainerRemove(r.Ctx, container.MachineLock, dockerTypes.ContainerRemoveOptions{Force: true})
 }
 
 func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
-	osStatScript, err := script.ScriptBox.FindString("os-stat.sh")
+	config, hostConfig := container.MachineLockCfg(string(machine.UID))
 
-	if err != nil {
-		return err
-	}
-
-	config := &container.Config{
-		Image: machineWorkerImage,
-		Labels: map[string]string{
-			lockerLabel: string(machine.UID),
-		},
-		Cmd: strslice.StrSlice{"-m", "--target", "1", "--", "sh", "-c", osStatScript},
-	}
-
-	hostConfig := &container.HostConfig{
-		Privileged: true,
-		PidMode:    "host",
-	}
-
-	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, machineLock)
+	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, container.MachineLock)
 	if err != nil {
 		return err
 	}
@@ -370,6 +348,23 @@ func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient 
 	if len(resp.Warnings) != 0 {
 		for _, warning := range resp.Warnings {
 			r.Eventer.Event(machine, "Warning", "CreateLock", warning)
+		}
+	}
+
+	return nil
+}
+
+func (r *MachineReconciler) startChaosDaemon(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
+	config, hostConfig := container.ChaosDaemonCfg()
+
+	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, container.ChaosDaemon)
+	if err != nil {
+		return err
+	}
+
+	if len(resp.Warnings) != 0 {
+		for _, warning := range resp.Warnings {
+			r.Eventer.Event(machine, "Warning", "CreateChaos", warning)
 		}
 	}
 

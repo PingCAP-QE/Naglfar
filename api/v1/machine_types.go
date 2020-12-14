@@ -116,6 +116,10 @@ type MachineStatus struct {
 	// +optional
 	State MachineState `json:"state"`
 
+	// exposed port of chaos daemon
+	// +optional
+	ChaosPort int `json:"chaosPort"`
+
 	// +optional
 	Info *MachineInfo `json:"info,omitempty"`
 }
