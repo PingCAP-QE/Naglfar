@@ -63,7 +63,7 @@ func IgnoreClusterNotExist(err error) error {
 	return err
 }
 
-func setPumpConfig(spec *tiupSpec.Specification,pumpConfig string,index int) error {
+func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) error {
 	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
 		err := yaml.Unmarshal(data, object)
 		return err
@@ -87,7 +87,7 @@ func setPumpConfig(spec *tiupSpec.Specification,pumpConfig string,index int) err
 	return nil
 }
 
-func setDrainerConfig(spec *tiupSpec.Specification,drainerConfig string,index int) error {
+func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index int, clusterIPMaps ...map[string]string) error {
 	unmarshalDrainerConfigToMap := func(data []byte, object *map[string]interface{}) error {
 		err := yaml.Unmarshal(data, object)
 		return err
@@ -105,6 +105,15 @@ func setDrainerConfig(spec *tiupSpec.Specification,drainerConfig string,index in
 		err := unmarshalDrainerConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
+		}
+	}
+	// transfer
+	if clusterIPMaps != nil {
+		clusterIP := clusterIPMaps[0][strings.Split(config["syncer.to.host"].(string), "://")[1]]
+		if clusterIP == "" {
+			return fmt.Errorf("syncer.to.host is not existed")
+		} else {
+			config["syncer.to.host"] = clusterIP
 		}
 	}
 	spec.Drainers[index].Config = config
@@ -153,7 +162,7 @@ func IsVersionModified(pre naglfarv1.TiDBClusterVersion, cur naglfarv1.TiDBClust
 }
 
 // If dryRun is true, host uses the resource's name
-func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource, dryRun bool) (
+func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource, dryRun bool, clusterIPMaps ...map[string]string) (
 	spec tiupSpec.Specification, control *naglfarv1.TestResourceStatus, err error) {
 	hostName := func(resourceName, clusterIP string) string {
 		if dryRun {
@@ -224,19 +233,22 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
-	for index,item := range ctf.TiDBCluster.Pump {
+	for index, item := range ctf.TiDBCluster.Pump {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("pump node not found: `%s`", item.Host)
 		}
 		spec.PumpServers = append(spec.PumpServers, tiupSpec.PumpSpec{
-			Host:            hostName(item.Host, node.ClusterIP),
-			Port:            item.Port,
-			SSHPort:         item.SSHPort,
-			DeployDir:       item.DeployDir,
-			DataDir:         item.DataDir,
+			Host:      hostName(item.Host, node.ClusterIP),
+			Port:      item.Port,
+			SSHPort:   item.SSHPort,
+			DeployDir: item.DeployDir,
+			DataDir:   item.DataDir,
 		})
-		setPumpConfig(&spec,ctf.TiDBCluster.Pump[index].Config,index)
+		if err := setPumpConfig(&spec, ctf.TiDBCluster.Pump[index].Config, index); err != nil {
+			err = fmt.Errorf("set PumpConfigs failed: %v", err)
+			return spec, nil, err
+		}
 	}
 	for index, item := range ctf.TiDBCluster.Drainer {
 		node, exist := resourceMaps[item.Host]
@@ -244,14 +256,17 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			return spec, nil, fmt.Errorf("drainer node not found: `%s`", item.Host)
 		}
 		spec.Drainers = append(spec.Drainers, tiupSpec.DrainerSpec{
-			Host:            hostName(item.Host, node.ClusterIP),
-			Port:            item.Port,
-			SSHPort:         item.SSHPort,
-			CommitTS:        item.CommitTS,
-			DeployDir:       item.DeployDir,
-			DataDir:         item.DataDir,
+			Host:      hostName(item.Host, node.ClusterIP),
+			Port:      item.Port,
+			SSHPort:   item.SSHPort,
+			CommitTS:  item.CommitTS,
+			DeployDir: item.DeployDir,
+			DataDir:   item.DataDir,
 		})
-		setDrainerConfig(&spec,ctf.TiDBCluster.Drainer[index].Config,index)
+		if err := setDrainerConfig(&spec, ctf.TiDBCluster.Drainer[index].Config, index, clusterIPMaps...); err != nil {
+			err = fmt.Errorf("set DrainerConfigs failed: %v", err)
+			return spec, nil, err
+		}
 	}
 	for _, item := range ctf.TiDBCluster.Monitor {
 		node, exist := resourceMaps[item.Host]
@@ -281,12 +296,6 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
-	fmt.Println(spec.PDServers[0])
-	fmt.Println(spec.PumpServers[0])
-	fmt.Println(spec.Drainers[0])
-	fmt.Println(spec.PDServers[0].Host)
-	fmt.Println(spec.PumpServers[0].Config)
-	fmt.Println(spec.Drainers[0].Config)
 	// set default values from tag
 	defaults.Set(&spec)
 	return
@@ -298,8 +307,11 @@ type ClusterManager struct {
 	control *naglfarv1.TestResourceStatus
 }
 
-func MakeClusterManager(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource) (*ClusterManager, error) {
-	specification, control, err := BuildSpecification(ctf, trs, false)
+func MakeClusterManager(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource, clusterIPMaps ...map[string]string) (*ClusterManager, error) {
+	var specification tiupSpec.Specification
+	var control *naglfarv1.TestResourceStatus
+	var err error
+	specification, control, err = BuildSpecification(ctf, trs, false, clusterIPMaps...)
 	if err != nil {
 		return nil, err
 	}
@@ -474,10 +486,10 @@ func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles
 	for i := 0; i < len(roles); i++ {
 		roleStr += " -R " + roles[i]
 	}
-	moveCmd := fmt.Sprintf("mv /tmp/meta.yaml /root/.tiup/storage/cluster/clusters/"+clusterName+"/meta.yaml")
+	moveCmd := fmt.Sprintf("mv /tmp/meta.yaml /root/.tiup/storage/cluster/clusters/" + clusterName + "/meta.yaml")
 	reloadCmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload %s %s --ignore-config-check", clusterName, roleStr)
-	combineCmd := moveCmd+";"+reloadCmd
-	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`,combineCmd )
+	combineCmd := moveCmd + ";" + reloadCmd
+	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`, combineCmd)
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",

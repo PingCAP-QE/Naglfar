@@ -191,6 +191,15 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 		}
 		return result
 	}
+
+	hostname2ClusterIP := func(resourceList naglfarv1.TestResourceList) map[string]string {
+		result := make(map[string]string)
+		for _, item := range resourceList.Items {
+			result[item.Name] = item.Status.ClusterIP
+		}
+		return result
+	}
+
 	resources = filterClusterResources()
 	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
 	if err != nil {
@@ -222,7 +231,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	if requeue {
 		return true, nil
 	}
-	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
+	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources, hostname2ClusterIP(resourceList))
 	if err != nil {
 		return false, err
 	}
