@@ -40,7 +40,7 @@ type RelationshipStatus struct {
 	// accepted requests(satisfied and not deployed)
 	AcceptedRequests AcceptResources `json:"acceptedRequests"`
 
-	// exclusive lock: machine name -> request ref
+	// exclusive lock: machine ref -> request ref
 	MachineLocks map[string]ref.Ref `json:"machineLock"`
 }
 

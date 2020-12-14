@@ -23,25 +23,37 @@ import (
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
-type DiskAllocator struct{}
+var DiskAllocate AllocateFunc = func(ctx AllocContext) (err error) {
+	diskNeeds := ctx.Target.Spec.Disks
 
-type DiskResource struct {
-	Size      util.BytesSize     `json:"size"`
-	Kind      naglfarv1.DiskKind `json:"kind"`
-	MountPath string             `json:"mountPath"`
-}
-
-func (a DiskAllocator) Filter(ctx *FilterContext) (err error) {
-	coresNeeds := int(ctx.Target.Spec.Disks)
-
-	var machines []*naglfarv1.Machine
-	for _, machine := range ctx.Machines {
+	machines := make(BindingTable)
+	for machine, binding := range ctx.Machines {
+		newBinding := binding.DeepCopy()
 		machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
 		resources := ctx.Relationship.Status.MachineToResources[machineKey]
 		disks := restDisks(machine, resources)
 
-		if len(cpuSet) >= coresNeeds {
-			machines = append(machines, machine)
+		for name, disk := range diskNeeds {
+			for device, diskResource := range disks {
+				if disk.Kind == diskResource.Kind &&
+					disk.Size.Unwrap() <= diskResource.Size.Unwrap() {
+
+					delete(disks, name)
+					newBinding.Disks[name] = naglfarv1.DiskBinding{
+						Kind:       disk.Kind,
+						Size:       diskResource.Size,
+						Device:     device,
+						OriginPath: diskResource.MountPath,
+						MountPath:  disk.MountPath,
+					}
+
+					break
+				}
+			}
+		}
+
+		if len(newBinding.Disks) == len(diskNeeds) {
+			machines[machine] = newBinding
 		}
 	}
 
@@ -49,11 +61,10 @@ func (a DiskAllocator) Filter(ctx *FilterContext) (err error) {
 	return
 }
 
-func (a DiskAllocator) Bind(ctx *BindContext) (err error) {
-	machineKey := ref.CreateRef(&ctx.Machine.ObjectMeta).Key()
-	resources := ctx.Relationship.Status.MachineToResources[machineKey]
-	ctx.Binding.CPUSet = pickCpuSet(restCpuSet(ctx.Machine, resources), ctx.Target.Spec.Cores)
-	return
+type DiskResource struct {
+	Size      util.BytesSize
+	Kind      naglfarv1.DiskKind
+	MountPath string
 }
 
 func restDisks(machine *naglfarv1.Machine, resources naglfarv1.ResourceRefList) map[string]*DiskResource {

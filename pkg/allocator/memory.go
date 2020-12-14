@@ -15,21 +15,18 @@
 package allocator
 
 import (
-	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
-type MemoryAllocator struct{}
-
-func (a MemoryAllocator) Alloc(ctx *AllocContext) (err error) {
+var MemoryAllocate AllocateFunc = func(ctx AllocContext) (err error) {
 	memoryNeeds, err := ctx.Target.Spec.Memory.ToSize()
 	if err != nil {
 		return
 	}
 
 	machines := make(BindingTable)
-	for machine, bindings := range ctx.Machines {
+	for machine, binding := range ctx.Machines {
 		var memory, reserve int64
 		memory, err = machine.Status.Info.Memory.ToSize()
 		if err != nil {
@@ -55,13 +52,9 @@ func (a MemoryAllocator) Alloc(ctx *AllocContext) (err error) {
 		}
 
 		if memory >= memoryNeeds {
-			var newBindings []*naglfarv1.ResourceBinding
-			for _, binding := range bindings {
-				newBinding := binding.DeepCopy()
-				newBinding.Memory = util.Size(float64(memoryNeeds))
-				newBindings = append(newBindings, newBinding)
-			}
-			machines[machine] = newBindings
+			newBinding := binding.DeepCopy()
+			newBinding.Memory = util.Size(float64(memoryNeeds))
+			machines[machine] = newBinding
 		}
 	}
 

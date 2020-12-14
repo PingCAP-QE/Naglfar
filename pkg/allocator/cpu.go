@@ -15,37 +15,29 @@
 package allocator
 
 import (
-	"fmt"
 	"sort"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 )
 
-type CpuAllocator struct{}
-
-func (a CpuAllocator) Filter(ctx *FilterContext) (err error) {
+var CpuAllocate AllocateFunc = func(ctx AllocContext) (err error) {
 	coresNeeds := int(ctx.Target.Spec.Cores)
 
-	var machines []*naglfarv1.Machine
-	for _, machine := range ctx.Machines {
+	machines := make(BindingTable)
+	for machine, binding := range ctx.Machines {
 		machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
 		resources := ctx.Relationship.Status.MachineToResources[machineKey]
 		cpuSet := restCpuSet(machine, resources)
 
 		if len(cpuSet) >= coresNeeds {
-			machines = append(machines, machine)
+			newBinding := binding.DeepCopy()
+			newBinding.CPUSet = pickCpuSet(cpuSet, int32(coresNeeds))
+			machines[machine] = newBinding
 		}
 	}
 
 	ctx.Machines = machines
-	return
-}
-
-func (a CpuAllocator) Bind(ctx *BindContext) (err error) {
-	machineKey := ref.CreateRef(&ctx.Machine.ObjectMeta).Key()
-	resources := ctx.Relationship.Status.MachineToResources[machineKey]
-	ctx.Binding.CPUSet = pickCpuSet(restCpuSet(ctx.Machine, resources), ctx.Target.Spec.Cores)
 	return
 }
 
@@ -78,17 +70,6 @@ func deleteCPUSet(cpuSet []int, allocSet []int) (idleCPUSet []int) {
 	sort.Slice(idleCPUSet, func(i, j int) bool {
 		return idleCPUSet[i] < idleCPUSet[j]
 	})
-	return
-}
-
-func cpuSetStr(cpuSet []int) (str string) {
-	for i, core := range cpuSet {
-		if i == 0 {
-			str = fmt.Sprintf("%d", core)
-		} else {
-			str = fmt.Sprintf("%s,%d", str, core)
-		}
-	}
 	return
 }
 

@@ -245,7 +245,7 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 		PublishAllPorts: true,
 		Resources: container.Resources{
 			Memory:     binding.Memory.Unwrap(),
-			CpusetCpus: cpuSetStr(binding.CPUSet),
+			CpusetCpus: util.CpuSetStr(binding.CPUSet),
 		},
 		CapAdd: r.Status.CapAdd,
 		// set privilege

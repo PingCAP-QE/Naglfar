@@ -16,7 +16,7 @@ package allocator
 
 import naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 
-type BindingTable map[*naglfarv1.Machine][]*naglfarv1.ResourceBinding
+type BindingTable map[*naglfarv1.Machine]*naglfarv1.ResourceBinding
 
 type AllocContext struct {
 	Machines     BindingTable
@@ -26,8 +26,10 @@ type AllocContext struct {
 }
 
 type Allocator interface {
-	Alloc(*AllocContext) error
+	Alloc(AllocContext) error
 }
+
+type AllocateFunc func(AllocContext) error
 
 type Combination []Allocator
 
@@ -35,7 +37,11 @@ func Combine(allocators ...Allocator) Combination {
 	return allocators
 }
 
-func (c Combination) Alloc(ctx *AllocContext) (err error) {
+func (f AllocateFunc) Alloc(ctx AllocContext) (err error) {
+	return f(ctx)
+}
+
+func (c Combination) Alloc(ctx AllocContext) (err error) {
 	for _, alloc := range c {
 		err = alloc.Alloc(ctx)
 		if err != nil {

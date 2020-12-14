@@ -16,9 +16,6 @@ package v1
 
 import (
 	"fmt"
-	"path"
-	"sort"
-	"strings"
 
 	docker "github.com/docker/docker/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -139,70 +136,6 @@ type MachineList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Machine `json:"items"`
-}
-
-func (r *Machine) Available() *AvailableResource {
-	if r.Status.Info == nil {
-		return nil
-	}
-
-	available := new(AvailableResource)
-	available.Memory = r.Status.Info.Memory.Sub(r.Spec.Reserve.Memory)
-	available.IdleCPUSet = deleteCPUSet(makeCPUSet(r.Status.Info.Threads), makeCPUSet(r.Spec.Reserve.Cores))
-	available.Disks = make(map[string]DiskResource)
-
-	exclusiveSet := make(map[string]bool)
-
-	for _, device := range r.Spec.ExclusiveDisks {
-		exclusiveSet[device] = true
-	}
-
-	for device, disk := range r.Status.Info.StorageDevices {
-		if _, ok := exclusiveSet[device]; ok {
-			diskResource := DiskResource{
-				Size:      disk.Total.Sub(disk.Used),
-				MountPath: disk.MountPoint,
-			}
-
-			if strings.HasPrefix(path.Base(device), "nvme") {
-				diskResource.Kind = NVMEKind
-			} else {
-				diskResource.Kind = OtherKind
-			}
-
-			available.Disks[device] = diskResource
-		}
-	}
-
-	return available
-}
-
-func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
-	rest = r.Available()
-
-	if rest == nil {
-		return
-	}
-
-	for _, refer := range resources {
-		rest.IdleCPUSet = deleteCPUSet(rest.IdleCPUSet, refer.Binding.CPUSet)
-		rest.Memory = rest.Memory.Sub(refer.Binding.Memory)
-
-		if len(refer.Binding.Disks) != 0 {
-			for _, diskBinding := range refer.Binding.Disks {
-				if _, ok := rest.Disks[diskBinding.Device]; !ok {
-					// something wrong,
-					rest = nil
-					return
-				}
-
-				delete(rest.Disks, diskBinding.Device)
-			}
-			continue
-		}
-	}
-
-	return
 }
 
 func (r *Machine) DockerURL() string {
