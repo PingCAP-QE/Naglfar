@@ -25,11 +25,10 @@ import (
 
 const statScript = "os-stat.sh"
 
-const MachineLockImage = "docker.io/alexeiled/nsenter"
-const MachineLock = "naglfar.lock"
-const LockerLabel = "locker"
+const MachineStatImage = "docker.io/alexeiled/nsenter"
+const MachineStat = "naglfar-machine-stat"
 
-func MachineLockCfg(locker string) (*container.Config, *container.HostConfig) {
+func MachineStatCfg() (*container.Config, *container.HostConfig) {
 	osStatScript, err := script.ScriptBox.FindString(statScript)
 
 	if err != nil {
@@ -37,11 +36,8 @@ func MachineLockCfg(locker string) (*container.Config, *container.HostConfig) {
 	}
 
 	config := &container.Config{
-		Image: MachineLockImage,
-		Labels: map[string]string{
-			LockerLabel: locker,
-		},
-		Cmd: strslice.StrSlice{"-m", "--target", "1", "--", "sh", "-c", osStatScript},
+		Image: MachineStatImage,
+		Cmd:   strslice.StrSlice{"-m", "--target", "1", "--", "sh", "-c", osStatScript},
 	}
 
 	hostConfig := &container.HostConfig{

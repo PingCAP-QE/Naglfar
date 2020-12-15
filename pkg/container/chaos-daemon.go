@@ -24,11 +24,12 @@ import (
 const ChaosDaemon = "chaos-daemon"
 const ChaosDaemonPort = "31767/tcp"
 const ChaosDaemonImage = "docker.io/pingcap/chaos-daemon"
+const LockerLabel = "locker"
 
 const dockerSocket = "/var/run/docker.sock"
 const sysDir = "/sys"
 
-func ChaosDaemonCfg() (*container.Config, *container.HostConfig) {
+func ChaosDaemonCfg(locker string) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
 
 	// bind mounts
@@ -45,6 +46,9 @@ func ChaosDaemonCfg() (*container.Config, *container.HostConfig) {
 		Cmd: strslice.StrSlice{
 			"/usr/local/bin/chaos-daemon",
 			"--runtime", "docker",
+		},
+		Labels: map[string]string{
+			LockerLabel: locker,
 		},
 		ExposedPorts: nat.PortSet{ChaosDaemonPort: struct{}{}},
 	}

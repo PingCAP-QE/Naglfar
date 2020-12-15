@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
@@ -117,6 +118,15 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	}
 	defer dockerClient.Close()
 
+	machine.Status.ChaosPort, result.Requeue, err = r.tryLock(machine, dockerClient)
+	if err != nil {
+		r.Eventer.Event(machine, "Warning", "Lock", err.Error())
+		return
+	}
+	if result.Requeue {
+		return
+	}
+
 	machine.Status.Info, result.Requeue, err = r.fetchMachineInfo(machine, dockerClient)
 	if err != nil {
 		r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
@@ -205,40 +215,14 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (info *naglfarv1.MachineInfo, requeue bool, err error) {
-	if err = r.tryLock(machine, dockerClient); err != nil {
-		r.Eventer.Event(machine, "Warning", "Lock", err.Error())
-		return
-	}
+	cfg, hostCfg := container.MachineStatCfg()
 
-	stat, err := dockerClient.ContainerInspect(r.Ctx, container.MachineLock)
-
-	if err != nil {
-		r.Eventer.Event(machine, "Warning", "Check", err.Error())
-		return
-	}
-
-	if timeIsZero(stat.State.StartedAt) {
-		err = dockerClient.ContainerStart(r.Ctx, container.MachineLock, dockerTypes.ContainerStartOptions{})
-		requeue = true
-		return
-	}
-
-	if timeIsZero(stat.State.FinishedAt) {
-		requeue = true
-		return
-	}
-
-	if stat.State.ExitCode != 0 {
-		err = fmt.Errorf("container exit with %d", stat.State.ExitCode)
-		r.Eventer.Event(machine, "Warning", "Fetch", err.Error())
-		return
-	}
-
-	stdout, _, err := dockerClient.Logs(container.MachineLock, dockerTypes.ContainerLogsOptions{
-		ShowStdout: true,
+	stdout, requeue, err := dockerClient.JustExec(container.MachineStat, container.MachineStatImage, dockerutil.RunOptions{
+		Config:     cfg,
+		HostConfig: hostCfg,
 	})
 
-	if err != nil {
+	if err != nil || requeue {
 		return
 	}
 
@@ -280,45 +264,46 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 	return info, nil
 }
 
-func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
-	if err := dockerClient.PullImageByPolicy(container.MachineLockImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
-		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineLockImage))
-		return err
+func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (chaosPort int, requeue bool, err error) {
+	cfg, hostCfg := container.ChaosDaemonCfg(string(machine.UID))
+	stat, requeue, err := dockerClient.Run(container.ChaosDaemon, container.ChaosDaemonImage, dockerutil.RunOptions{
+		Config:     cfg,
+		HostConfig: hostCfg,
+	})
+
+	if err != nil || requeue {
+		return
 	}
 
-	info, err := dockerClient.ContainerInspect(r.Ctx, container.MachineLock)
-
-	if err != nil {
-		if !docker.IsErrNotFound(err) {
-			return err
-		}
-
-		return r.createLock(machine, dockerClient)
+	if stat.Config == nil || stat.Config.Labels == nil {
+		err = fmt.Errorf("invalid lock container: %s", stat.Name)
 	}
 
-	if info.Config == nil || info.Config.Labels == nil {
-		return fmt.Errorf("invalid lock container")
-	}
-
-	uid, ok := info.Config.Labels[container.LockerLabel]
+	uid, ok := stat.Config.Labels[container.LockerLabel]
 	if !ok {
-		return fmt.Errorf("lock container has no label `%s`", container.LockerLabel)
+		err = fmt.Errorf("container %s has no label `%s`", stat.Name, container.LockerLabel)
+		return
 	}
 
 	if uid != string(machine.UID) {
-		return fmt.Errorf("machine locked by other naglfar system: UID(%s)", uid)
+		err = fmt.Errorf("machine(%s) locked by other naglfar system: UID(%s)", machine.Name, machine.UID)
+		return
 	}
 
-	return nil
+	if ports, ok := stat.NetworkSettings.Ports[container.ChaosDaemonPort]; ok && len(ports) > 0 {
+		chaosPort, _ = strconv.Atoi(ports[0].HostPort)
+	}
+
+	return
 }
 
 func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
-	if err := dockerClient.PullImageByPolicy(container.MachineLockImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
-		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineLockImage))
+	if err := dockerClient.PullImageByPolicy(container.MachineStatImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineStatImage))
 		return err
 	}
 
-	info, err := dockerClient.ContainerInspect(r.Ctx, container.MachineLock)
+	info, err := dockerClient.ContainerInspect(r.Ctx, container.ChaosDaemon)
 
 	if err != nil {
 		if !docker.IsErrNotFound(err) {
@@ -334,39 +319,5 @@ func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *doc
 		return nil
 	}
 
-	return dockerClient.ContainerRemove(r.Ctx, container.MachineLock, dockerTypes.ContainerRemoveOptions{Force: true})
-}
-
-func (r *MachineReconciler) createLock(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
-	config, hostConfig := container.MachineLockCfg(string(machine.UID))
-
-	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, container.MachineLock)
-	if err != nil {
-		return err
-	}
-
-	if len(resp.Warnings) != 0 {
-		for _, warning := range resp.Warnings {
-			r.Eventer.Event(machine, "Warning", "CreateLock", warning)
-		}
-	}
-
-	return nil
-}
-
-func (r *MachineReconciler) startChaosDaemon(machine *naglfarv1.Machine, dockerClient docker.APIClient) error {
-	config, hostConfig := container.ChaosDaemonCfg()
-
-	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, container.ChaosDaemon)
-	if err != nil {
-		return err
-	}
-
-	if len(resp.Warnings) != 0 {
-		for _, warning := range resp.Warnings {
-			r.Eventer.Event(machine, "Warning", "CreateChaos", warning)
-		}
-	}
-
-	return nil
+	return dockerClient.ContainerRemove(r.Ctx, container.ChaosDaemon, dockerTypes.ContainerRemoveOptions{Force: true})
 }
