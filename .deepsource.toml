@@ -8,6 +8,5 @@ exclude_patterns = [
   "**/*.pb.go",
 ]
 
-
   [analyzers.meta]
   import_paths = ["github.com/PingCAP-QE/Naglfar"]
