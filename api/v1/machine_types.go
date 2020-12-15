@@ -248,6 +248,10 @@ func (r *Machine) DockerURL() string {
 	return fmt.Sprintf("tcp://%s:%d", r.Spec.Host, r.Spec.DockerPort)
 }
 
+func (r *Machine) ChaosURL() string {
+	return fmt.Sprintf("%s:%d", r.Spec.Host, r.Status.ChaosPort)
+}
+
 func (r *Machine) DockerClient() (*docker.Client, error) {
 	if r.Spec.DockerTLS {
 		return nil, fmt.Errorf("docker tls is unimplemented")
