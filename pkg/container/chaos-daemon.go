@@ -23,7 +23,7 @@ import (
 
 const ChaosDaemon = "chaos-daemon"
 const ChaosDaemonPort = "31767/tcp"
-const ChaosDaemonImage = "docker.io/pingcap/chaos-daemon"
+const ChaosDaemonImage = "docker.io/pingcap/chaos-daemon:v1.0.2"
 const LockerLabel = "locker"
 
 const dockerSocket = "/var/run/docker.sock"

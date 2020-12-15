@@ -73,7 +73,7 @@ mod:
 	@git diff --exit-code -- go.sum go.mod
 
 # Generate code
-generate:
+generate: gen-proto
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
@@ -87,6 +87,8 @@ docker-push:
 log:
 	kubectl logs -f deployment/naglfar-controller-manager -n naglfar-system -c manager
 
+gen-proto:
+	protoc --go_out=plugins=grpc:. pkg/chaos/pb/chaos.proto
 
 install-controller-gen:
 ifeq (, $(shell which controller-gen))
@@ -97,6 +99,18 @@ ifeq (, $(shell which controller-gen))
 	go mod init tmp ;\
 	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+endif
+
+install-protoc-gen:
+ifeq (, $(shell which protoc-gen-go))
+	@{ \
+	set -e ;\
+	PROTOC_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$PROTOC_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/golang/protobuf/protoc-gen-go@v1.2.0 ;\
+	rm -rf $$PROTOC_GEN_TMP_DIR ;\
 	}
 endif
 

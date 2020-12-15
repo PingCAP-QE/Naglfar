@@ -15,7 +15,8 @@
 package chaos
 
 import (
-	"github.com/chaos-mesh/chaos-mesh/pkg/chaosdaemon/pb"
+	"github.com/PingCAP-QE/Naglfar/pkg/chaos/pb"
+
 	"google.golang.org/grpc"
 )
 
