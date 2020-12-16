@@ -42,27 +42,32 @@ func (client *Client) Run(name, image string, options RunOptions) (stat dockerTy
 		return
 	}
 
-	if stat, err = client.ContainerInspect(client.Ctx, name); err != nil {
-		if !docker.IsErrNotFound(err) {
-			return
-		}
-
-		_, err = client.ContainerCreate(client.Ctx, options.Config, options.HostConfig, options.NetworkingConfig, name)
-		if err != nil {
-			return
-		}
-
+	for {
 		stat, err = client.ContainerInspect(client.Ctx, name)
+
 		if err != nil {
-			return
+			if !docker.IsErrNotFound(err) {
+				return
+			}
+
+			_, err = client.ContainerCreate(client.Ctx, options.Config, options.HostConfig, options.NetworkingConfig, name)
+			if err != nil {
+				return
+			}
+
+			continue
 		}
-	}
 
-	if TimeIsZero(stat.State.StartedAt) {
-		err = client.ContainerStart(client.Ctx, name, dockerTypes.ContainerStartOptions{})
-	}
+		if TimeIsZero(stat.State.StartedAt) {
+			err = client.ContainerStart(client.Ctx, name, dockerTypes.ContainerStartOptions{})
+			if err != nil {
+				return
+			}
+			continue
+		}
 
-	return
+		return
+	}
 }
 
 func (client *Client) JustExec(name, image string, options RunOptions) (stdout bytes.Buffer, err error) {
