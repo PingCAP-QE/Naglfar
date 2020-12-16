@@ -87,6 +87,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 				Namespace: req.Namespace,
 				Name:      ct.Spec.ResourceRequest,
 			}, &rr); err != nil {
+				r.Recorder.Eventf(&ct, "Warning", "Install", err.Error())
 				return ctrl.Result{}, err
 			}
 			if rr.Status.State != naglfarv1.TestResourceRequestReady {

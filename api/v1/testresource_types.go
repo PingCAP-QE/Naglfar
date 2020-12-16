@@ -24,6 +24,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
@@ -51,7 +52,7 @@ func (r ResourceState) IsRequired() bool {
 	return r != "" && r != ResourcePending && r != ResourceFail
 }
 
-func (r ResourceState) ShouldUninstall() bool {
+func (r ResourceState) CouldUninstall() bool {
 	switch r {
 	case ResourceUninitialized, ResourceReady, ResourceFinish:
 		return true
@@ -171,6 +172,11 @@ type TestResourceStatus struct {
 
 	// +optional
 	PortBindings string `json:"portBindings,omitempty"`
+
+	// Records which CR uses this test resource
+	// For example, if workloada uses this resource, if workloadb wants to uses this resource too,
+	// it needs to wait workloada clean the `claimRef` field of this resource
+	ClaimRef *ref.Ref `json:"claimRef,omitempty"`
 }
 
 // +kubebuilder:object:root=true
