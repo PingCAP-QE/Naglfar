@@ -118,22 +118,15 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	}
 	defer dockerClient.Close()
 
-	machine.Status.ChaosPort, result.Requeue, err = r.tryLock(machine, dockerClient)
+	machine.Status.ChaosPort, err = r.tryLock(machine, dockerClient)
 	if err != nil {
 		r.Eventer.Event(machine, "Warning", "Lock", err.Error())
 		return
 	}
-	if result.Requeue {
-		return
-	}
 
-	machine.Status.Info, result.Requeue, err = r.fetchMachineInfo(machine, dockerClient)
+	machine.Status.Info, err = r.fetchMachineInfo(machine, dockerClient)
 	if err != nil {
 		r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
-		return
-	}
-
-	if result.Requeue {
 		return
 	}
 
@@ -214,15 +207,15 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (info *naglfarv1.MachineInfo, requeue bool, err error) {
+func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (info *naglfarv1.MachineInfo, err error) {
 	cfg, hostCfg := container.MachineStatCfg()
 
-	stdout, requeue, err := dockerClient.JustExec(container.MachineStat, container.MachineStatImage, dockerutil.RunOptions{
+	stdout, err := dockerClient.JustExec(container.MachineStat, container.MachineStatImage, dockerutil.RunOptions{
 		Config:     cfg,
 		HostConfig: hostCfg,
 	})
 
-	if err != nil || requeue {
+	if err != nil {
 		return
 	}
 
@@ -264,14 +257,14 @@ func makeMachineInfo(rawInfo *naglfarv1.MachineInfo) (*naglfarv1.MachineInfo, er
 	return info, nil
 }
 
-func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (chaosPort int, requeue bool, err error) {
+func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (chaosPort int, err error) {
 	cfg, hostCfg := container.ChaosDaemonCfg(string(machine.UID))
-	stat, requeue, err := dockerClient.Run(container.ChaosDaemon, container.ChaosDaemonImage, dockerutil.RunOptions{
+	stat, err := dockerClient.Run(container.ChaosDaemon, container.ChaosDaemonImage, dockerutil.RunOptions{
 		Config:     cfg,
 		HostConfig: hostCfg,
 	})
 
-	if err != nil || requeue {
+	if err != nil {
 		return
 	}
 

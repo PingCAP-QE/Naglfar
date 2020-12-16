@@ -33,7 +33,7 @@ type RunOptions struct {
 	NetworkingConfig *network.NetworkingConfig
 }
 
-func (client *Client) Run(name, image string, options RunOptions) (stat dockerTypes.ContainerJSON, requeue bool, err error) {
+func (client *Client) Run(name, image string, options RunOptions) (stat dockerTypes.ContainerJSON, err error) {
 	if options.Policy == "" {
 		options.Policy = naglfarv1.PullPolicyIfNotPresent
 	}
@@ -42,18 +42,20 @@ func (client *Client) Run(name, image string, options RunOptions) (stat dockerTy
 		return
 	}
 
-	stat, err = client.ContainerInspect(client.Ctx, name)
-
-	if err != nil {
+	if stat, err = client.ContainerInspect(client.Ctx, name); err != nil {
 		if !docker.IsErrNotFound(err) {
 			return
 		}
 
 		_, err = client.ContainerCreate(client.Ctx, options.Config, options.HostConfig, options.NetworkingConfig, name)
-		if err == nil {
-			requeue = true
+		if err != nil {
+			return
 		}
-		return
+
+		stat, err = client.ContainerInspect(client.Ctx, name)
+		if err != nil {
+			return
+		}
 	}
 
 	if TimeIsZero(stat.State.StartedAt) {
@@ -63,10 +65,10 @@ func (client *Client) Run(name, image string, options RunOptions) (stat dockerTy
 	return
 }
 
-func (client *Client) JustExec(name, image string, options RunOptions) (stdout bytes.Buffer, requeue bool, err error) {
-	stat, requeue, err := client.Run(name, image, options)
+func (client *Client) JustExec(name, image string, options RunOptions) (stdout bytes.Buffer, err error) {
+	stat, err := client.Run(name, image, options)
 
-	if err != nil || requeue {
+	if err != nil {
 		return
 	}
 
