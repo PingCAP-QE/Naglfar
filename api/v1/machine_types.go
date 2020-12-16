@@ -116,6 +116,10 @@ type MachineStatus struct {
 	// +optional
 	State MachineState `json:"state"`
 
+	// exposed port of chaos daemon
+	// +optional
+	ChaosPort int `json:"chaosPort"`
+
 	// +optional
 	Info *MachineInfo `json:"info,omitempty"`
 }
@@ -242,6 +246,10 @@ func (r *Machine) Rest(resources ResourceRefList) (rest *AvailableResource) {
 
 func (r *Machine) DockerURL() string {
 	return fmt.Sprintf("tcp://%s:%d", r.Spec.Host, r.Spec.DockerPort)
+}
+
+func (r *Machine) ChaosURL() string {
+	return fmt.Sprintf("%s:%d", r.Spec.Host, r.Status.ChaosPort)
 }
 
 func (r *Machine) DockerClient() (*docker.Client, error) {

@@ -391,10 +391,10 @@ func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles
 	for i := 0; i < len(roles); i++ {
 		roleStr += " -R " + roles[i]
 	}
-	moveCmd := fmt.Sprintf("mv /tmp/meta.yaml /root/.tiup/storage/cluster/clusters/"+clusterName+"/meta.yaml")
+	moveCmd := fmt.Sprintf("mv /tmp/meta.yaml /root/.tiup/storage/cluster/clusters/" + clusterName + "/meta.yaml")
 	reloadCmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload %s %s --ignore-config-check", clusterName, roleStr)
-	combineCmd := moveCmd+";"+reloadCmd
-	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`,combineCmd )
+	combineCmd := moveCmd + ";" + reloadCmd
+	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`, combineCmd)
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		c.log.Error(err, "run command on remote failed",

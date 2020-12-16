@@ -12,6 +12,7 @@ require (
 	github.com/docker/go-units v0.4.0
 	github.com/go-logr/logr v0.1.0
 	github.com/gobuffalo/packr v1.30.1
+	github.com/golang/protobuf v1.4.1
 	github.com/ngaut/log v0.0.0-20180314031856-b8e36e7ba5ac
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
@@ -21,6 +22,8 @@ require (
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
+	golang.org/x/net v0.0.0-20200520182314-0ba52f642ac2
+	google.golang.org/grpc v1.26.0
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/apimachinery v0.17.2
 	k8s.io/cli-runtime v0.17.2
