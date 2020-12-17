@@ -117,12 +117,13 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 
 		if machineRef, ok := relation.Status.ResourceToMachine[resourceKey]; ok {
 			var machine naglfarv1.Machine
+			var requeue bool
 			if err = r.Get(r.Ctx, machineRef.Namespaced(), &machine); err != nil {
 				// TODO: deal with not found
 				return
 			}
 
-			requeue, err := r.finalize(resource, &machine)
+			requeue, err = r.finalize(resource, &machine)
 			if err != nil {
 				return
 			}
@@ -544,11 +545,13 @@ func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource 
 }
 
 func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	var requeue bool
 	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
 	if err != nil {
 		return
 	}
-	requeue, err := r.finalize(resource, machine)
+
+	requeue, err = r.finalize(resource, machine)
 	if err != nil {
 		return
 	}
