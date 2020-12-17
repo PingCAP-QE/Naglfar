@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -155,6 +156,26 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) bool {
 	// TODO tidbcluster can't be null,check in webhook
 	return !reflect.DeepEqual(pre, cur)
+}
+
+func IsClusterConfigModified(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+	// TODO tidbcluster can't be null,check in webhook
+	return !reflect.DeepEqual(pre, cur)
+}
+
+func IsScale(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+	// TODO check
+	return len(pre.TiDB) != len(cur.TiDB) || len(pre.PD) != len(cur.PD) || len(pre.TiKV) != len(cur.TiKV)
+}
+
+func IsScaleIn(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+	// TODO check
+	return len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
+}
+
+func IsScaleOut(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+	// TODO check
+	return len(pre.TiDB) < len(cur.TiDB) || len(pre.PD) < len(cur.PD) || len(pre.TiKV) < len(cur.TiKV)
 }
 
 func IsVersionModified(pre naglfarv1.TiDBClusterVersion, cur naglfarv1.TiDBClusterVersion) bool {
@@ -360,12 +381,87 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 		return err
 	}
 
-	roles := c.diffServerConfigs(*ct.Status.PreServerConfigs, ct.Spec.TiDBCluster.ServerConfigs)
+	roles := c.diffServerConfigs(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs)
 
 	log.Info("RequestTopology is modified.", "changed roles", roles)
 
 	if err := c.reloadCluster(clusterName, []string{}, roles); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (c *ClusterManager) ScaleInCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
+	nodes := c.getScaleInNode(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster, clusterIPMaps)
+
+	log.Info("RequestTopology is modified.", "scale-in nodes", nodes)
+
+	var nodesStr string
+	for i := 0; i < len(nodes); i++ {
+		nodesStr += " --node " + nodes[i]
+	}
+
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster scale-in %s %s -y", clusterName, nodesStr)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		if strings.Contains(errStr, "specify another cluster name") {
+			return ErrClusterDuplicated{clusterName: clusterName}
+		}
+		return fmt.Errorf("scale-in cluster failed(%s): %s", err, errStr)
+	}
+	return nil
+}
+
+func (c *ClusterManager) ScaleOutCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
+	type ScaleOut struct {
+		TiDB []naglfarv1.TiDBSpec `yaml:"tidb_servers,omitempty"`
+
+		TiKV []naglfarv1.TiKVSpec `yaml:"tikv_servers,omitempty"`
+
+		PD []naglfarv1.PDSpec `yaml:"pd_servers,omitempty"`
+	}
+
+	var scaleOut ScaleOut
+	tidbs, pds, tikvs := c.getScaleOutRoles(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster, clusterIPMaps)
+	scaleOut.TiDB = tidbs
+	scaleOut.PD = pds
+	scaleOut.TiKV = tikvs
+	outfile, err := yaml.Marshal(scaleOut)
+
+	if err := c.writeScaleOutFileOnControl(outfile); err != nil {
+		return err
+	}
+
+	if err != nil {
+		return err
+	}
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster scale-out %s /root/scale-out.yaml -i %s -y", clusterName, insecureKeyPath)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		if strings.Contains(errStr, "specify another cluster name") {
+			return ErrClusterDuplicated{clusterName: clusterName}
+		}
+		return fmt.Errorf("scale-out cluster failed(%s): %s", err, errStr)
 	}
 	return nil
 }
@@ -415,6 +511,19 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
 	}
 	if err := client.Copy(bytes.NewReader(out), "/root/topology.yaml", "0655", int64(len(out))); err != nil {
+		return fmt.Errorf("error while copying file: %s", err)
+	}
+	return nil
+}
+
+func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
+	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
+	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
+	err := client.Connect()
+	if err != nil {
+		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
+	}
+	if err := client.Copy(bytes.NewReader(out), "/root/scale-out.yaml", "0655", int64(len(out))); err != nil {
 		return fmt.Errorf("error while copying file: %s", err)
 	}
 	return nil
@@ -578,4 +687,103 @@ func (c *ClusterManager) GenUnzipCommand(filePath string, destDir string) string
 		return "tar -zxf " + filePath + " -C " + destDir
 	}
 	return "tar -xf " + filePath + " -C " + destDir
+}
+
+func (c *ClusterManager) getScaleInNode(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster, clusterIPMaps map[string]string) []string {
+	var result []string
+	for i := 0; i < len(pre.TiDB); i++ {
+		var isExisted bool
+		for j := 0; j < len(cur.TiDB); j++ {
+			if reflect.DeepEqual(pre.TiDB[i], cur.TiDB[j]) {
+				isExisted = true
+			}
+		}
+		if !isExisted {
+			if pre.TiDB[i].Port == 0 {
+				pre.TiDB[i].Port = 4000
+			}
+			node := clusterIPMaps[pre.TiDB[i].Host] + ":" + strconv.Itoa(pre.TiDB[i].Port)
+			result = append(result, node)
+		}
+	}
+	for i := 0; i < len(pre.PD); i++ {
+		var isExisted bool
+		for j := 0; j < len(cur.PD); j++ {
+			if reflect.DeepEqual(pre.PD[i], cur.PD[j]) {
+				isExisted = true
+			}
+		}
+		if !isExisted {
+			if pre.PD[i].ClientPort == 0 {
+				pre.PD[i].ClientPort = 2379
+			}
+			node := clusterIPMaps[pre.PD[i].Host] + ":" + strconv.Itoa(pre.PD[i].ClientPort)
+			result = append(result, node)
+		}
+	}
+	for i := 0; i < len(pre.TiKV); i++ {
+		var isExisted bool
+		for j := 0; j < len(cur.TiKV); j++ {
+			if reflect.DeepEqual(pre.TiKV[i], cur.TiKV[j]) {
+				isExisted = true
+			}
+		}
+		if !isExisted {
+			if pre.TiKV[i].Port == 0 {
+				pre.TiKV[i].Port = 20160
+			}
+			node := clusterIPMaps[pre.TiKV[i].Host] + ":" + strconv.Itoa(pre.TiKV[i].Port)
+			result = append(result, node)
+		}
+	}
+	return result
+}
+
+func (c *ClusterManager) getScaleOutRoles(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster, clusterIPMaps map[string]string) ([]naglfarv1.TiDBSpec, []naglfarv1.PDSpec, []naglfarv1.TiKVSpec) {
+
+	var tidbs []naglfarv1.TiDBSpec
+	for i := 0; i < len(cur.TiDB); i++ {
+		var isExisted bool
+		for j := 0; j < len(pre.TiDB); j++ {
+			if reflect.DeepEqual(cur.TiDB[i], pre.TiDB[j]) {
+				isExisted = true
+			}
+		}
+		if !isExisted {
+			tmp := cur.TiDB[i]
+			tmp.Host = clusterIPMaps[tmp.Host]
+			tidbs = append(tidbs, tmp)
+		}
+	}
+
+	var pds []naglfarv1.PDSpec
+	for i := 0; i < len(cur.PD); i++ {
+		var isExisted bool
+		for j := 0; j < len(pre.PD); j++ {
+			if reflect.DeepEqual(cur.PD[i], pre.PD[j]) {
+				isExisted = true
+			}
+		}
+		if !isExisted {
+			tmp := cur.PD[i]
+			tmp.Host = clusterIPMaps[tmp.Host]
+			pds = append(pds, tmp)
+		}
+	}
+
+	var tikvs []naglfarv1.TiKVSpec
+	for i := 0; i < len(cur.TiKV); i++ {
+		var isExisted bool
+		for j := 0; j < len(pre.TiKV); j++ {
+			if reflect.DeepEqual(cur.TiKV[i], pre.TiKV[j]) {
+				isExisted = true
+			}
+		}
+		if !isExisted {
+			tmp := cur.TiKV[i]
+			tmp.Host = clusterIPMaps[tmp.Host]
+			tikvs = append(tikvs, tmp)
+		}
+	}
+	return tidbs, pds, tikvs
 }

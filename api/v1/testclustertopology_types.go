@@ -53,27 +53,27 @@ type TiDBSpec struct {
 	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
-	StatusPort int `json:"statusPort,omitempty"`
+	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
 
-	DeployDir string `json:"deployDir"`
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
 	// +optional
-	DataDir string `json:"dataDir,omitempty"`
+	DataDir string `json:"dataDir,omitempty" yaml:"data_dir"`
 	// +optional
-	LogDir string `json:"logDir,omitempty"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir"`
 }
 
 type PDSpec struct {
 	Host string `json:"host"`
 
 	// +optional
-	ClientPort int `json:"clientPort,omitempty"`
+	ClientPort int `json:"clientPort,omitempty" yaml:"client_port,omitempty"`
 	// +optional
-	PeerPort int `json:"peerPort,omitempty"`
+	PeerPort int `json:"peerPort,omitempty" yaml:"peer_port,omitempty"`
 
-	DeployDir string `json:"deployDir"`
-	DataDir   string `json:"dataDir"`
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir,omitempty" yaml:"data_dir"`
 	// +optional
-	LogDir string `json:"logDir,omitempty"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir"`
 }
 
 type TiKVSpec struct {
@@ -81,11 +81,11 @@ type TiKVSpec struct {
 	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
-	StatusPort int    `json:"statusPort,omitempty"`
-	DeployDir  string `json:"deployDir"`
-	DataDir    string `json:"dataDir"`
+	StatusPort int    `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
+	DeployDir  string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir    string `json:"dataDir,omitempty" yaml:"data_dir"`
 	// +optional
-	LogDir string `json:"logDir,omitempty"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir"`
 }
 
 type PumpSpec struct {
@@ -208,8 +208,8 @@ type TestClusterTopologyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	PreServerConfigs *ServerConfigs      `json:"preServerConfigs,omitempty"`
-	PreVersion       *TiDBClusterVersion `json:"preVersion,omitempty"`
+	PreTiDBCluster *TiDBCluster `json:"preTiDBCluster,omitempty""`
+
 	// default Pending
 	State ClusterTopologyState `json:"state,omitempty"`
 }
