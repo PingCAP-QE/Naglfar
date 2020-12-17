@@ -122,10 +122,12 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 				return
 			}
 
-			result.Requeue, err = r.finalize(resource, &machine)
-
-			if result.Requeue || err != nil {
+			requeue, err := r.finalize(resource, &machine)
+			if err != nil {
 				return
+			}
+			if requeue {
+				return ctrl.Result{RequeueAfter: time.Second}, nil
 			}
 
 			machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
@@ -546,9 +548,12 @@ func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource
 	if err != nil {
 		return
 	}
-	result.Requeue, err = r.finalize(resource, machine)
-	if result.Requeue || err != nil {
+	requeue, err := r.finalize(resource, machine)
+	if err != nil {
 		return
+	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	r.Eventer.Event(resource, "Normal", "uninstall", "uninstall resource successfully")
 	// clear all container spec
