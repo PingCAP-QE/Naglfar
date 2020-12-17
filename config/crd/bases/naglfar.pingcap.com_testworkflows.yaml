@@ -70,6 +70,30 @@ spec:
                               control:
                                 description: Control machine host
                                 type: string
+                              drainer:
+                                items:
+                                  properties:
+                                    commitTS:
+                                      format: int64
+                                      type: integer
+                                    config:
+                                      type: string
+                                    dataDir:
+                                      type: string
+                                    deployDir:
+                                      type: string
+                                    host:
+                                      type: string
+                                    port:
+                                      type: integer
+                                    sshPort:
+                                      type: integer
+                                  required:
+                                  - config
+                                  - dataDir
+                                  - host
+                                  type: object
+                                type: array
                               grafana:
                                 items:
                                   properties:
@@ -122,6 +146,26 @@ spec:
                                   required:
                                   - dataDir
                                   - deployDir
+                                  - host
+                                  type: object
+                                type: array
+                              pump:
+                                items:
+                                  properties:
+                                    config:
+                                      type: string
+                                    dataDir:
+                                      type: string
+                                    deployDir:
+                                      type: string
+                                    host:
+                                      type: string
+                                    port:
+                                      type: integer
+                                    sshPort:
+                                      type: integer
+                                  required:
+                                  - dataDir
                                   - host
                                   type: object
                                 type: array
