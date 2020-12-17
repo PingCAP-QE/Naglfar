@@ -24,7 +24,6 @@ import (
 	dockerTypes "github.com/docker/docker/api/types"
 	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
-	"github.com/ngaut/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -124,7 +123,7 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 		return
 	}
 
-	machine.Status.Info, err = r.fetchMachineInfo(machine, dockerClient)
+	machine.Status.Info, err = r.fetchMachineInfo(log, machine, dockerClient)
 	if err != nil {
 		r.Eventer.Event(machine, "Warning", "FetchInfo", err.Error())
 		return
@@ -207,7 +206,7 @@ func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *MachineReconciler) fetchMachineInfo(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (info *naglfarv1.MachineInfo, err error) {
+func (r *MachineReconciler) fetchMachineInfo(log logr.Logger, machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (info *naglfarv1.MachineInfo, err error) {
 	cfg, hostCfg := container.MachineStatCfg()
 
 	stdout, err := dockerClient.JustExec(container.MachineStat, container.MachineStatImage, dockerutil.RunOptions{
