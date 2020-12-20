@@ -51,20 +51,23 @@ type TiDBSpec struct {
 	Host string `json:"host"`
 
 	// +optional
+	SshPort int `json:"sshPort,omitempty" yaml:"ssh_port,omitempty"`
+	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
 	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
 
 	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+
 	// +optional
-	DataDir string `json:"dataDir,omitempty" yaml:"data_dir"`
-	// +optional
-	LogDir string `json:"logDir,omitempty" yaml:"log_dir"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
 }
 
 type PDSpec struct {
 	Host string `json:"host"`
 
+	// +optional
+	SshPort int `json:"sshPort,omitempty" yaml:"ssh_port,omitempty"`
 	// +optional
 	ClientPort int `json:"clientPort,omitempty" yaml:"client_port,omitempty"`
 	// +optional
@@ -72,6 +75,7 @@ type PDSpec struct {
 
 	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
 	DataDir   string `json:"dataDir,omitempty" yaml:"data_dir"`
+
 	// +optional
 	LogDir string `json:"logDir,omitempty" yaml:"log_dir"`
 }
@@ -79,13 +83,17 @@ type PDSpec struct {
 type TiKVSpec struct {
 	Host string `json:"host"`
 	// +optional
+	SshPort int `json:"sshPort,omitempty" yaml:"ssh_port,omitempty"`
+	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
-	StatusPort int    `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
-	DeployDir  string `json:"deployDir" yaml:"deploy_dir"`
-	DataDir    string `json:"dataDir,omitempty" yaml:"data_dir"`
+	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
+
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir" yaml:"data_dir"`
+
 	// +optional
-	LogDir string `json:"logDir,omitempty" yaml:"log_dir"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
 }
 
 type PumpSpec struct {

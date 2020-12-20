@@ -126,6 +126,8 @@ spec:
                         type: string
                       peerPort:
                         type: integer
+                      sshPort:
+                        type: integer
                     required:
                     - deployDir
                     - host
@@ -164,8 +166,6 @@ spec:
                   description: TiDB machine hosts
                   items:
                     properties:
-                      dataDir:
-                        type: string
                       deployDir:
                         type: string
                       host:
@@ -173,6 +173,8 @@ spec:
                       logDir:
                         type: string
                       port:
+                        type: integer
+                      sshPort:
                         type: integer
                       statusPort:
                         type: integer
@@ -195,9 +197,12 @@ spec:
                         type: string
                       port:
                         type: integer
+                      sshPort:
+                        type: integer
                       statusPort:
                         type: integer
                     required:
+                    - dataDir
                     - deployDir
                     - host
                     type: object
@@ -303,6 +308,8 @@ spec:
                         type: string
                       peerPort:
                         type: integer
+                      sshPort:
+                        type: integer
                     required:
                     - deployDir
                     - host
@@ -341,8 +348,6 @@ spec:
                   description: TiDB machine hosts
                   items:
                     properties:
-                      dataDir:
-                        type: string
                       deployDir:
                         type: string
                       host:
@@ -350,6 +355,8 @@ spec:
                       logDir:
                         type: string
                       port:
+                        type: integer
+                      sshPort:
                         type: integer
                       statusPort:
                         type: integer
@@ -372,9 +379,12 @@ spec:
                         type: string
                       port:
                         type: integer
+                      sshPort:
+                        type: integer
                       statusPort:
                         type: integer
                     required:
+                    - dataDir
                     - deployDir
                     - host
                     type: object

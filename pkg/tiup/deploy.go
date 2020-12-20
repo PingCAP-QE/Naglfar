@@ -752,6 +752,22 @@ func (c *ClusterManager) getScaleOutRoles(pre naglfarv1.TiDBCluster, cur naglfar
 		if !isExisted {
 			tmp := cur.TiDB[i]
 			tmp.Host = clusterIPMaps[tmp.Host]
+			// if nil, set default
+			if tmp.SshPort == 0 {
+				tmp.SshPort = 22
+			}
+			if tmp.Port == 0 {
+				tmp.Port = 4000
+			}
+			if tmp.StatusPort == 0 {
+				tmp.StatusPort = 10080
+			}
+			if tmp.DeployDir == "" {
+				tmp.DeployDir = "/data/deploy/install/deploy/tidb-4000"
+			}
+			if tmp.LogDir == "" {
+				tmp.LogDir = "/data/deploy/install/log/tidb-4000"
+			}
 			tidbs = append(tidbs, tmp)
 		}
 	}
@@ -767,6 +783,26 @@ func (c *ClusterManager) getScaleOutRoles(pre naglfarv1.TiDBCluster, cur naglfar
 		if !isExisted {
 			tmp := cur.PD[i]
 			tmp.Host = clusterIPMaps[tmp.Host]
+
+			if tmp.SshPort == 0 {
+				tmp.SshPort = 22
+			}
+			if tmp.ClientPort == 0 {
+				tmp.ClientPort = 2379
+			}
+			if tmp.PeerPort == 0 {
+				tmp.PeerPort = 2380
+			}
+			if tmp.DataDir == "" {
+				tmp.DataDir = "/data/deploy/install/data/pd-2379"
+			}
+			if tmp.DeployDir == "" {
+				tmp.DeployDir = "/data/deploy/install/deploy/pd-2379"
+			}
+			if tmp.LogDir == "" {
+				tmp.LogDir = "/data/deploy/install/log/pd-2379"
+			}
+
 			pds = append(pds, tmp)
 		}
 	}
@@ -782,6 +818,26 @@ func (c *ClusterManager) getScaleOutRoles(pre naglfarv1.TiDBCluster, cur naglfar
 		if !isExisted {
 			tmp := cur.TiKV[i]
 			tmp.Host = clusterIPMaps[tmp.Host]
+
+			if tmp.SshPort == 0 {
+				tmp.SshPort = 22
+			}
+			if tmp.Port == 0 {
+				tmp.Port = 20160
+			}
+			if tmp.StatusPort == 0 {
+				tmp.StatusPort = 20180
+			}
+			if tmp.DataDir == "" {
+				tmp.DataDir = "/data/deploy/install/data/tikv-20160"
+			}
+			if tmp.DeployDir == "" {
+				tmp.DeployDir = "/data/deploy/install/deploy/tikv-20160"
+			}
+			if tmp.LogDir == "" {
+				tmp.LogDir = "/data/deploy/install/log/tikv-20160"
+			}
+
 			tikvs = append(tikvs, tmp)
 		}
 	}
