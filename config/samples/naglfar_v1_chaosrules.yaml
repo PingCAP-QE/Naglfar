@@ -1,0 +1,7 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: ChaosRules
+metadata:
+  name: chaosrules-sample
+spec:
+  # Add fields here
+  foo: bar

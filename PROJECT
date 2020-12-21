@@ -22,4 +22,10 @@ resources:
 - group: naglfar
   kind: Relationship
   version: v1
+- group: naglfar
+  kind: ChaosRules
+  version: v1
+- group: naglfar
+  kind: ChaosApply
+  version: v1
 version: "2"

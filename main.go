@@ -144,6 +144,14 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "TestClusterTopology")
 		os.Exit(1)
 	}
+	if err = (&controllers.ChaosApplyReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("ChaosApply"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ChaosApply")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

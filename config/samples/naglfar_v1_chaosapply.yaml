@@ -1,0 +1,7 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: ChaosApply
+metadata:
+  name: chaosapply-sample
+spec:
+  # Add fields here
+  foo: bar

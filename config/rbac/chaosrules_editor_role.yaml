@@ -1,0 +1,24 @@
+# permissions for end users to edit chaosrules.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaosrules-editor-role
+rules:
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - chaosrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - chaosrules/status
+  verbs:
+  - get
