@@ -517,9 +517,12 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 }
 
 func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
-	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
+	clientConfig, err := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
+	if err != nil {
+		return fmt.Errorf("generate client privatekey failed: %s", err)
+	}
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
-	err := client.Connect()
+	err = client.Connect()
 	if err != nil {
 		return fmt.Errorf("couldn't establish a connection to the remote server: %s", err)
 	}

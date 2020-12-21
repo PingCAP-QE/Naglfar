@@ -217,18 +217,11 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	filterClusterResources := func() []*naglfarv1.TestResource {
 		allHosts := ct.Spec.TiDBCluster.AllHosts()
 		result := make([]*naglfarv1.TestResource, 0)
-		for idx, item := range resourceList.Items {
+		for idx := range resourceList.Items {
+			item := &resourceList.Items[idx]
 			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, &resourceList.Items[idx])
+				result = append(result, item)
 			}
-		}
-		return result
-	}
-
-	hostname2ClusterIP := func(resourceList naglfarv1.TestResourceList) map[string]string {
-		result := make(map[string]string)
-		for _, item := range resourceList.Items {
-			result[item.Name] = item.Status.ClusterIP
 		}
 		return result
 	}
@@ -285,9 +278,10 @@ func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, c
 	filterClusterResources := func() []*naglfarv1.TestResource {
 		allHosts := ct.Spec.TiDBCluster.AllHosts()
 		result := make([]*naglfarv1.TestResource, 0)
-		for idx, item := range resourceList.Items {
+		for idx := range resourceList.Items {
+			item := &resourceList.Items[idx]
 			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, &resourceList.Items[idx])
+				result = append(result, item)
 			}
 		}
 		return result
@@ -315,22 +309,15 @@ func (r *TestClusterTopologyReconciler) scaleInTiDBCluster(ctx context.Context, 
 	filterClusterResources := func() []*naglfarv1.TestResource {
 		allHosts := ct.Spec.TiDBCluster.AllHosts()
 		result := make([]*naglfarv1.TestResource, 0)
-		for idx, item := range resourceList.Items {
+		for idx := range resourceList.Items {
+			item := &resourceList.Items[idx]
 			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, &resourceList.Items[idx])
+				result = append(result, item)
 			}
 		}
 		return result
 	}
 	resources = filterClusterResources()
-
-	hostname2ClusterIP := func(resourceList naglfarv1.TestResourceList) map[string]string {
-		result := make(map[string]string)
-		for _, item := range resourceList.Items {
-			result[item.Name] = item.Status.ClusterIP
-		}
-		return result
-	}
 
 	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
 
@@ -353,22 +340,14 @@ func (r *TestClusterTopologyReconciler) scaleOutTiDBCluster(ctx context.Context,
 	filterClusterResources := func() []*naglfarv1.TestResource {
 		allHosts := ct.Spec.TiDBCluster.AllHosts()
 		result := make([]*naglfarv1.TestResource, 0)
-		for idx, item := range resourceList.Items {
+		for idx, _ := range resourceList.Items {
+			item := &resourceList.Items[idx]
 			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, &resourceList.Items[idx])
+				result = append(result, item)
 			}
 		}
 		return result
 	}
-
-	hostname2ClusterIP := func(resourceList naglfarv1.TestResourceList) map[string]string {
-		result := make(map[string]string)
-		for _, item := range resourceList.Items {
-			result[item.Name] = item.Status.ClusterIP
-		}
-		return result
-	}
-
 	resources = filterClusterResources()
 	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
 	if err != nil {
@@ -504,4 +483,13 @@ func buildTiDBClusterInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*n
 		envs = append(envs, fmt.Sprintf("prometheus%d=%s:%d", idx, item.Host, item.Port))
 	}
 	return
+}
+
+func hostname2ClusterIP(resourceList naglfarv1.TestResourceList) map[string]string {
+	result := make(map[string]string)
+	for idx := range resourceList.Items {
+		item := &resourceList.Items[idx]
+		result[item.Name] = item.Status.ClusterIP
+	}
+	return result
 }
