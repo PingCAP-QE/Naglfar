@@ -50,6 +50,7 @@ type ChaosApplyInstance struct {
 // +kubebuilder:object:root=true
 
 // ChaosApply is the Schema for the chaosapplies API
+// +kubebuilder:subresource:status
 type ChaosApply struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
