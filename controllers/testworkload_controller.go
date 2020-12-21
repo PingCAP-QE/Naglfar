@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
@@ -131,6 +132,12 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 			r.Recorder.Event(workload, "Warning", "Precondition", err.Error())
 			return ctrl.Result{}, err
 		}
+		if workloadNode.Status.ClaimRef != nil && *workloadNode.Status.ClaimRef != ref.CreateRef(&workload.ObjectMeta) {
+			r.Recorder.Eventf(workload, "Warning", "Precondition", "node %s is occupied by %s",
+				ref.CreateRef(&workloadNode.ObjectMeta).Key(),
+				workloadNode.Status.ClaimRef.Key())
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 		switch workloadNode.Status.State {
 		case naglfarv1.ResourceDestroy:
 			return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -138,6 +145,10 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized:
 			if workloadNode.Status.Image == "" {
+				self := ref.CreateRef(&workload.ObjectMeta)
+				// claim occupy
+				workloadNode.Status.ClaimRef = &self
+
 				r.setContainerSpec(&workloadNode.Status, workload, &item)
 				topologyEnvs, err := r.buildTopologyEnvs(&workload.Spec, topologies, resourceList)
 				if err != nil {
@@ -145,11 +156,10 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 					return ctrl.Result{}, err
 				}
 				workloadNode.Status.Envs = append(workloadNode.Status.Envs, topologyEnvs...)
-
-				r.Recorder.Event(workload, "Normal", "Install", fmt.Sprintf("preparing the workload: %s", item.Name))
 				if err := r.Status().Update(ctx, workloadNode); err != nil {
 					return ctrl.Result{}, err
 				}
+				r.Recorder.Event(workload, "Normal", "Install", fmt.Sprintf("preparing the workload: %s", item.Name))
 			} else if workloadNode.Status.Image != item.DockerContainer.Image {
 				err := fmt.Errorf("resource %s has installed a conflict image", workloadNode.Name)
 				r.Recorder.Event(workload, "Warning", "Precondition", err.Error())
@@ -276,8 +286,10 @@ func (r *TestWorkloadReconciler) uninstallWorkload(ctx context.Context, workload
 		if workloadNode == nil {
 			continue
 		}
-		if workloadNode.Status.State.ShouldUninstall() {
+		if workloadNode.Status.State.CouldUninstall() {
 			workloadNode.Status.State = naglfarv1.ResourceDestroy
+			// release claim
+			workloadNode.Status.ClaimRef = nil
 			if r.Status().Update(ctx, workloadNode); err != nil {
 				return err
 			}

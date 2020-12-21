@@ -101,6 +101,27 @@ spec:
               items:
                 type: string
               type: array
+            claimRef:
+              description: Records which CR uses this test resource For example, if
+                workloada uses this resource, if workloadb wants to uses this resource
+                too, it needs to wait workloada clean the `claimRef` field of this
+                resource
+              properties:
+                name:
+                  type: string
+                namespace:
+                  type: string
+                uid:
+                  description: UID is a type that holds unique ID values, including
+                    UUIDs.  Because we don't ONLY use UUIDs, this is an alias to string.  Being
+                    a type captures intent and helps make sure that UIDs and names
+                    do not get conflated.
+                  type: string
+              required:
+              - name
+              - namespace
+              - uid
+              type: object
             clusterIP:
               description: ClusterIP is the ip address of the container in the overlay(or
                 calico) network

@@ -87,6 +87,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 				Namespace: req.Namespace,
 				Name:      ct.Spec.ResourceRequest,
 			}, &rr); err != nil {
+				r.Recorder.Eventf(&ct, "Warning", "Install", err.Error())
 				return ctrl.Result{}, err
 			}
 			if rr.Status.State != naglfarv1.TestResourceRequestReady {
@@ -184,9 +185,10 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	filterClusterResources := func() []*naglfarv1.TestResource {
 		allHosts := ct.Spec.TiDBCluster.AllHosts()
 		result := make([]*naglfarv1.TestResource, 0)
-		for idx, item := range resourceList.Items {
+		for idx := range resourceList.Items {
+			item := &resourceList.Items[idx]
 			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, &resourceList.Items[idx])
+				result = append(result, item)
 			}
 		}
 		return result
@@ -194,7 +196,8 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 
 	hostname2ClusterIP := func(resourceList naglfarv1.TestResourceList) map[string]string {
 		result := make(map[string]string)
-		for _, item := range resourceList.Items {
+		for idx := range resourceList.Items {
+			item := &resourceList.Items[idx]
 			result[item.Name] = item.Status.ClusterIP
 		}
 		return result
@@ -252,9 +255,10 @@ func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, c
 	filterClusterResources := func() []*naglfarv1.TestResource {
 		allHosts := ct.Spec.TiDBCluster.AllHosts()
 		result := make([]*naglfarv1.TestResource, 0)
-		for idx, item := range resourceList.Items {
+		for idx := range resourceList.Items {
+			item := &resourceList.Items[idx]
 			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, &resourceList.Items[idx])
+				result = append(result, item)
 			}
 		}
 		return result
