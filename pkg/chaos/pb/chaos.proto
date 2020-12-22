@@ -5,24 +5,24 @@ package pb;
 import "google/protobuf/empty.proto";
 
 service ChaosDaemon {
-  rpc SetTcs(TcsRequest) returns (google.protobuf.Empty) {}
+  rpc SetTcs(TcsRequest) returns(google.protobuf.Empty) {}
 
-  rpc FlushIPSets(IPSetsRequest) returns (google.protobuf.Empty) {}
+  rpc FlushIPSets(IPSetsRequest) returns(google.protobuf.Empty) {}
 
-  rpc SetIptablesChains(IptablesChainsRequest) returns (google.protobuf.Empty) {}
+  rpc SetIptablesChains(IptablesChainsRequest) returns(google.protobuf.Empty) {}
 
-  rpc SetTimeOffset(TimeRequest) returns (google.protobuf.Empty) {}
-  rpc RecoverTimeOffset(TimeRequest) returns (google.protobuf.Empty) {}
+  rpc SetTimeOffset(TimeRequest) returns(google.protobuf.Empty) {}
+  rpc RecoverTimeOffset(TimeRequest) returns(google.protobuf.Empty) {}
 
-  rpc ContainerKill(ContainerRequest) returns (google.protobuf.Empty) {}
-  rpc ContainerGetPid (ContainerRequest) returns (ContainerResponse) {}
+  rpc ContainerKill(ContainerRequest) returns(google.protobuf.Empty) {}
+  rpc ContainerGetPid(ContainerRequest) returns(ContainerResponse) {}
 
-  rpc ExecStressors (ExecStressRequest) returns (ExecStressResponse) {}
-  rpc CancelStressors (CancelStressRequest) returns (google.protobuf.Empty) {}
+  rpc ExecStressors(ExecStressRequest) returns(ExecStressResponse) {}
+  rpc CancelStressors(CancelStressRequest) returns(google.protobuf.Empty) {}
 
-  rpc ApplyIoChaos(ApplyIoChaosRequest) returns (ApplyIoChaosResponse) {}
+  rpc ApplyIoChaos(ApplyIoChaosRequest) returns(ApplyIoChaosResponse) {}
 
-  rpc SetDNSServer (SetDNSServerRequest) returns (google.protobuf.Empty) {}
+  rpc SetDNSServer(SetDNSServerRequest) returns(google.protobuf.Empty) {}
 }
 
 message TcHandle {
@@ -30,14 +30,12 @@ message TcHandle {
   uint32 minor = 2;
 }
 
-message ContainerRequest{
+message ContainerRequest {
   ContainerAction action = 1;
   string container_id = 2;
 }
 
-message ContainerResponse{
- uint32 pid = 1;
-}
+message ContainerResponse { uint32 pid = 1; }
 
 message NetemRequest {
   Netem netem = 1;
@@ -90,8 +88,8 @@ message Qdisc {
 }
 
 message EmatchFilterRequest {
-    EmatchFilter filter = 1;
-    string container_id = 2;
+  EmatchFilter filter = 1;
+  string container_id = 2;
 }
 
 message EmatchFilter {
@@ -105,9 +103,7 @@ message TcFilterRequest {
   string container_id = 2;
 }
 
-message TcFilter {
-  TcHandle parent = 1;
-}
+message TcFilter { TcHandle parent = 1; }
 
 message IPSetsRequest {
   repeated IPSet ipsets = 1;
@@ -126,10 +122,7 @@ message IptablesChainsRequest {
 
 message Chain {
   string name = 1;
-  enum Direction {
-    INPUT = 0;
-    OUTPUT = 1;
-  }
+  enum Direction { INPUT = 0; OUTPUT = 1; }
   Direction direction = 2;
   repeated string ipsets = 3;
   string target = 4;
@@ -146,18 +139,12 @@ message TimeRequest {
 }
 
 message ContainerAction {
-  enum Action {
-      KILL = 0;
-      GETPID = 1;
-  }
+  enum Action { KILL = 0; GETPID = 1; }
   Action action = 1;
 }
 
 message ExecStressRequest {
-  enum Scope {
-    CONTAINER = 0;
-    POD = 1;
-  }
+  enum Scope { CONTAINER = 0; POD = 1; }
   Scope scope = 1;
   string target = 2;
   string stressors = 3;
@@ -194,10 +181,7 @@ message TcsRequest {
 }
 
 message Tc {
-  enum Type {
-    NETEM = 0;
-    BANDWIDTH = 1;
-  }
+  enum Type { NETEM = 0; BANDWIDTH = 1; }
   Type type = 1;
   Netem netem = 2;
   Tbf tbf = 3;

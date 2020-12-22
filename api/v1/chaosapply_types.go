@@ -27,19 +27,22 @@ type ChaosApplySpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of ChaosApply. Edit ChaosApply_types.go to remove/update
-	Resource string `json:"resource"`
-	Rules    string `json:"rules"`
+	Request string `json:"request"`
+	Rules   string `json:"rules"`
 }
 
 // ChaosApplyStatus defines the observed state of ChaosApply
 type ChaosApplyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	ApplyTable map[string]*ChaosResourcesInstance
+}
 
-	Tcs        bool                `json:"tcs,omitempty"`
-	TimeOffset bool                `json:"timeOffset,omitempty"`
-	Stress     *ChaosApplyInstance `json:"stress,omitempty"`
-	Io         *ChaosApplyInstance `json:"io,omitempty"`
+type ChaosResourcesInstance struct {
+	Tcs        bool `json:"tcs,omitempty"`
+	TimeOffset bool `json:"timeOffset,omitempty"`
+	Stress     bool `json:"stress,omitempty"`
+	Io         bool `json:"io,omitempty"`
 }
 
 type ChaosApplyInstance struct {
