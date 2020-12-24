@@ -341,9 +341,13 @@ func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*na
 	}
 	for _, item := range spec.TiDBServers {
 		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.StatusPort))
 	}
 	for _, item := range spec.PDServers {
 		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.ClientPort))
+	}
+	for _, item := range spec.TiKVServers {
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.StatusPort))
 	}
 	for _, item := range spec.Grafana {
 		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
