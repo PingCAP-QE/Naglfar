@@ -158,22 +158,22 @@ func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerCon
 	return !reflect.DeepEqual(pre, cur)
 }
 
-func IsClusterConfigModified(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+func IsClusterConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 	// TODO tidbcluster can't be null,check in webhook
 	return !reflect.DeepEqual(pre, cur)
 }
 
-func IsScale(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+func IsScale(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 	// TODO check
 	return len(pre.TiDB) != len(cur.TiDB) || len(pre.PD) != len(cur.PD) || len(pre.TiKV) != len(cur.TiKV)
 }
 
-func IsScaleIn(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+func IsScaleIn(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 	// TODO check
 	return len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
 }
 
-func IsScaleOut(pre naglfarv1.TiDBCluster, cur naglfarv1.TiDBCluster) bool {
+func IsScaleOut(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 	// TODO check
 	return len(pre.TiDB) < len(cur.TiDB) || len(pre.PD) < len(cur.PD) || len(pre.TiKV) < len(cur.TiKV)
 }
@@ -194,6 +194,10 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 	spec.GlobalOptions = tiupSpec.GlobalOptions{
 		User:    "root",
 		SSHPort: 22,
+	}
+	if ctf.TiDBCluster.Global != nil {
+		spec.GlobalOptions.DataDir = ctf.TiDBCluster.Global.DataDir
+		spec.GlobalOptions.DeployDir = ctf.TiDBCluster.Global.DeployDir
 	}
 	if err := setServerConfigs(&spec, ctf.TiDBCluster.ServerConfigs); err != nil {
 		err = fmt.Errorf("set serverConfigs failed: %v", err)
@@ -433,6 +437,20 @@ func (c *ClusterManager) ScaleOutCluster(log logr.Logger, clusterName string, ct
 
 	var scaleOut ScaleOut
 	tidbs, pds, tikvs := c.getScaleOutRoles(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster, clusterIPMaps)
+	var scaleOutStr string
+	scaleOutStr += "tidbs: "
+	for i := 0; i < len(tidbs); i++ {
+		scaleOutStr += tidbs[i].Host + ":" + strconv.Itoa(tidbs[i].Port) + " "
+	}
+	scaleOutStr += "pds: "
+	for i := 0; i < len(pds); i++ {
+		scaleOutStr += pds[i].Host + ":" + strconv.Itoa(pds[i].ClientPort) + " "
+	}
+	scaleOutStr += "tikvs: "
+	for i := 0; i < len(tikvs); i++ {
+		scaleOutStr += tikvs[i].Host + ":" + strconv.Itoa(tikvs[i].Port) + " "
+	}
+	log.Info("RequestTopology is modified.", "scale-out nodes: ", scaleOutStr)
 	scaleOut.TiDB = tidbs
 	scaleOut.PD = pds
 	scaleOut.TiKV = tikvs
@@ -755,21 +773,11 @@ func (c *ClusterManager) getScaleOutRoles(pre naglfarv1.TiDBCluster, cur naglfar
 		if !isExisted {
 			tmp := cur.TiDB[i]
 			tmp.Host = clusterIPMaps[tmp.Host]
-			// if nil, set default
-			if tmp.SshPort == 0 {
-				tmp.SshPort = 22
-			}
 			if tmp.Port == 0 {
 				tmp.Port = 4000
 			}
 			if tmp.StatusPort == 0 {
 				tmp.StatusPort = 10080
-			}
-			if tmp.DeployDir == "" {
-				tmp.DeployDir = "/data/deploy/install/deploy/tidb-4000"
-			}
-			if tmp.LogDir == "" {
-				tmp.LogDir = "/data/deploy/install/log/tidb-4000"
 			}
 			tidbs = append(tidbs, tmp)
 		}
@@ -787,25 +795,12 @@ func (c *ClusterManager) getScaleOutRoles(pre naglfarv1.TiDBCluster, cur naglfar
 			tmp := cur.PD[i]
 			tmp.Host = clusterIPMaps[tmp.Host]
 
-			if tmp.SshPort == 0 {
-				tmp.SshPort = 22
-			}
 			if tmp.ClientPort == 0 {
 				tmp.ClientPort = 2379
 			}
 			if tmp.PeerPort == 0 {
 				tmp.PeerPort = 2380
 			}
-			if tmp.DataDir == "" {
-				tmp.DataDir = "/data/deploy/install/data/pd-2379"
-			}
-			if tmp.DeployDir == "" {
-				tmp.DeployDir = "/data/deploy/install/deploy/pd-2379"
-			}
-			if tmp.LogDir == "" {
-				tmp.LogDir = "/data/deploy/install/log/pd-2379"
-			}
-
 			pds = append(pds, tmp)
 		}
 	}
@@ -822,25 +817,12 @@ func (c *ClusterManager) getScaleOutRoles(pre naglfarv1.TiDBCluster, cur naglfar
 			tmp := cur.TiKV[i]
 			tmp.Host = clusterIPMaps[tmp.Host]
 
-			if tmp.SshPort == 0 {
-				tmp.SshPort = 22
-			}
 			if tmp.Port == 0 {
 				tmp.Port = 20160
 			}
 			if tmp.StatusPort == 0 {
 				tmp.StatusPort = 20180
 			}
-			if tmp.DataDir == "" {
-				tmp.DataDir = "/data/deploy/install/data/tikv-20160"
-			}
-			if tmp.DeployDir == "" {
-				tmp.DeployDir = "/data/deploy/install/deploy/tikv-20160"
-			}
-			if tmp.LogDir == "" {
-				tmp.LogDir = "/data/deploy/install/log/tikv-20160"
-			}
-
 			tikvs = append(tikvs, tmp)
 		}
 	}

@@ -77,6 +77,16 @@ spec:
                     - host
                     type: object
                   type: array
+                global:
+                  properties:
+                    dataDir:
+                      type: string
+                    deployDir:
+                      type: string
+                  required:
+                  - dataDir
+                  - deployDir
+                  type: object
                 grafana:
                   items:
                     properties:
@@ -126,8 +136,6 @@ spec:
                         type: string
                       peerPort:
                         type: integer
-                      sshPort:
-                        type: integer
                     required:
                     - deployDir
                     - host
@@ -174,8 +182,6 @@ spec:
                         type: string
                       port:
                         type: integer
-                      sshPort:
-                        type: integer
                       statusPort:
                         type: integer
                     required:
@@ -196,8 +202,6 @@ spec:
                       logDir:
                         type: string
                       port:
-                        type: integer
-                      sshPort:
                         type: integer
                       statusPort:
                         type: integer
@@ -231,6 +235,7 @@ spec:
           description: TestClusterTopologyStatus defines the observed state of TestClusterTopology
           properties:
             preTiDBCluster:
+              description: Save tidb cluster configuration before update and scale-in/out
               properties:
                 control:
                   description: Control machine host
@@ -259,6 +264,16 @@ spec:
                     - host
                     type: object
                   type: array
+                global:
+                  properties:
+                    dataDir:
+                      type: string
+                    deployDir:
+                      type: string
+                  required:
+                  - dataDir
+                  - deployDir
+                  type: object
                 grafana:
                   items:
                     properties:
@@ -308,8 +323,6 @@ spec:
                         type: string
                       peerPort:
                         type: integer
-                      sshPort:
-                        type: integer
                     required:
                     - deployDir
                     - host
@@ -356,8 +369,6 @@ spec:
                         type: string
                       port:
                         type: integer
-                      sshPort:
-                        type: integer
                       statusPort:
                         type: integer
                     required:
@@ -378,8 +389,6 @@ spec:
                       logDir:
                         type: string
                       port:
-                        type: integer
-                      sshPort:
                         type: integer
                       statusPort:
                         type: integer

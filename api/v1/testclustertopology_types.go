@@ -51,8 +51,6 @@ type TiDBSpec struct {
 	Host string `json:"host"`
 
 	// +optional
-	SshPort int `json:"sshPort,omitempty" yaml:"ssh_port,omitempty"`
-	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
 	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
@@ -67,8 +65,6 @@ type PDSpec struct {
 	Host string `json:"host"`
 
 	// +optional
-	SshPort int `json:"sshPort,omitempty" yaml:"ssh_port,omitempty"`
-	// +optional
 	ClientPort int `json:"clientPort,omitempty" yaml:"client_port,omitempty"`
 	// +optional
 	PeerPort int `json:"peerPort,omitempty" yaml:"peer_port,omitempty"`
@@ -82,8 +78,7 @@ type PDSpec struct {
 
 type TiKVSpec struct {
 	Host string `json:"host"`
-	// +optional
-	SshPort int `json:"sshPort,omitempty" yaml:"ssh_port,omitempty"`
+
 	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
@@ -139,9 +134,16 @@ type GrafanaSpec struct {
 	DeployDir string `json:"deployDir"`
 }
 
+type Global struct {
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir" yaml:"data_dir"`
+}
+
 type TiDBCluster struct {
 	Version TiDBClusterVersion `json:"version"`
 
+	// +optional
+	Global *Global `json:"global,omitempty"`
 	// +optional
 	ServerConfigs ServerConfigs `json:"serverConfigs,omitempty"`
 
@@ -216,7 +218,8 @@ type TestClusterTopologyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	PreTiDBCluster *TiDBCluster `json:"preTiDBCluster,omitempty""`
+	// Save tidb cluster configuration before update and scale-in/out
+	PreTiDBCluster *TiDBCluster `json:"preTiDBCluster,omitempty"`
 
 	// default Pending
 	State ClusterTopologyState `json:"state,omitempty"`

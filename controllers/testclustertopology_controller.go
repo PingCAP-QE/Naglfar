@@ -87,6 +87,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 				Namespace: req.Namespace,
 				Name:      ct.Spec.ResourceRequest,
 			}, &rr); err != nil {
+				r.Recorder.Eventf(&ct, "Warning", "Install", err.Error())
 				return ctrl.Result{}, err
 			}
 			if rr.Status.State != naglfarv1.TestResourceRequestReady {
@@ -125,7 +126,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		}
 
 		// cluster config no change
-		if !tiup.IsClusterConfigModified(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster) {
+		if !tiup.IsClusterConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
 			return ctrl.Result{}, nil
 		}
 
@@ -145,49 +146,11 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 
-		if tiup.IsServerConfigModified(ct.Spec.TiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs) {
-			// update serverConfig
-			requeue, err := r.updateTiDBCluster(ctx, &ct, &rr)
-			if err != nil {
-				r.Recorder.Event(&ct, "Warning", "Updating", err.Error())
-				return ctrl.Result{}, err
-			}
-			if requeue {
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-			}
-		} else if tiup.IsScale(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster) {
-			// scale-out/in
-			if tiup.IsScaleIn(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster) && tiup.IsScaleOut(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster) {
-				err := fmt.Errorf("can't scale out/in at the same time")
-				r.Recorder.Event(&ct, "Warning", "Updating", err.Error())
-				return ctrl.Result{}, err
-			}
-
-			if tiup.IsScaleIn(*ct.Status.PreTiDBCluster, *ct.Spec.TiDBCluster) {
-				requeue, err := r.scaleInTiDBCluster(ctx, &ct, &rr)
-				if err != nil {
-					r.Recorder.Event(&ct, "Warning", "Updating", err.Error())
-					return ctrl.Result{}, err
-				}
-				if requeue {
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-			} else {
-				requeue, err := r.scaleOutTiDBCluster(ctx, &ct, &rr)
-				if err != nil {
-					r.Recorder.Event(&ct, "Warning", "Updating", err.Error())
-					return ctrl.Result{}, err
-				}
-				if requeue {
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-			}
-		} else {
-			// unsupport update
-			err := fmt.Errorf("update unsupport field")
-			r.Recorder.Event(&ct, "Warning", "Updating", err.Error())
-			return ctrl.Result{}, err
+		isOK, result, err := r.updateTiDBCluster(ctx, &ct, &rr)
+		if !isOK {
+			return result, err
 		}
+
 		ct.Status.PreTiDBCluster = ct.Spec.TiDBCluster.DeepCopy()
 		ct.Status.State = naglfarv1.ClusterTopologyStateReady
 		if err := r.Status().Update(ctx, &ct); err != nil {
@@ -214,46 +177,9 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
-	filterClusterResources := func() []*naglfarv1.TestResource {
-		allHosts := ct.Spec.TiDBCluster.AllHosts()
-		result := make([]*naglfarv1.TestResource, 0)
-		for idx := range resourceList.Items {
-			item := &resourceList.Items[idx]
-			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, item)
-			}
-		}
-		return result
-	}
+	resources = filterClusterResources(ct, resourceList)
 
-	resources = filterClusterResources()
-	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
-	if err != nil {
-		return false, fmt.Errorf("index exposed ports failed: %v", err)
-	}
-	for _, resource := range resources {
-		switch resource.Status.State {
-		case naglfarv1.ResourceUninitialized:
-			requeue = true
-			if resource.Status.Image == "" {
-				resource.Status.Image = tiup.ContainerImage
-				resource.Status.CapAdd = []string{"SYS_ADMIN"}
-				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
-				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
-				resource.Status.ExposedPorts = append(resource.Status.ExposedPorts, naglfarv1.SSHPort)
-				err := r.Status().Update(ctx, resource)
-				if err != nil {
-					return false, err
-				}
-			}
-		case naglfarv1.ResourceReady:
-			if resource.Status.Image != tiup.ContainerImage {
-				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
-			}
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
-			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
-		}
-	}
+	requeue, err = r.initResource(ctx, resources, ct)
 	if requeue {
 		return true, nil
 	}
@@ -264,8 +190,8 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version)
 }
 
-func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
-	log := r.Log.WithValues("updateTiDBCluster", types.NamespacedName{
+func (r *TestClusterTopologyReconciler) updateServerConfigs(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
+	log := r.Log.WithValues("updateServerConfigs", types.NamespacedName{
 		Namespace: ct.Namespace,
 		Name:      ct.Name,
 	})
@@ -275,18 +201,7 @@ func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, c
 	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
-	filterClusterResources := func() []*naglfarv1.TestResource {
-		allHosts := ct.Spec.TiDBCluster.AllHosts()
-		result := make([]*naglfarv1.TestResource, 0)
-		for idx := range resourceList.Items {
-			item := &resourceList.Items[idx]
-			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, item)
-			}
-		}
-		return result
-	}
-	resources = filterClusterResources()
+	resources = filterClusterResources(ct, resourceList)
 
 	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
 	if err != nil {
@@ -306,18 +221,7 @@ func (r *TestClusterTopologyReconciler) scaleInTiDBCluster(ctx context.Context, 
 	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
-	filterClusterResources := func() []*naglfarv1.TestResource {
-		allHosts := ct.Spec.TiDBCluster.AllHosts()
-		result := make([]*naglfarv1.TestResource, 0)
-		for idx := range resourceList.Items {
-			item := &resourceList.Items[idx]
-			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, item)
-			}
-		}
-		return result
-	}
-	resources = filterClusterResources()
+	resources = filterClusterResources(ct, resourceList)
 
 	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
 
@@ -337,45 +241,8 @@ func (r *TestClusterTopologyReconciler) scaleOutTiDBCluster(ctx context.Context,
 	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
-	filterClusterResources := func() []*naglfarv1.TestResource {
-		allHosts := ct.Spec.TiDBCluster.AllHosts()
-		result := make([]*naglfarv1.TestResource, 0)
-		for idx, _ := range resourceList.Items {
-			item := &resourceList.Items[idx]
-			if _, ok := allHosts[item.Name]; ok {
-				result = append(result, item)
-			}
-		}
-		return result
-	}
-	resources = filterClusterResources()
-	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
-	if err != nil {
-		return false, fmt.Errorf("index exposed ports failed: %v", err)
-	}
-	for _, resource := range resources {
-		switch resource.Status.State {
-		case naglfarv1.ResourceUninitialized:
-			requeue = true
-			if resource.Status.Image == "" {
-				resource.Status.Image = tiup.ContainerImage
-				resource.Status.CapAdd = []string{"SYS_ADMIN"}
-				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
-				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
-				resource.Status.ExposedPorts = append(resource.Status.ExposedPorts, naglfarv1.SSHPort)
-				err := r.Status().Update(ctx, resource)
-				if err != nil {
-					return false, err
-				}
-			}
-		case naglfarv1.ResourceReady:
-			if resource.Status.Image != tiup.ContainerImage {
-				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
-			}
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
-			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
-		}
-	}
+	resources = filterClusterResources(ct, resourceList)
+	requeue, err = r.initResource(ctx, resources, ct)
 	if requeue {
 		return true, nil
 	}
@@ -492,4 +359,86 @@ func hostname2ClusterIP(resourceList naglfarv1.TestResourceList) map[string]stri
 		result[item.Name] = item.Status.ClusterIP
 	}
 	return result
+}
+
+func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isOk bool, result ctrl.Result, err error) {
+
+	if tiup.IsServerConfigModified(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs) {
+		// update serverConfig
+		requeue, err := r.updateServerConfigs(ctx, ct, rr)
+		if err != nil {
+			r.Recorder.Event(ct, "Warning", "Update serverConfigs", err.Error())
+			return false, ctrl.Result{}, err
+		}
+		if requeue {
+			return false, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	if tiup.IsScaleIn(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+		requeue, err := r.scaleInTiDBCluster(ctx, ct, rr)
+		if err != nil {
+			r.Recorder.Event(ct, "Warning", "Update scale-in", err.Error())
+			return false, ctrl.Result{}, err
+		}
+		if requeue {
+			return false, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	if tiup.IsScaleOut(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+		requeue, err := r.scaleOutTiDBCluster(ctx, ct, rr)
+		if err != nil {
+			r.Recorder.Event(ct, "Warning", "Update scale-out", err.Error())
+			return false, ctrl.Result{}, err
+		}
+		if requeue {
+			return false, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+	return true, ctrl.Result{}, nil
+}
+
+func filterClusterResources(ct *naglfarv1.TestClusterTopology, resourceList naglfarv1.TestResourceList) []*naglfarv1.TestResource {
+	allHosts := ct.Spec.TiDBCluster.AllHosts()
+	result := make([]*naglfarv1.TestResource, 0)
+	for idx, _ := range resourceList.Items {
+		item := &resourceList.Items[idx]
+		if _, ok := allHosts[item.Name]; ok {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, resources []*naglfarv1.TestResource, ct *naglfarv1.TestClusterTopology) (bool, error) {
+	var requeue bool
+	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return requeue, fmt.Errorf("index exposed ports failed: %v", err)
+	}
+	for _, resource := range resources {
+		switch resource.Status.State {
+		case naglfarv1.ResourceUninitialized:
+			requeue = true
+			if resource.Status.Image == "" {
+				resource.Status.Image = tiup.ContainerImage
+				resource.Status.CapAdd = []string{"SYS_ADMIN"}
+				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
+				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
+				resource.Status.ExposedPorts = append(resource.Status.ExposedPorts, naglfarv1.SSHPort)
+				err := r.Status().Update(ctx, resource)
+				if err != nil {
+					return false, err
+				}
+			}
+		case naglfarv1.ResourceReady:
+			if resource.Status.Image != tiup.ContainerImage {
+				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
+			}
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
+		}
+	}
+	return requeue, nil
 }
