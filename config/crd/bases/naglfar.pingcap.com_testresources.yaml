@@ -29,6 +29,9 @@ spec:
     description: the port bindings of resource
     name: PortBindings
     type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: naglfar.pingcap.com
   names:
     kind: TestResource
@@ -134,6 +137,9 @@ spec:
               items:
                 type: string
               type: array
+            exitCode:
+              description: means the container's exit code
+              type: integer
             exposedPorts:
               items:
                 type: string
@@ -166,6 +172,16 @@ spec:
               type: array
             password:
               type: string
+            phase:
+              description: ResourcePhase tells us the running state of resource workload,
+                eg. whether the resource is pending, running, exit with error or exit
+                normally
+              enum:
+              - pending
+              - running
+              - failed
+              - succeeded
+              type: string
             portBindings:
               type: string
             privilege:
@@ -183,6 +199,8 @@ spec:
               - finish
               - destroy
               type: string
+          required:
+          - exitCode
           type: object
       type: object
   version: v1

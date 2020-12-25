@@ -227,7 +227,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 			if resource.Status.Image != tiup.ContainerImage {
 				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
 			}
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
 			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
 		}
 	}

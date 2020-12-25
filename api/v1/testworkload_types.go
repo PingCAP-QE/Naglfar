@@ -97,6 +97,7 @@ type TestWorkloadStatus struct {
 // +kubebuilder:resource:shortName="tw"
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="the state of workload"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // TestWorkload is the Schema for the testworkloads API
 type TestWorkload struct {

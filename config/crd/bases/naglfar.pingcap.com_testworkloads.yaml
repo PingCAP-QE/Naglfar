@@ -13,6 +13,9 @@ spec:
     description: the state of workload
     name: State
     type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: naglfar.pingcap.com
   names:
     kind: TestWorkload

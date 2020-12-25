@@ -141,7 +141,7 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 		switch workloadNode.Status.State {
 		case naglfarv1.ResourceDestroy:
 			return ctrl.Result{RequeueAfter: time.Second}, nil
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail:
+		case naglfarv1.ResourcePending:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized:
 			if workloadNode.Status.Image == "" {
@@ -198,7 +198,7 @@ func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload 
 			return ctrl.Result{}, err
 		}
 		switch workloadNode.Status.State {
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceUninitialized:
+		case naglfarv1.ResourcePending, naglfarv1.ResourceUninitialized:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceReady:
 			// no nothing
