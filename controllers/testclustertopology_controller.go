@@ -181,7 +181,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 
 	requeue, err = r.initResource(ctx, resources, ct)
 	if requeue {
-		return true, nil
+		return true, err
 	}
 	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources, hostname2ClusterIP(resourceList))
 	if err != nil {
@@ -244,7 +244,7 @@ func (r *TestClusterTopologyReconciler) scaleOutTiDBCluster(ctx context.Context,
 	resources = filterClusterResources(ct, resourceList)
 	requeue, err = r.initResource(ctx, resources, ct)
 	if requeue {
-		return true, nil
+		return true, err
 	}
 	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources, hostname2ClusterIP(resourceList))
 	if err != nil {
@@ -402,7 +402,7 @@ func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, c
 func filterClusterResources(ct *naglfarv1.TestClusterTopology, resourceList naglfarv1.TestResourceList) []*naglfarv1.TestResource {
 	allHosts := ct.Spec.TiDBCluster.AllHosts()
 	result := make([]*naglfarv1.TestResource, 0)
-	for idx, _ := range resourceList.Items {
+	for idx := range resourceList.Items {
 		item := &resourceList.Items[idx]
 		if _, ok := allHosts[item.Name]; ok {
 			result = append(result, item)

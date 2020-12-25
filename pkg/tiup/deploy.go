@@ -70,7 +70,7 @@ func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) e
 		return err
 	}
 	var (
-		config = make(map[string]interface{}, 0)
+		config = make(map[string]interface{})
 	)
 	for _, item := range []struct {
 		object *map[string]interface{}
@@ -94,7 +94,7 @@ func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index 
 		return err
 	}
 	var (
-		config = make(map[string]interface{}, 0)
+		config = make(map[string]interface{})
 	)
 	for _, item := range []struct {
 		object *map[string]interface{}
@@ -127,9 +127,9 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 		return err
 	}
 	var (
-		tidbConfigs = make(map[string]interface{}, 0)
-		tikvConfigs = make(map[string]interface{}, 0)
-		pdConfigs   = make(map[string]interface{}, 0)
+		tidbConfigs = make(map[string]interface{})
+		tikvConfigs = make(map[string]interface{})
+		pdConfigs   = make(map[string]interface{})
 	)
 	for _, item := range []struct {
 		object *map[string]interface{}

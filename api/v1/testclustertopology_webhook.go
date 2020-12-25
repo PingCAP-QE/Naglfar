@@ -17,6 +17,8 @@ package v1
 import (
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,7 +57,7 @@ var _ webhook.Validator = &TestClusterTopology{}
 func (r *TestClusterTopology) ValidateCreate() error {
 	testclustertopologylog.Info("validate create", "name", r.Name)
 
-	result := isFilledAllNeed(r.Spec.TiDBCluster)
+	result := getEmptyRequiredFields(r.Spec.TiDBCluster)
 	if len(result) != 0 {
 		return fmt.Errorf("you must fill %v", result)
 	}
@@ -72,23 +74,23 @@ func (r *TestClusterTopology) ValidateUpdate(old runtime.Object) error {
 		return nil
 	}
 
-	if isUnSupport(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+	if checkUnSupportComponentsChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
 		return fmt.Errorf("update unsupport component")
 	}
 
-	if isScale(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) && isServerConfigModified(&tct.Status.PreTiDBCluster.ServerConfigs, &r.Spec.TiDBCluster.ServerConfigs) {
+	if checkScale(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) && checkServerConfigModified(&tct.Status.PreTiDBCluster.ServerConfigs, &r.Spec.TiDBCluster.ServerConfigs) {
 		return fmt.Errorf("update and scale-in/out cluster can't use at the same time")
 	}
 
-	if isScaleInAndOut(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+	if checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
 		return fmt.Errorf("scale-in/out cluster can't use at the same time")
 	}
 
-	if isImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+	if checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
 		return fmt.Errorf("immutable field is changed")
 	}
 
-	result := isFilledAllNeed(r.Spec.TiDBCluster)
+	result := getEmptyRequiredFields(r.Spec.TiDBCluster)
 	if len(result) != 0 {
 		return fmt.Errorf("you must fill %v", result)
 	}
@@ -105,22 +107,17 @@ func (r *TestClusterTopology) ValidateDelete() error {
 	return nil
 }
 
-func isServerConfigModified(pre *ServerConfigs, cur *ServerConfigs) bool {
+func checkServerConfigModified(pre *ServerConfigs, cur *ServerConfigs) bool {
 	// TODO tidbcluster can't be null,check in webhook
 	return !reflect.DeepEqual(pre, cur)
 }
 
-func isClusterConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {
-	// TODO tidbcluster can't be null,check in webhook
-	return !reflect.DeepEqual(pre, cur)
-}
-
-func isScale(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkScale(pre *TiDBCluster, cur *TiDBCluster) bool {
 	// TODO check
 	return len(pre.TiDB) != len(cur.TiDB) || len(pre.PD) != len(cur.PD) || len(pre.TiKV) != len(cur.TiKV)
 }
 
-func isScaleInAndOut(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) bool {
 	// TODO check
 	scaleIn := len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
 	scaleOut := len(pre.TiDB) < len(cur.TiDB) || len(pre.PD) < len(cur.PD) || len(pre.TiKV) < len(cur.TiKV)
@@ -129,39 +126,102 @@ func isScaleInAndOut(pre *TiDBCluster, cur *TiDBCluster) bool {
 	}
 	if !scaleIn && !scaleOut {
 		// update some host, like tikv(n1,n2,n3)--->tikv(n1,n2,n4)
-		for i := 0; i < len(pre.TiDB); i++ {
-			var isExist bool
-			for j := 0; j < len(cur.TiDB); j++ {
-				if pre.TiDB[i].Host == cur.TiDB[j].Host {
-					isExist = true
-					break
+		checkComponents := []string{"TiDB", "PD", "TiKV"}
+		curType := reflect.TypeOf(*cur)
+		preVal := reflect.ValueOf(*pre)
+		curVal := reflect.ValueOf(*cur)
+		for i := 0; i < curType.NumField(); i++ {
+			if checkIn(checkComponents, curType.Field(i).Name) {
+				preField := preVal.Field(i)
+				curField := curVal.Field(i)
+				var isExist bool
+				for j := 0; j < preField.Len(); j++ {
+					for k := 0; k < curField.Len(); k++ {
+						if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+							isExist = true
+							break
+						}
+					}
 				}
-			}
-			if !isExist {
-				return true
+				if !isExist {
+					return true
+				}
 			}
 		}
-		for i := 0; i < len(pre.PD); i++ {
+	}
+	return false
+}
+
+func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
+	return !checkInclusion(pre, cur) && !checkInclusion(cur, pre)
+}
+
+func checkInclusion(pre *TiDBCluster, cur *TiDBCluster) bool {
+	checkComponents := []string{"TiDB", "PD", "TiKV"}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < curVal.Type().NumField(); i++ {
+		if checkIn(checkComponents, curVal.Type().Field(i).Name) {
+			preField := preVal.Field(i)
+			curField := curVal.Field(i)
 			var isExist bool
-			for j := 0; j < len(cur.PD); j++ {
-				if pre.PD[i].Host == cur.PD[j].Host {
-					isExist = true
-					break
+			for j := 0; j < preField.Len(); j++ {
+				for k := 0; k < curField.Len(); k++ {
+					if reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
+						isExist = true
+						break
+					}
 				}
 			}
 			if !isExist {
-				return true
+				return false
 			}
 		}
-		for i := 0; i < len(pre.TiKV); i++ {
-			var isExist bool
-			for j := 0; j < len(cur.TiKV); j++ {
-				if pre.TiKV[i].Host == cur.TiKV[j].Host {
-					isExist = true
-					break
+	}
+	return true
+}
+
+func getEmptyRequiredFields(cur *TiDBCluster) []string {
+	var tips []string
+	if cur.Global != nil && cur.Global.DeployDir != "" && cur.Global.DataDir != "" {
+		return tips
+	}
+	curVal := reflect.ValueOf(*cur)
+	checkMaps := map[string][]string{
+		"TiDB": {"DeployDir"},
+		"PD":   {"DeployDir", "DataDir"},
+		"TiKV": {"DeployDir", "DataDir"},
+	}
+
+	prefix := "spec.tidbCluster"
+	for key, val := range checkMaps {
+		components := curVal.FieldByName(key)
+		for i := 0; i < components.Len(); i++ {
+			for j := 0; j < len(val); j++ {
+				if components.Index(i).FieldByName(val[j]).String() == "" && curVal.FieldByName("Global").IsNil() {
+					tmp := strings.ToLower(key) + "[" + strconv.Itoa(i) + "]"
+					tips = append(tips, strings.Join([]string{prefix, tmp, val[j]}, "."))
+					continue
+				}
+				if components.Index(i).FieldByName(val[j]).String() == "" && curVal.FieldByName("Global").FieldByName(val[j]).String() == "" {
+					tmp := strings.ToLower(key) + "[" + strconv.Itoa(i) + "]"
+					tips = append(tips, strings.Join([]string{prefix, tmp, val[j]}, "."))
 				}
 			}
-			if !isExist {
+		}
+	}
+	return tips
+}
+
+func checkUnSupportComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
+	unSupportComponents := []string{"Global", "Drainer", "Pump", "Version", "Monitor", "Control", "Grafana"}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < curVal.Type().NumField(); i++ {
+		if checkIn(unSupportComponents, curVal.Type().Field(i).Name) {
+			preField := preVal.Field(i)
+			curField := curVal.Field(i)
+			if !reflect.DeepEqual(preField.Interface(), curField.Interface()) {
 				return true
 			}
 		}
@@ -169,127 +229,11 @@ func isScaleInAndOut(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return false
 }
 
-func isImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	return !aIncludeB(pre, cur) && !aIncludeB(cur, pre)
-}
-func aIncludeB(pre *TiDBCluster, cur *TiDBCluster) bool {
-	for i := 0; i < len(pre.TiDB); i++ {
-		var isExist bool
-		for j := 0; j < len(cur.TiDB); j++ {
-			if reflect.DeepEqual(pre.TiDB[i], cur.TiDB[j]) {
-				isExist = true
-				break
-			}
+func checkIn(lists []string, str string) bool {
+	for i := 0; i < len(lists); i++ {
+		if lists[i] == str {
+			return true
 		}
-		if !isExist {
-			return false
-		}
-	}
-	for i := 0; i < len(pre.PD); i++ {
-		var isExist bool
-		for j := 0; j < len(cur.PD); j++ {
-			if reflect.DeepEqual(pre.PD[i], cur.PD[j]) {
-				isExist = true
-				break
-			}
-		}
-		if !isExist {
-			return false
-		}
-	}
-	for i := 0; i < len(pre.TiKV); i++ {
-		var isExist bool
-		for j := 0; j < len(cur.TiKV); j++ {
-			if reflect.DeepEqual(pre.TiKV[i], cur.TiKV[j]) {
-				isExist = true
-				break
-			}
-		}
-		if !isExist {
-			return false
-		}
-	}
-	return true
-}
-
-func isFilledAllNeed(cur *TiDBCluster) []string {
-	var tips []string
-	if cur.Global != nil && cur.Global.DeployDir != "" && cur.Global.DataDir != "" {
-		return tips
-	}
-
-	for i := 0; i < len(cur.TiDB); i++ {
-		if cur.TiDB[i].DeployDir == "" && cur.Global == nil {
-			tips = append(tips, "tidb/deployDir")
-			break
-		}
-		if cur.TiDB[i].DeployDir == "" && cur.Global.DeployDir == "" {
-			tips = append(tips, "tidb/deployDir")
-			break
-		}
-	}
-	for i := 0; i < len(cur.PD); i++ {
-		if cur.PD[i].DeployDir == "" && cur.Global == nil {
-			tips = append(tips, "pd/deployDir")
-			break
-		}
-		if cur.PD[i].DeployDir == "" && cur.Global.DeployDir == "" {
-			tips = append(tips, "pd/deployDir")
-			break
-		}
-
-		if cur.PD[i].DataDir == "" && cur.Global == nil {
-			tips = append(tips, "pd/dataDir")
-			break
-		}
-		if cur.PD[i].DataDir == "" && cur.Global.DataDir == "" {
-			tips = append(tips, "pd/dataDir")
-			break
-		}
-	}
-	for i := 0; i < len(cur.TiKV); i++ {
-		if cur.TiKV[i].DeployDir == "" && cur.Global == nil {
-			tips = append(tips, "tikv/deployDir")
-			break
-		}
-		if cur.TiKV[i].DeployDir == "" && cur.Global.DeployDir == "" {
-			tips = append(tips, "tikv/deployDir")
-			break
-		}
-
-		if cur.TiKV[i].DataDir == "" && cur.Global == nil {
-			tips = append(tips, "tikv/dataDir")
-			break
-		}
-		if cur.TiKV[i].DataDir == "" && cur.Global.DataDir == "" {
-			tips = append(tips, "tikv/dataDir")
-			break
-		}
-	}
-	return tips
-}
-
-func isUnSupport(pre *TiDBCluster, cur *TiDBCluster) bool {
-	if !reflect.DeepEqual(pre.Global, cur.Global) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.Drainer, cur.Drainer) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.Pump, cur.Pump) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.Version, cur.Version) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.Monitor, cur.Monitor) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.Control, cur.Control) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.Grafana, cur.Grafana) {
-		return true
 	}
 	return false
 }

@@ -16,6 +16,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"reflect"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -176,23 +177,19 @@ type TiDBCluster struct {
 }
 
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
+	components := []string{"TiDB", "TiKV", "PD", "Monitor", "Grafana"}
 	result := map[string]struct{}{
 		c.Control: {},
 	}
-	for _, item := range c.TiDB {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.TiKV {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.PD {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.Monitor {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.Grafana {
-		result[item.Host] = struct{}{}
+
+	val := reflect.ValueOf(*c)
+	for i := 0; i < val.Type().NumField(); i++ {
+		if checkIn(components, val.Type().Field(i).Name) {
+			field := val.Field(i)
+			for j := 0; j < field.Len(); i++ {
+				result[field.Index(j).FieldByName("Host").String()] = struct{}{}
+			}
+		}
 	}
 	return result
 }
@@ -218,7 +215,9 @@ type TestClusterTopologyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Save tidb cluster configuration before update and scale-in/out
+	// PreTiDBCluster save tidb cluster configuration before update and scale-in/out,
+	// It is used to compare with the new configuration to see if the TestClusterTopology
+	// has been changed and what has been changed
 	PreTiDBCluster *TiDBCluster `json:"preTiDBCluster,omitempty"`
 
 	// default Pending
