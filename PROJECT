@@ -28,4 +28,7 @@ resources:
 - group: naglfar
   kind: ChaosApply
   version: v1
+- group: naglfar
+  kind: ChaosBinding
+  version: v1
 version: "2"

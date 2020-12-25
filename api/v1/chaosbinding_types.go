@@ -21,45 +21,48 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// ChaosApplySpec defines the desired state of ChaosApply
-type ChaosApplySpec struct {
+// ChaosBindingSpec defines the desired state of ChaosBinding
+type ChaosBindingSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Request string `json:"request"`
-	Rules   string `json:"rules"`
+	// reference of resource
+	Resource string `json:"resources"`
 }
 
-// ChaosApplyStatus defines the observed state of ChaosApply
-type ChaosApplyStatus struct {
+// ChaosBindingStatus defines the observed state of ChaosBinding
+type ChaosBindingStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// +optional
-	Applied map[string]bool `json:"applied"`
+	// ChaosApply ~>
+	Applies map[string]*ChaosResources `json:"applies"`
+}
+
+type ChaosResources struct {
 }
 
 // +kubebuilder:object:root=true
 
-// ChaosApply is the Schema for the chaosapplies API
+// ChaosBinding is the Schema for the chaosbindings API
 // +kubebuilder:subresource:status
-type ChaosApply struct {
+type ChaosBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ChaosApplySpec   `json:"spec,omitempty"`
-	Status ChaosApplyStatus `json:"status,omitempty"`
+	Spec   ChaosBindingSpec   `json:"spec,omitempty"`
+	Status ChaosBindingStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ChaosApplyList contains a list of ChaosApply
-type ChaosApplyList struct {
+// ChaosBindingList contains a list of ChaosBinding
+type ChaosBindingList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ChaosApply `json:"items"`
+	Items           []ChaosBinding `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ChaosApply{}, &ChaosApplyList{})
+	SchemeBuilder.Register(&ChaosBinding{}, &ChaosBindingList{})
 }

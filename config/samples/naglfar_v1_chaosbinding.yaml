@@ -1,0 +1,7 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: ChaosBinding
+metadata:
+  name: chaosbinding-sample
+spec:
+  # Add fields here
+  foo: bar

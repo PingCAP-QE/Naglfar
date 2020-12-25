@@ -152,6 +152,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ChaosApply")
 		os.Exit(1)
 	}
+	if err = (&controllers.ChaosBindingReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("ChaosBinding"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ChaosBinding")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

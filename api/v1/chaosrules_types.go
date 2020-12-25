@@ -18,6 +18,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:Enum=netem;bandwidth
+type ChaosTcType string
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -26,14 +29,19 @@ type ChaosRulesSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of ChaosRules. Edit ChaosRules_types.go to remove/update
-
 }
 
 // ChaosRulesStatus defines the observed state of ChaosRules
 type ChaosRulesStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+}
+
+type ChaosTcRule struct {
+	TcType ChaosTcType `json:"tcType"`
+}
+
+type ChaosTcNetem struct {
 }
 
 // +kubebuilder:object:root=true
