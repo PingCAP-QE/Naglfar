@@ -144,6 +144,10 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "TestClusterTopology")
 		os.Exit(1)
 	}
+	if err = (&naglfarv1.ProcChaos{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ProcChaos")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

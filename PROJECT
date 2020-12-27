@@ -22,4 +22,7 @@ resources:
 - group: naglfar
   kind: Relationship
   version: v1
+- group: naglfar
+  kind: ProcChaos
+  version: v1
 version: "2"
