@@ -177,7 +177,7 @@ type TiDBCluster struct {
 }
 
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
-	components := []string{"TiDB", "TiKV", "PD", "Monitor", "Grafana"}
+	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField}
 	result := map[string]struct{}{
 		c.Control: {},
 	}

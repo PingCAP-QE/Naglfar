@@ -35,6 +35,20 @@ func (r *TestClusterTopology) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
+
+const (
+	ControlField = "control"
+	VersionField = "Version"
+	GlobalField = "Global"
+	TiDBField = "TiDB"
+	TiKVField = "TiKV"
+	PDField   = "PD"
+	PumpField = "Pump"
+	DrainerField = "Drainer"
+	MonitorField = "Monitor"
+	GrafanaField = "Grafana"
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // +kubebuilder:webhook:path=/mutate-naglfar-pingcap-com-v1-testclustertopology,mutating=true,failurePolicy=fail,groups=naglfar.pingcap.com,resources=testclustertopologies,verbs=create;update,versions=v1,name=mtestclustertopology.kb.io
@@ -126,12 +140,11 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 	}
 	if !scaleIn && !scaleOut {
 		// update some host, like tikv(n1,n2,n3)--->tikv(n1,n2,n4)
-		checkComponents := []string{"TiDB", "PD", "TiKV"}
-		curType := reflect.TypeOf(*cur)
+		checkComponents := []string{TiDBField, PDField, TiKVField}
 		preVal := reflect.ValueOf(*pre)
 		curVal := reflect.ValueOf(*cur)
-		for i := 0; i < curType.NumField(); i++ {
-			if checkIn(checkComponents, curType.Field(i).Name) {
+		for i := 0; i < curVal.Type().NumField(); i++ {
+			if checkIn(checkComponents, curVal.Type().Field(i).Name) {
 				preField := preVal.Field(i)
 				curField := curVal.Field(i)
 				var isExist bool
@@ -148,16 +161,35 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 				}
 			}
 		}
+
 	}
 	return false
 }
 
 func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	return !checkInclusion(pre, cur) && !checkInclusion(cur, pre)
+	checkComponents := []string{TiDBField, PDField, TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < curVal.Type().NumField(); i++ {
+		if checkIn(checkComponents, curVal.Type().Field(i).Name) {
+			preField := preVal.Field(i)
+			curField := curVal.Field(i)
+			for j := 0; j < preField.Len(); j++ {
+				for k := 0; k < curField.Len(); k++ {
+					if preField.Index(j).FieldByName("host") == curField.Index(k).FieldByName("host") {
+						if !reflect.DeepEqual(preField.Index(j).Interface(),curField.Index(k).Interface()){
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 func checkInclusion(pre *TiDBCluster, cur *TiDBCluster) bool {
-	checkComponents := []string{"TiDB", "PD", "TiKV"}
+	checkComponents := []string{TiDBField, PDField, TiKVField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
 	for i := 0; i < curVal.Type().NumField(); i++ {
@@ -188,9 +220,9 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 	}
 	curVal := reflect.ValueOf(*cur)
 	checkMaps := map[string][]string{
-		"TiDB": {"DeployDir"},
-		"PD":   {"DeployDir", "DataDir"},
-		"TiKV": {"DeployDir", "DataDir"},
+		TiDBField: {"DeployDir"},
+		PDField:   {"DeployDir", "DataDir"},
+		TiKVField: {"DeployDir", "DataDir"},
 	}
 
 	prefix := "spec.tidbCluster"
@@ -214,7 +246,7 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 }
 
 func checkUnSupportComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	unSupportComponents := []string{"Global", "Drainer", "Pump", "Version", "Monitor", "Control", "Grafana"}
+	unSupportComponents := []string{GlobalField, DrainerField , PumpField, VersionField , MonitorField , ControlField, GrafanaField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
 	for i := 0; i < curVal.Type().NumField(); i++ {

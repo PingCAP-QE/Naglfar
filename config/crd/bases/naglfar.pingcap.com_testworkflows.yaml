@@ -254,8 +254,10 @@ spec:
                           state of TestClusterTopology
                         properties:
                           preTiDBCluster:
-                            description: Save tidb cluster configuration before update
-                              and scale-in/out
+                            description: PreTiDBCluster save tidb cluster configuration
+                              before update and scale-in/out, It is used to compare
+                              with the new configuration to see if the TestClusterTopology
+                              has been changed and what has been changed
                             properties:
                               control:
                                 description: Control machine host
