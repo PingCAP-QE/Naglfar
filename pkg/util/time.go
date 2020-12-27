@@ -35,6 +35,6 @@ func (r Time) Unwrap() time.Time {
 	return t
 }
 
-func Format(t time.Time) Time {
+func NewTime(t time.Time) Time {
 	return Time(t.Format(layout))
 }
