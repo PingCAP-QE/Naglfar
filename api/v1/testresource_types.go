@@ -29,19 +29,19 @@ import (
 )
 
 const (
-	ResourcePending       ResourceState = "pending"
-	ResourceUninitialized               = "uninitialized"
-	ResourceReady                       = "ready"
-	ResourceFinish                      = "finish"
-	ResourceDestroy                     = "destroy"
+	ResourcePending       = ResourceState("pending")
+	ResourceUninitialized = ResourceState("uninitialized")
+	ResourceReady         = ResourceState("ready")
+	ResourceFinish        = ResourceState("finish")
+	ResourceDestroy       = ResourceState("destroy")
 
-	ResourcePhasePending   ResourcePhase = "pending"
-	ResourcePhaseRunning                 = "running"
-	ResourcePhaseFailed                  = "failed"
-	ResourcePhaseSucceeded               = "succeeded"
+	ResourcePhasePending   = ResourcePhase("pending")
+	ResourcePhaseRunning   = ResourcePhase("running")
+	ResourcePhaseFailed    = ResourcePhase("failed")
+	ResourcePhaseSucceeded = ResourcePhase("succeeded")
 
-	PullPolicyAlways       PullImagePolicy = "Always"
-	PullPolicyIfNotPresent                 = "IfNotPresent"
+	PullPolicyAlways       = PullImagePolicy("Always")
+	PullPolicyIfNotPresent = PullImagePolicy("IfNotPresent")
 )
 
 // TODO: make it configurable

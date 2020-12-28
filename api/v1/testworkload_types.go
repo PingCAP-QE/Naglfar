@@ -22,10 +22,10 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	TestWorkloadStatePending   TestWorkloadState = "pending"
-	TestWorkloadStateRunning                     = "running"
-	TestWorkloadStateSucceeded                   = "succeeded"
-	TestWorkloadStateFailed                      = "failed"
+	TestWorkloadStatePending   = TestWorkloadState("pending")
+	TestWorkloadStateRunning   = TestWorkloadState("running")
+	TestWorkloadStateSucceeded = TestWorkloadState("succeeded")
+	TestWorkloadStateFailed    = TestWorkloadState("failed")
 )
 
 type ClusterTopologyRef struct {
@@ -71,7 +71,7 @@ type TestWorkloadSpec struct {
 	TeardownTestClusterTopology []string `json:"teardownTestClusterTopology,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=pending;running;finish;fail
+// +kubebuilder:validation:Enum=pending;running;succeeded;failed
 type TestWorkloadState string
 
 type TestWorkloadResult struct {
@@ -93,6 +93,7 @@ type TestWorkloadStatus struct {
 	// +optional
 	State TestWorkloadState `json:"state"`
 
+	// Record status of each workloads
 	// +optional
 	WorkloadStatus map[string]WorkloadStatus `json:"workloadStatus,omitempty"`
 

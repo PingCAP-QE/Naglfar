@@ -206,8 +206,12 @@ func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload 
 		case naglfarv1.ResourcePending, naglfarv1.ResourceDestroy:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized, naglfarv1.ResourceReady, naglfarv1.ResourceFinish:
+			if workload.Status.WorkloadStatus == nil {
+				workload.Status.WorkloadStatus = make(map[string]naglfarv1.WorkloadStatus)
+			}
 			if _, exist := workload.Status.WorkloadStatus[item.Name]; !exist {
 				phaseChangedWorkloads += 1
+				workload.Status.WorkloadStatus[item.Name] = naglfarv1.WorkloadStatus{Phase: naglfarv1.ResourcePhasePending}
 			}
 			if workload.Status.WorkloadStatus[item.Name].Phase != workloadNode.Status.Phase {
 				workload.Status.WorkloadStatus[item.Name] = naglfarv1.WorkloadStatus{Phase: workloadNode.Status.Phase}
@@ -225,6 +229,7 @@ func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload 
 			panic(fmt.Sprintf("it's a bug, we forget to process the `%s` state", workloadNode.Status.State))
 		}
 	}
+	// only need update the status if exist workloads which changed since last
 	if phaseChangedWorkloads != 0 {
 		if succeededWorkloads == len(workload.Spec.Workloads) {
 			workload.Status.State = naglfarv1.TestWorkloadStateSucceeded
@@ -233,10 +238,8 @@ func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload 
 			workload.Status.State = naglfarv1.TestWorkloadStateFailed
 			r.Recorder.Event(workload, "Normal", "Finish", "all workloads finished")
 		}
-		if err := r.Status().Update(ctx, workload); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+		err := r.Status().Update(ctx, workload)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	}
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }

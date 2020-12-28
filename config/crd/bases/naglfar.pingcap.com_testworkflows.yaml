@@ -408,8 +408,8 @@ spec:
                             enum:
                             - pending
                             - running
-                            - finish
-                            - fail
+                            - succeeded
+                            - failed
                             type: string
                           workloadStatus:
                             additionalProperties:
@@ -427,6 +427,7 @@ spec:
                               required:
                               - phase
                               type: object
+                            description: Record status of each workloads
                             type: object
                         type: object
                     type: object
