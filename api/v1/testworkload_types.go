@@ -22,9 +22,10 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	TestWorkloadStatePending TestWorkloadState = "pending"
-	TestWorkloadStateRunning                   = "running"
-	TestWorkloadStateFinish                    = "finish"
+	TestWorkloadStatePending   TestWorkloadState = "pending"
+	TestWorkloadStateRunning                     = "running"
+	TestWorkloadStateSucceeded                   = "succeeded"
+	TestWorkloadStateFailed                      = "failed"
 )
 
 type ClusterTopologyRef struct {
@@ -38,7 +39,7 @@ type ResourceRequestRef struct {
 	Node string `json:"node"`
 }
 
-type DockerContainerSpec struct {
+type ContainerSpec struct {
 	ResourceRequest ResourceRequestRef `json:"resourceRequest"`
 	Image           string             `json:"image"`
 	// +optional
@@ -51,7 +52,7 @@ type TestWorkloadItemSpec struct {
 	Name string `json:"name"`
 
 	// +optional
-	DockerContainer *DockerContainerSpec `json:"dockerContainer,omitempty"`
+	DockerContainer *ContainerSpec `json:"dockerContainer,omitempty"`
 }
 
 // TestWorkloadSpec defines the desired state of TestWorkload
@@ -79,6 +80,10 @@ type TestWorkloadResult struct {
 	PlainText string `json:"plainText,omitempty"`
 }
 
+type WorkloadStatus struct {
+	Phase ResourcePhase `json:"phase"`
+}
+
 // TestWorkloadStatus defines the observed state of TestWorkload
 type TestWorkloadStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -87,6 +92,9 @@ type TestWorkloadStatus struct {
 	// default pending
 	// +optional
 	State TestWorkloadState `json:"state"`
+
+	// +optional
+	WorkloadStatus map[string]WorkloadStatus `json:"workloadStatus,omitempty"`
 
 	// Save the results passed through
 	// +optional
