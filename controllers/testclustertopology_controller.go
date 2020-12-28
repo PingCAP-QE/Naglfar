@@ -178,7 +178,6 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 		log.Error(err, "unable to list child resources")
 	}
 	resources = filterClusterResources(ct, resourceList)
-
 	requeue, err = r.initResource(ctx, resources, ct)
 	if requeue {
 		return true, err

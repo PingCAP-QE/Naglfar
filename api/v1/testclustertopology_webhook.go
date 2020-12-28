@@ -35,15 +35,14 @@ func (r *TestClusterTopology) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-
 const (
 	ControlField = "control"
 	VersionField = "Version"
-	GlobalField = "Global"
-	TiDBField = "TiDB"
-	TiKVField = "TiKV"
-	PDField   = "PD"
-	PumpField = "Pump"
+	GlobalField  = "Global"
+	TiDBField    = "TiDB"
+	TiKVField    = "TiKV"
+	PDField      = "PD"
+	PumpField    = "Pump"
 	DrainerField = "Drainer"
 	MonitorField = "Monitor"
 	GrafanaField = "Grafana"
@@ -176,8 +175,8 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
 			curField := curVal.Field(i)
 			for j := 0; j < preField.Len(); j++ {
 				for k := 0; k < curField.Len(); k++ {
-					if preField.Index(j).FieldByName("host") == curField.Index(k).FieldByName("host") {
-						if !reflect.DeepEqual(preField.Index(j).Interface(),curField.Index(k).Interface()){
+					if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+						if !reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
 							return true
 						}
 					}
@@ -246,7 +245,7 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 }
 
 func checkUnSupportComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	unSupportComponents := []string{GlobalField, DrainerField , PumpField, VersionField , MonitorField , ControlField, GrafanaField}
+	unSupportComponents := []string{GlobalField, DrainerField, PumpField, VersionField, MonitorField, ControlField, GrafanaField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
 	for i := 0; i < curVal.Type().NumField(); i++ {

@@ -186,7 +186,7 @@ func (c *TiDBCluster) AllHosts() map[string]struct{} {
 	for i := 0; i < val.Type().NumField(); i++ {
 		if checkIn(components, val.Type().Field(i).Name) {
 			field := val.Field(i)
-			for j := 0; j < field.Len(); i++ {
+			for j := 0; j < field.Len(); j++ {
 				result[field.Index(j).FieldByName("Host").String()] = struct{}{}
 			}
 		}
