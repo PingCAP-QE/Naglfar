@@ -122,7 +122,7 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 		}
 
 		state := procChaos.Status.States[index]
-		duration := time.Now().Sub(state.KilledTime.Unwrap()) - task.Period.Unwrap()
+		duration := time.Since(state.KilledTime.Unwrap()) - task.Period.Unwrap()
 		if duration <= 0 {
 			killAndUpdate(task, state)
 			return
