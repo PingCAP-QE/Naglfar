@@ -75,7 +75,7 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 	}
 
 	var request *naglfarv1.TestResourceRequest
-	if err = r.Get(r.Ctx, ref.ParseKey(procChaos.Spec.Request).Namespaced(), request); err != nil {
+	if err = r.Get(r.Ctx, types.NamespacedName{Namespace: req.Namespace, Name: procChaos.Spec.Request}, request); err != nil {
 		log.Error(err, fmt.Sprintf("unable to fetch Request(%s)", procChaos.Spec.Request))
 		err = client.IgnoreNotFound(err)
 		return

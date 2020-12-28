@@ -15,8 +15,9 @@
 package v1
 
 import (
-	"github.com/PingCAP-QE/Naglfar/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -48,7 +49,7 @@ type ProcChaosSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Request is the reference of TestResourceRequest
+	// Request is the name of TestResourceRequest
 	Request string `json:"request"`
 
 	Tasks []*ProcChaosTask `json:"tasks"`
