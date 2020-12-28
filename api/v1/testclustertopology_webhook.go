@@ -87,16 +87,16 @@ func (r *TestClusterTopology) ValidateUpdate(old runtime.Object) error {
 		return nil
 	}
 
-	if checkUnSupportComponentsChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("update unsupport component")
+	if checkUnsupportedComponentsChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+		return fmt.Errorf("update unsupport components")
 	}
 
 	if checkScale(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) && checkServerConfigModified(&tct.Status.PreTiDBCluster.ServerConfigs, &r.Spec.TiDBCluster.ServerConfigs) {
-		return fmt.Errorf("update and scale-in/out cluster can't use at the same time")
+		return fmt.Errorf("cluster can't update and scale-in/out at the same time")
 	}
 
 	if checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("scale-in/out cluster can't use at the same time")
+		return fmt.Errorf("cluster can't scale-in/out at the same time")
 	}
 
 	if checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
@@ -121,15 +121,14 @@ func (r *TestClusterTopology) ValidateDelete() error {
 }
 
 func checkServerConfigModified(pre *ServerConfigs, cur *ServerConfigs) bool {
-	// TODO tidbcluster can't be null,check in webhook
 	return !reflect.DeepEqual(pre, cur)
 }
 
 func checkScale(pre *TiDBCluster, cur *TiDBCluster) bool {
-	// TODO check
 	return len(pre.TiDB) != len(cur.TiDB) || len(pre.PD) != len(cur.PD) || len(pre.TiKV) != len(cur.TiKV)
 }
 
+// checkSimultaneousScaleOutAndScaleIn check if tidb cluster scale-out and scale-out at the same time
 func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) bool {
 	// TODO check
 	scaleIn := len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
@@ -142,76 +141,83 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 		checkComponents := []string{TiDBField, PDField, TiKVField}
 		preVal := reflect.ValueOf(*pre)
 		curVal := reflect.ValueOf(*cur)
-		for i := 0; i < curVal.Type().NumField(); i++ {
-			if checkIn(checkComponents, curVal.Type().Field(i).Name) {
-				preField := preVal.Field(i)
-				curField := curVal.Field(i)
-				var isExist bool
-				for j := 0; j < preField.Len(); j++ {
-					for k := 0; k < curField.Len(); k++ {
-						if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
-							isExist = true
-							break
-						}
-					}
-				}
-				if !isExist {
-					return true
-				}
+		for i := 0; i < len(checkComponents); i++ {
+			preField := preVal.FieldByName(checkComponents[i])
+			curField := curVal.FieldByName(checkComponents[i])
+			if !preField.IsValid() || !curField.IsValid() {
+				continue
 			}
-		}
-
-	}
-	return false
-}
-
-func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	checkComponents := []string{TiDBField, PDField, TiKVField}
-	preVal := reflect.ValueOf(*pre)
-	curVal := reflect.ValueOf(*cur)
-	for i := 0; i < curVal.Type().NumField(); i++ {
-		if checkIn(checkComponents, curVal.Type().Field(i).Name) {
-			preField := preVal.Field(i)
-			curField := curVal.Field(i)
-			for j := 0; j < preField.Len(); j++ {
-				for k := 0; k < curField.Len(); k++ {
-					if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
-						if !reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
-							return true
-						}
-					}
-				}
-			}
-		}
-	}
-	return false
-}
-
-func checkInclusion(pre *TiDBCluster, cur *TiDBCluster) bool {
-	checkComponents := []string{TiDBField, PDField, TiKVField}
-	preVal := reflect.ValueOf(*pre)
-	curVal := reflect.ValueOf(*cur)
-	for i := 0; i < curVal.Type().NumField(); i++ {
-		if checkIn(checkComponents, curVal.Type().Field(i).Name) {
-			preField := preVal.Field(i)
-			curField := curVal.Field(i)
 			var isExist bool
 			for j := 0; j < preField.Len(); j++ {
 				for k := 0; k < curField.Len(); k++ {
-					if reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
+					if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
 						isExist = true
 						break
 					}
 				}
 			}
 			if !isExist {
-				return false
+				return true
 			}
+		}
+
+	}
+	return false
+}
+
+// checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
+func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
+	checkComponents := []string{TiDBField, PDField, TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preField := preVal.FieldByName(checkComponents[i])
+		curField := curVal.FieldByName(checkComponents[i])
+		if !preField.IsValid() || !curField.IsValid() {
+			continue
+		}
+		for j := 0; j < preField.Len(); j++ {
+			for k := 0; k < curField.Len(); k++ {
+				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+					if !reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
+						return true
+					}
+				}
+			}
+
+		}
+	}
+	return false
+}
+
+// checkInclusion check if pre include cur
+func checkInclusion(pre *TiDBCluster, cur *TiDBCluster) bool {
+	checkComponents := []string{TiDBField, PDField, TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preField := preVal.FieldByName(checkComponents[i])
+		curField := curVal.FieldByName(checkComponents[i])
+		if !preField.IsValid() || !curField.IsValid() {
+			continue
+		}
+		var isExist bool
+		for j := 0; j < preField.Len(); j++ {
+			for k := 0; k < curField.Len(); k++ {
+				if reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
+					isExist = true
+					break
+				}
+			}
+		}
+		if !isExist {
+			return false
 		}
 	}
 	return true
 }
 
+// getEmptyRequiredFields return which required fields are empty
 func getEmptyRequiredFields(cur *TiDBCluster) []string {
 	var tips []string
 	if cur.Global != nil && cur.Global.DeployDir != "" && cur.Global.DataDir != "" {
@@ -227,6 +233,9 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 	prefix := "spec.tidbCluster"
 	for key, val := range checkMaps {
 		components := curVal.FieldByName(key)
+		if !components.IsValid() {
+			continue
+		}
 		for i := 0; i < components.Len(); i++ {
 			for j := 0; j < len(val); j++ {
 				if components.Index(i).FieldByName(val[j]).String() == "" && curVal.FieldByName("Global").IsNil() {
@@ -244,22 +253,25 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 	return tips
 }
 
-func checkUnSupportComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	unSupportComponents := []string{GlobalField, DrainerField, PumpField, VersionField, MonitorField, ControlField, GrafanaField}
+// checkUnsupportedComponentsChanged return if unsupported components' fields are changed
+func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
+	unsupportedComponents := []string{GlobalField, DrainerField, PumpField, VersionField, MonitorField, ControlField, GrafanaField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
-	for i := 0; i < curVal.Type().NumField(); i++ {
-		if checkIn(unSupportComponents, curVal.Type().Field(i).Name) {
-			preField := preVal.Field(i)
-			curField := curVal.Field(i)
-			if !reflect.DeepEqual(preField.Interface(), curField.Interface()) {
-				return true
-			}
+	for i := 0; i < len(unsupportedComponents); i++ {
+		preField := preVal.FieldByName(unsupportedComponents[i])
+		curField := curVal.FieldByName(unsupportedComponents[i])
+		if !preField.IsValid()|| !curField.IsValid() {
+			continue
+		}
+		if !reflect.DeepEqual(preField.Interface(), curField.Interface()) {
+			return true
 		}
 	}
 	return false
 }
 
+// checkIn return if str in lists
 func checkIn(lists []string, str string) bool {
 	for i := 0; i < len(lists); i++ {
 		if lists[i] == str {

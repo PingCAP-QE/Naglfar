@@ -15,8 +15,9 @@
 package v1
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -71,10 +72,10 @@ type PDSpec struct {
 	PeerPort int `json:"peerPort,omitempty" yaml:"peer_port,omitempty"`
 
 	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
-	DataDir   string `json:"dataDir,omitempty" yaml:"data_dir"`
+	DataDir   string `json:"dataDir,omitempty" yaml:"data_dir,omitempty"`
 
 	// +optional
-	LogDir string `json:"logDir,omitempty" yaml:"log_dir"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
 }
 
 type TiKVSpec struct {

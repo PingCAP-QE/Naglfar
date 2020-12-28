@@ -154,32 +154,19 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 }
 
 func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) bool {
-	// TODO tidbcluster can't be null,check in webhook
 	return !reflect.DeepEqual(pre, cur)
 }
 
 func IsClusterConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
-	// TODO tidbcluster can't be null,check in webhook
 	return !reflect.DeepEqual(pre, cur)
 }
 
-func IsScale(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
-	// TODO check
-	return len(pre.TiDB) != len(cur.TiDB) || len(pre.PD) != len(cur.PD) || len(pre.TiKV) != len(cur.TiKV)
-}
-
 func IsScaleIn(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
-	// TODO check
 	return len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
 }
 
 func IsScaleOut(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
-	// TODO check
 	return len(pre.TiDB) < len(cur.TiDB) || len(pre.PD) < len(cur.PD) || len(pre.TiKV) < len(cur.TiKV)
-}
-
-func IsVersionModified(pre naglfarv1.TiDBClusterVersion, cur naglfarv1.TiDBClusterVersion) bool {
-	return !reflect.DeepEqual(pre, cur)
 }
 
 // If dryRun is true, host uses the resource's name
