@@ -47,6 +47,14 @@ type ProcChaosReconciler struct {
 	Ctx    context.Context
 }
 
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=machines/status,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=relationships/status,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresources/status,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresourcerequests,verbs=get
+// +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=testresourcerequests/status,verbs=get
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=procchaos,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=naglfar.pingcap.com,resources=procchaos/status,verbs=get;update;patch
 
