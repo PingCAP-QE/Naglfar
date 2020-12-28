@@ -218,6 +218,7 @@ type TestClusterTopologyStatus struct {
 // +kubebuilder:resource:shortName="tct"
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="the state of cluster topology"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // TestClusterTopology is the Schema for the testclustertopologies API
 type TestClusterTopology struct {

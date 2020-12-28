@@ -22,9 +22,10 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	TestWorkloadStatePending TestWorkloadState = "pending"
-	TestWorkloadStateRunning                   = "running"
-	TestWorkloadStateFinish                    = "finish"
+	TestWorkloadStatePending   = TestWorkloadState("pending")
+	TestWorkloadStateRunning   = TestWorkloadState("running")
+	TestWorkloadStateSucceeded = TestWorkloadState("succeeded")
+	TestWorkloadStateFailed    = TestWorkloadState("failed")
 )
 
 type ClusterTopologyRef struct {
@@ -38,7 +39,7 @@ type ResourceRequestRef struct {
 	Node string `json:"node"`
 }
 
-type DockerContainerSpec struct {
+type ContainerSpec struct {
 	ResourceRequest ResourceRequestRef `json:"resourceRequest"`
 	Image           string             `json:"image"`
 	// +optional
@@ -51,7 +52,7 @@ type TestWorkloadItemSpec struct {
 	Name string `json:"name"`
 
 	// +optional
-	DockerContainer *DockerContainerSpec `json:"dockerContainer,omitempty"`
+	DockerContainer *ContainerSpec `json:"dockerContainer,omitempty"`
 }
 
 // TestWorkloadSpec defines the desired state of TestWorkload
@@ -70,13 +71,17 @@ type TestWorkloadSpec struct {
 	TeardownTestClusterTopology []string `json:"teardownTestClusterTopology,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=pending;running;finish;fail
+// +kubebuilder:validation:Enum=pending;running;succeeded;failed
 type TestWorkloadState string
 
 type TestWorkloadResult struct {
 	// plain text format
 	// +optional
 	PlainText string `json:"plainText,omitempty"`
+}
+
+type WorkloadStatus struct {
+	Phase ResourcePhase `json:"phase"`
 }
 
 // TestWorkloadStatus defines the observed state of TestWorkload
@@ -88,6 +93,10 @@ type TestWorkloadStatus struct {
 	// +optional
 	State TestWorkloadState `json:"state"`
 
+	// Record status of each workloads
+	// +optional
+	WorkloadStatus map[string]WorkloadStatus `json:"workloadStatus,omitempty"`
+
 	// Save the results passed through
 	// +optional
 	Results map[string]TestWorkloadResult `json:"results,omitempty"`
@@ -97,6 +106,7 @@ type TestWorkloadStatus struct {
 // +kubebuilder:resource:shortName="tw"
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="the state of workload"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // TestWorkload is the Schema for the testworkloads API
 type TestWorkload struct {
