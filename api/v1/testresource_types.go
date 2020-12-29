@@ -29,15 +29,19 @@ import (
 )
 
 const (
-	ResourcePending       ResourceState = "pending"
-	ResourceFail                        = "fail"
-	ResourceUninitialized               = "uninitialized"
-	ResourceReady                       = "ready"
-	ResourceFinish                      = "finish"
-	ResourceDestroy                     = "destroy"
+	ResourcePending       = ResourceState("pending")
+	ResourceUninitialized = ResourceState("uninitialized")
+	ResourceReady         = ResourceState("ready")
+	ResourceFinish        = ResourceState("finish")
+	ResourceDestroy       = ResourceState("destroy")
 
-	PullPolicyAlways       PullImagePolicy = "Always"
-	PullPolicyIfNotPresent                 = "IfNotPresent"
+	ResourcePhasePending   = ResourcePhase("pending")
+	ResourcePhaseRunning   = ResourcePhase("running")
+	ResourcePhaseFailed    = ResourcePhase("failed")
+	ResourcePhaseSucceeded = ResourcePhase("succeeded")
+
+	PullPolicyAlways       = PullImagePolicy("Always")
+	PullPolicyIfNotPresent = PullImagePolicy("IfNotPresent")
 )
 
 // TODO: make it configurable
@@ -45,13 +49,19 @@ const cleanerImage = "hub.pingcap.net/mahjonp/alpine:latest"
 
 const SSHPort = "22/tcp"
 
+// ResourceState is used on controller reconcile
 // +kubebuilder:validation:Enum=pending;fail;uninitialized;ready;finish;destroy
 type ResourceState string
 
+// ResourcePhase tells us the running state of resource workload, eg. whether the resource is pending, running, exit with error or exit normally
+// +kubebuilder:validation:Enum=pending;running;failed;succeeded
+type ResourcePhase string
+
 func (r ResourceState) IsRequired() bool {
-	return r != "" && r != ResourcePending && r != ResourceFail
+	return r != "" && r != ResourcePending
 }
 
+// CouldUninstall check whether a resource of current state can be re-initialized
 func (r ResourceState) CouldUninstall() bool {
 	switch r {
 	case ResourceUninitialized, ResourceReady, ResourceFinish:
@@ -156,7 +166,13 @@ type TestResourceStatus struct {
 
 	// default pending
 	// +optional
-	State ResourceState `json:"state"`
+	State ResourceState `json:"state,omitempty"`
+
+	// +optional
+	Phase ResourcePhase `json:"phase,omitempty"`
+
+	// means the container's exit code
+	ExitCode int `json:"exitCode"`
 
 	ResourceContainerSpec `json:",inline"`
 
@@ -189,6 +205,7 @@ type TestResourceStatus struct {
 // +kubebuilder:printcolumn:name="SSHPort",type="integer",JSONPath=".status.sshPort",description="the ssh port of resource"
 // +kubebuilder:printcolumn:name="ClusterIP",type="string",JSONPath=".status.clusterIP",description="the cluster ip of resource"
 // +kubebuilder:printcolumn:name="PortBindings",type="string",JSONPath=".status.portBindings",description="the port bindings of resource"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type TestResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
