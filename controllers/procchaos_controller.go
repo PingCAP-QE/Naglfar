@@ -155,7 +155,7 @@ func (r *ProcChaosReconciler) killProc(log logr.Logger, task *naglfarv1.ProcChao
 		return
 	}
 
-	if resource.Status.State != naglfarv1.MachineReady {
+	if resource.Status.State != naglfarv1.ResourceReady {
 		err = fmt.Errorf("Resource(%s) not ready", node)
 		log.Error(err, "wait a while")
 		return
