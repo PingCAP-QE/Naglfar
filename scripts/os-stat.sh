@@ -16,7 +16,7 @@ ARCHITECTURE=$(uname -m)
 memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
 
 # CPU
-cpuThreads=$(grep processor /proc/cpuinfo | wc -l)
+cpuThreads=$(grep "^processor" /proc/cpuinfo | wc -l)
 
 # Disk
 disksJson=$(for d in $(df -P -T \

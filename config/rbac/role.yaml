@@ -40,6 +40,26 @@ rules:
 - apiGroups:
   - naglfar.pingcap.com
   resources:
+  - procchaos
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - procchaos/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
   - relationships
   verbs:
   - create

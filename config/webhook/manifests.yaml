@@ -109,6 +109,24 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-naglfar-pingcap-com-v1-procchaos
+  failurePolicy: Fail
+  name: vprocchaos.kb.io
+  rules:
+  - apiGroups:
+    - naglfar.pingcap.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - procchaos
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-naglfar-pingcap-com-v1-testclustertopology
   failurePolicy: Fail
   name: vtestclustertopology.kb.io
