@@ -577,9 +577,27 @@ spec:
                             enum:
                             - pending
                             - running
-                            - finish
-                            - fail
+                            - succeeded
+                            - failed
                             type: string
+                          workloadStatus:
+                            additionalProperties:
+                              properties:
+                                phase:
+                                  description: ResourcePhase tells us the running
+                                    state of resource workload, eg. whether the resource
+                                    is pending, running, exit with error or exit normally
+                                  enum:
+                                  - pending
+                                  - running
+                                  - failed
+                                  - succeeded
+                                  type: string
+                              required:
+                              - phase
+                              type: object
+                            description: Record status of each workloads
+                            type: object
                         type: object
                     type: object
                 required:

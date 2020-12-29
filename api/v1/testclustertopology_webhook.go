@@ -261,7 +261,7 @@ func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool 
 	for i := 0; i < len(unsupportedComponents); i++ {
 		preField := preVal.FieldByName(unsupportedComponents[i])
 		curField := curVal.FieldByName(unsupportedComponents[i])
-		if !preField.IsValid()|| !curField.IsValid() {
+		if !preField.IsValid() || !curField.IsValid() {
 			continue
 		}
 		if !reflect.DeepEqual(preField.Interface(), curField.Interface()) {

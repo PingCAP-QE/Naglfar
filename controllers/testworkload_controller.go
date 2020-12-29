@@ -86,13 +86,14 @@ func (r *TestWorkloadReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	switch workload.Status.State {
 	case "":
 		workload.Status.State = naglfarv1.TestWorkloadStatePending
+		workload.Status.WorkloadStatus = make(map[string]naglfarv1.WorkloadStatus)
 		err := r.Status().Update(ctx, workload)
 		return ctrl.Result{}, err
 	case naglfarv1.TestWorkloadStatePending:
 		return r.reconcilePending(ctx, workload)
 	case naglfarv1.TestWorkloadStateRunning:
 		return r.reconcileRunning(ctx, workload)
-	case naglfarv1.TestWorkloadStateFinish:
+	case naglfarv1.TestWorkloadStateSucceeded, naglfarv1.TestWorkloadStateFailed:
 		return r.reconcileFinish(workload)
 	}
 	return ctrl.Result{}, nil
@@ -141,7 +142,7 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 		switch workloadNode.Status.State {
 		case naglfarv1.ResourceDestroy:
 			return ctrl.Result{RequeueAfter: time.Second}, nil
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail:
+		case naglfarv1.ResourcePending:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized:
 			if workloadNode.Status.Image == "" {
@@ -186,7 +187,11 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 
 // 1. poll the state of workload resource nodes, if all workloads have finished, set itself to `finish`
 func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload *naglfarv1.TestWorkload) (ctrl.Result, error) {
-	var finishedCount = 0
+	var (
+		phaseChangedWorkloads = 0
+		succeededWorkloads    = 0
+		failedWorkloads       = 0
+	)
 	for _, item := range workload.Spec.Workloads {
 		workloadNode, err := r.getWorkloadRequestNode(ctx, workload.Namespace, item.DockerContainer)
 		if err != nil {
@@ -198,23 +203,43 @@ func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload 
 			return ctrl.Result{}, err
 		}
 		switch workloadNode.Status.State {
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceUninitialized:
+		case naglfarv1.ResourcePending, naglfarv1.ResourceDestroy:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
-		case naglfarv1.ResourceReady:
-			// no nothing
-		case naglfarv1.ResourceFinish:
-			finishedCount += 1
+		case naglfarv1.ResourceUninitialized, naglfarv1.ResourceReady, naglfarv1.ResourceFinish:
+			if workload.Status.WorkloadStatus == nil {
+				workload.Status.WorkloadStatus = make(map[string]naglfarv1.WorkloadStatus)
+			}
+			if _, exist := workload.Status.WorkloadStatus[item.Name]; !exist {
+				phaseChangedWorkloads += 1
+				workload.Status.WorkloadStatus[item.Name] = naglfarv1.WorkloadStatus{Phase: naglfarv1.ResourcePhasePending}
+			}
+			if workload.Status.WorkloadStatus[item.Name].Phase != workloadNode.Status.Phase {
+				workload.Status.WorkloadStatus[item.Name] = naglfarv1.WorkloadStatus{Phase: workloadNode.Status.Phase}
+				phaseChangedWorkloads += 1
+			}
+			switch workloadNode.Status.Phase {
+			case naglfarv1.ResourcePhaseSucceeded:
+				succeededWorkloads += 1
+				r.Recorder.Eventf(workload, "Normal", "Workload", "workload %s succeeded", item.Name)
+			case naglfarv1.ResourcePhaseFailed:
+				failedWorkloads += 1
+				r.Recorder.Eventf(workload, "Warning", "Workload", "workload %s failed", item.Name)
+			}
 		default:
 			panic(fmt.Sprintf("it's a bug, we forget to process the `%s` state", workloadNode.Status.State))
 		}
 	}
-	if finishedCount == len(workload.Spec.Workloads) {
-		workload.Status.State = naglfarv1.TestWorkloadStateFinish
-		if err := r.Status().Update(ctx, workload); err != nil {
-			return ctrl.Result{}, err
+	// only need update the status if exist workloads which changed since last
+	if phaseChangedWorkloads != 0 {
+		if succeededWorkloads == len(workload.Spec.Workloads) {
+			workload.Status.State = naglfarv1.TestWorkloadStateSucceeded
+			r.Recorder.Event(workload, "Normal", "Finish", "all workloads finished")
+		} else if succeededWorkloads+failedWorkloads == len(workload.Spec.Workloads) {
+			workload.Status.State = naglfarv1.TestWorkloadStateFailed
+			r.Recorder.Event(workload, "Normal", "Finish", "all workloads finished")
 		}
-		r.Recorder.Event(workload, "Normal", "Finish", "all workload has been finished")
-		return ctrl.Result{}, nil
+		err := r.Status().Update(ctx, workload)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	}
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
@@ -237,7 +262,7 @@ func (r *TestWorkloadReconciler) setContainerSpec(containerSpec *naglfarv1.TestR
 	return
 }
 
-func (r *TestWorkloadReconciler) getWorkloadRequestNode(ctx context.Context, ns string, workloadSpec *naglfarv1.DockerContainerSpec) (*naglfarv1.TestResource, error) {
+func (r *TestWorkloadReconciler) getWorkloadRequestNode(ctx context.Context, ns string, workloadSpec *naglfarv1.ContainerSpec) (*naglfarv1.TestResource, error) {
 	resourceRequest := new(naglfarv1.TestResourceRequest)
 	err := r.Get(ctx, types.NamespacedName{
 		Namespace: ns,

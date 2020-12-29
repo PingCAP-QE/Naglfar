@@ -177,8 +177,10 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
 	}
+
 	resources = filterClusterResources(ct, resourceList)
 	requeue, err = r.initResource(ctx, resources, ct)
+
 	if requeue {
 		return true, err
 	}
@@ -321,9 +323,13 @@ func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*na
 	}
 	for _, item := range spec.TiDBServers {
 		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.StatusPort))
 	}
 	for _, item := range spec.PDServers {
 		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.ClientPort))
+	}
+	for _, item := range spec.TiKVServers {
+		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.StatusPort))
 	}
 	for _, item := range spec.Grafana {
 		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
@@ -435,7 +441,7 @@ func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, resour
 			if resource.Status.Image != tiup.ContainerImage {
 				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
 			}
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
 			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
 		}
 	}

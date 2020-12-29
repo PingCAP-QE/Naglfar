@@ -13,6 +13,9 @@ spec:
     description: the state of workload
     name: State
     type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: naglfar.pingcap.com
   names:
     kind: TestWorkload
@@ -116,9 +119,27 @@ spec:
               enum:
               - pending
               - running
-              - finish
-              - fail
+              - succeeded
+              - failed
               type: string
+            workloadStatus:
+              additionalProperties:
+                properties:
+                  phase:
+                    description: ResourcePhase tells us the running state of resource
+                      workload, eg. whether the resource is pending, running, exit
+                      with error or exit normally
+                    enum:
+                    - pending
+                    - running
+                    - failed
+                    - succeeded
+                    type: string
+                required:
+                - phase
+                type: object
+              description: Record status of each workloads
+              type: object
           type: object
       type: object
   version: v1

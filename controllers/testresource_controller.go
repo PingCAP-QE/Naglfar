@@ -117,15 +117,18 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 
 		if machineRef, ok := relation.Status.ResourceToMachine[resourceKey]; ok {
 			var machine naglfarv1.Machine
+			var requeue bool
 			if err = r.Get(r.Ctx, machineRef.Namespaced(), &machine); err != nil {
 				// TODO: deal with not found
 				return
 			}
 
-			result.Requeue, err = r.finalize(resource, &machine)
-
-			if result.Requeue || err != nil {
+			requeue, err = r.finalize(resource, &machine)
+			if err != nil {
 				return
+			}
+			if requeue {
+				return ctrl.Result{RequeueAfter: time.Second}, nil
 			}
 
 			machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
@@ -150,8 +153,6 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return r.reconcileStatePending(log, resource)
 	case naglfarv1.ResourceUninitialized:
 		return r.reconcileStateUninitialized(log, resource)
-	case naglfarv1.ResourceFail:
-		return r.reconcileStateFail(log, resource)
 	case naglfarv1.ResourceReady:
 		return r.reconcileStateReady(log, resource)
 	case naglfarv1.ResourceFinish:
@@ -404,11 +405,18 @@ func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource,
 	return
 }
 
+// reconcileStateUninitialized reconcile state on uninitialized:
+// uninitialized -> ready: if container stays running
+// uninitialized -> finish: if container ends running
 func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	if resource.Status.Phase == "" {
+		resource.Status.Phase = naglfarv1.ResourcePhasePending
+		err = r.Status().Update(r.Ctx, resource)
+		return
+	}
 	if resource.Status.Image == "" {
 		return
 	}
-
 	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
 	if err != nil {
 		return
@@ -426,6 +434,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 
 	if err != nil {
 		if !docker.IsErrContainerNotFound(err) {
+			r.Eventer.Eventf(resource, "Warning", "CreateContainer", "create container %s error: %s", containerName, err)
 			return
 		}
 
@@ -446,7 +455,9 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 			return
 		}
 		err = dockerClient.ContainerStart(r.Ctx, containerName, dockerTypes.ContainerStartOptions{})
-		if err == nil {
+		if err != nil {
+			r.Eventer.Eventf(resource, "Warning", "StartContainer", "start container %s error: %s", containerName, err)
+		} else {
 			result.Requeue = true
 		}
 		return
@@ -459,6 +470,11 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	}
 
 	if stats.State.Running {
+		if resource.Status.Phase != naglfarv1.ResourcePhaseRunning {
+			resource.Status.Phase = naglfarv1.ResourcePhaseRunning
+			err = r.Status().Update(r.Ctx, resource)
+			return
+		}
 		network, ok := stats.NetworkSettings.Networks[clusterNetwork]
 		if !ok {
 			err = fmt.Errorf("network configuration error, miss %s network", clusterNetwork)
@@ -480,18 +496,18 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 
 	if !timeIsZero(stats.State.FinishedAt) {
 		resource.Status.State = naglfarv1.ResourceFinish
+		resource.Status.ExitCode = stats.State.ExitCode
+		switch resource.Status.ExitCode {
+		case 0:
+			resource.Status.Phase = naglfarv1.ResourcePhaseSucceeded
+		default:
+			resource.Status.Phase = naglfarv1.ResourcePhaseFailed
+		}
 	}
-
 	err = r.Status().Update(r.Ctx, resource)
 	return
 }
 
-// TODO: complete reconcileStateFail
-func (r *TestResourceReconciler) reconcileStateFail(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	return
-}
-
-// TODO: complete reconcileStateReady
 func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
 	if err != nil {
@@ -523,6 +539,13 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 
 	if !timeIsZero(stats.State.FinishedAt) {
 		resource.Status.State = naglfarv1.ResourceFinish
+		resource.Status.ExitCode = stats.State.ExitCode
+		switch resource.Status.ExitCode {
+		case 0:
+			resource.Status.Phase = naglfarv1.ResourcePhaseSucceeded
+		default:
+			resource.Status.Phase = naglfarv1.ResourcePhaseFailed
+		}
 	}
 
 	if resource.Status.State != naglfarv1.ResourceReady {
@@ -542,13 +565,18 @@ func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource 
 }
 
 func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	var requeue bool
 	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
 	if err != nil {
 		return
 	}
-	result.Requeue, err = r.finalize(resource, machine)
-	if result.Requeue || err != nil {
+
+	requeue, err = r.finalize(resource, machine)
+	if err != nil {
 		return
+	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	r.Eventer.Event(resource, "Normal", "uninstall", "uninstall resource successfully")
 	// clear all container spec

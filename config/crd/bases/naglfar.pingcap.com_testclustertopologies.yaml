@@ -13,6 +13,9 @@ spec:
     description: the state of cluster topology
     name: State
     type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: naglfar.pingcap.com
   names:
     kind: TestClusterTopology
