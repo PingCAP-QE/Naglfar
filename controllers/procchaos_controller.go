@@ -63,8 +63,8 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 
 	// your logic here
 
-	var procChaos *naglfarv1.ProcChaos
-	if err = r.Get(r.Ctx, req.NamespacedName, procChaos); err != nil {
+	var procChaos naglfarv1.ProcChaos
+	if err = r.Get(r.Ctx, req.NamespacedName, &procChaos); err != nil {
 		log.Error(err, "unable to fetch ProcChaos")
 
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -74,8 +74,8 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 		return
 	}
 
-	var request *naglfarv1.TestResourceRequest
-	if err = r.Get(r.Ctx, types.NamespacedName{Namespace: req.Namespace, Name: procChaos.Spec.Request}, request); err != nil {
+	var request naglfarv1.TestResourceRequest
+	if err = r.Get(r.Ctx, types.NamespacedName{Namespace: req.Namespace, Name: procChaos.Spec.Request}, &request); err != nil {
 		log.Error(err, fmt.Sprintf("unable to fetch Request(%s)", procChaos.Spec.Request))
 		err = client.IgnoreNotFound(err)
 		return
@@ -89,13 +89,13 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 	}
 
 	var killAndUpdate = func(task *naglfarv1.ProcChaosTask, state *naglfarv1.ProcChaosState) {
-		state.KilledNode, err = r.killProc(log, task, request)
+		state.KilledNode, err = r.killProc(log, task, &request)
 		if err != nil {
 			return
 		}
 		state.KilledTime = util.NewTime(time.Now())
 
-		if err = r.Status().Update(r.Ctx, procChaos); err == nil {
+		if err = r.Status().Update(r.Ctx, &procChaos); err == nil {
 			result.Requeue = true
 			result.RequeueAfter = tinyDuration
 		}
@@ -108,7 +108,11 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 
 		if task.Period != "" {
 			state.KilledTime = util.NewTime(time.Now())
-			continue
+			if err = r.Status().Update(r.Ctx, &procChaos); err == nil {
+				result.Requeue = true
+				result.RequeueAfter = tinyDuration
+			}
+			return
 		}
 
 		killAndUpdate(task, state)
@@ -122,7 +126,7 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 		}
 
 		state := procChaos.Status.States[index]
-		duration := time.Since(state.KilledTime.Unwrap()) - task.Period.Unwrap()
+		duration := task.Period.Unwrap() - time.Since(state.KilledTime.Unwrap())
 		if duration <= 0 {
 			killAndUpdate(task, state)
 			return
@@ -130,26 +134,32 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 		durations = append(durations, duration)
 	}
 
-	result.RequeueAfter = util.MinDuration(durations...)
+	minDuration := util.MinDuration(durations...)
+
+	log.Info(fmt.Sprintf("sleep for %s", minDuration.String()))
+	result.Requeue = true
+	result.RequeueAfter = minDuration
 	return
 }
 
 func (r *ProcChaosReconciler) killProc(log logr.Logger, task *naglfarv1.ProcChaosTask, request *naglfarv1.TestResourceRequest) (node string, err error) {
 	node = util.RandOne(task.Nodes)
-	var resource *naglfarv1.TestResource
-	var relation *naglfarv1.Relationship
-	var machine *naglfarv1.Machine
+	var resource naglfarv1.TestResource
+	var relation naglfarv1.Relationship
+	var machine naglfarv1.Machine
+	var nodeFound bool
 
 	for _, item := range request.Spec.Items {
 		if node == item.Name {
-			if err = r.Get(r.Ctx, types.NamespacedName{Namespace: request.Namespace, Name: node}, resource); err != nil {
+			nodeFound = true
+			if err = r.Get(r.Ctx, types.NamespacedName{Namespace: request.Namespace, Name: node}, &resource); err != nil {
 				log.Error(err, fmt.Sprintf("cannot get resource(%s) in namespace(%s)", node, request.Namespace))
 				return
 			}
 		}
 	}
 
-	if resource == nil {
+	if !nodeFound {
 		err = fmt.Errorf("node(%s) is not exist", node)
 		return
 	}
@@ -160,7 +170,7 @@ func (r *ProcChaosReconciler) killProc(log logr.Logger, task *naglfarv1.ProcChao
 		return
 	}
 
-	if err = r.Get(r.Ctx, relationshipName, relation); err != nil {
+	if err = r.Get(r.Ctx, relationshipName, &relation); err != nil {
 		log.Error(err, fmt.Sprintf("cannot get relationship(%s)", relationshipName))
 		return
 	}
@@ -175,12 +185,12 @@ func (r *ProcChaosReconciler) killProc(log logr.Logger, task *naglfarv1.ProcChao
 		return
 	}
 
-	if err = r.Get(r.Ctx, machineRef.Namespaced(), machine); err != nil {
+	if err = r.Get(r.Ctx, machineRef.Namespaced(), &machine); err != nil {
 		log.Error(err, fmt.Sprintf("cannot get machine(%s)", machineRef.Key()))
 		return
 	}
 
-	dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
+	dockerClient, err := dockerutil.MakeClient(r.Ctx, &machine)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("cannot make docker client from machine(%s)", machineRef.Key()))
 		return
@@ -201,10 +211,17 @@ func (r *ProcChaosReconciler) killProc(log logr.Logger, task *naglfarv1.ProcChao
 		return
 	}
 
+	log.Info(fmt.Sprintf("get procs %s", stdout.String()))
+
 	var procs []string
 
 	err = json.Unmarshal(stdout.Bytes(), &procs)
 	if err != nil {
+		return
+	}
+
+	if len(procs) == 0 {
+		log.Info(fmt.Sprintf("process pattern %s not found", task.Pattern))
 		return
 	}
 

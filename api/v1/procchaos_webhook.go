@@ -50,7 +50,7 @@ func (r *ProcChaos) ValidateCreate() error {
 	}
 
 	for _, task := range r.Spec.Tasks {
-		if _, err := task.Period.Parse(); err != nil {
+		if _, err := task.Period.Parse(); task.Period != "" && err != nil {
 			return err
 		}
 	}
