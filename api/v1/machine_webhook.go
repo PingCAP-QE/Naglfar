@@ -64,6 +64,10 @@ func (r *Machine) Default() {
 	if r.Spec.Reserve.Memory == "" {
 		r.Spec.Reserve.Memory = util.Size(1 * units.GiB)
 	}
+
+	if r.Spec.DockerVersion == "" {
+		r.Spec.DockerVersion = "1.25"
+	}
 	// TODO(user): fill in your defaulting logic.
 }
 
