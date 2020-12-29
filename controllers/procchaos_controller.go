@@ -88,34 +88,26 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 		return
 	}
 
-	var killAndUpdate = func(task *naglfarv1.ProcChaosTask, state *naglfarv1.ProcChaosState) {
+	var kill = func(task *naglfarv1.ProcChaosTask, state *naglfarv1.ProcChaosState) {
 		state.KilledNode, err = r.killProc(log, task, &request)
 		if err != nil {
 			return
 		}
 		state.KilledTime = util.NewTime(time.Now())
-
-		if err = r.Status().Update(r.Ctx, &procChaos); err == nil {
-			result.Requeue = true
-			result.RequeueAfter = tinyDuration
-		}
 	}
 
-	for states := len(procChaos.Status.States); states < len(procChaos.Spec.Tasks); states++ {
+	if len(procChaos.Status.States) < len(procChaos.Spec.Tasks) {
 		state := new(naglfarv1.ProcChaosState)
-		task := procChaos.Spec.Tasks[states]
+		task := procChaos.Spec.Tasks[len(procChaos.Status.States)]
 		procChaos.Status.States = append(procChaos.Status.States, state)
 
 		if task.Period != "" {
 			state.KilledTime = util.NewTime(time.Now())
-			if err = r.Status().Update(r.Ctx, &procChaos); err == nil {
-				result.Requeue = true
-				result.RequeueAfter = tinyDuration
-			}
-			return
+		} else {
+			kill(task, state)
 		}
 
-		killAndUpdate(task, state)
+		err = r.Status().Update(r.Ctx, &procChaos)
 		return
 	}
 
@@ -128,7 +120,8 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 		state := procChaos.Status.States[index]
 		duration := task.Period.Unwrap() - time.Since(state.KilledTime.Unwrap())
 		if duration <= 0 {
-			killAndUpdate(task, state)
+			kill(task, state)
+			err = r.Status().Update(r.Ctx, &procChaos)
 			return
 		}
 		durations = append(durations, duration)
