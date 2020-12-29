@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	kubescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
@@ -41,6 +42,7 @@ type Client struct {
 
 var (
 	namespace        string
+	requestName      string
 	testWorkloadName string
 	workloadItemName string
 
@@ -66,6 +68,19 @@ func (c *Client) GetTiDBClusterTopology(ctx context.Context, clusterName string)
 	}
 	spec, _, err := tiup.BuildSpecification(&topology.Spec, resources, false)
 	return &spec, err
+}
+
+func (c *Client) getRequest(ctx context.Context) (*naglfarv1.TestResourceRequest, error) {
+	var request naglfarv1.TestResourceRequest
+
+	err := kubeutil.Retry(3, time.Second, func() error {
+		if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: requestName}, &request); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	return &request, err
 }
 
 func (c *Client) getTestResources(ctx context.Context) ([]*naglfarv1.TestResource, error) {
@@ -139,6 +154,7 @@ func NewClient(kubeconfig string) (*Client, error) {
 
 func init() {
 	namespace = os.Getenv(controllers.NaglfarClusterNs)
+	requestName = os.Getenv(controllers.NaglfarTestResourceRequestName)
 	testWorkloadName = os.Getenv(controllers.NaglfarTestWorkloadName)
 	workloadItemName = os.Getenv(controllers.NaglfarTestWorkloadItem)
 

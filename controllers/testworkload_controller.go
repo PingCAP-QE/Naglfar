@@ -32,10 +32,11 @@ import (
 )
 
 const (
-	testWorkloadFinalizer   = "testworkload.naglfar.pingcap.com"
-	NaglfarClusterNs        = "NAGLFAR_CLUSTER_NS"
-	NaglfarTestWorkloadName = "NAGLFAR_TESTWORKLOAD_NAME"
-	NaglfarTestWorkloadItem = "NAGLFAR_TESTWORKLOAD_WORKLOAD_ITEM"
+	testWorkloadFinalizer          = "testworkload.naglfar.pingcap.com"
+	NaglfarClusterNs               = "NAGLFAR_CLUSTER_NS"
+	NaglfarTestResourceRequestName = "NAGLFAR_TEST_RESOURCE_REQUEST_NAME"
+	NaglfarTestWorkloadName        = "NAGLFAR_TESTWORKLOAD_NAME"
+	NaglfarTestWorkloadItem        = "NAGLFAR_TESTWORKLOAD_WORKLOAD_ITEM"
 )
 
 // TestWorkloadReconciler reconciles a TestWorkload object
@@ -251,6 +252,7 @@ func (r *TestWorkloadReconciler) reconcileFinish(workload *naglfarv1.TestWorkloa
 func (r *TestWorkloadReconciler) setContainerSpec(containerSpec *naglfarv1.TestResourceStatus, testWorkload *naglfarv1.TestWorkload, workloadSpec *naglfarv1.TestWorkloadItemSpec) {
 	var envs []string
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarClusterNs, testWorkload.Namespace))
+	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestResourceRequestName, workloadSpec.DockerContainer.ResourceRequest.Name))
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadName, testWorkload.Name))
 	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadItem, workloadSpec.Name))
 	for _, item := range testWorkload.Spec.ClusterTopologiesRefs {
