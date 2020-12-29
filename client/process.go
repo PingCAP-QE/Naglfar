@@ -16,9 +16,11 @@ package client
 
 import (
 	"context"
+
+	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 )
 
-func (c *Client) CreateProcChaos(ctx context.Context, chaosName string) error {
+func (c *Client) CreateProcChaos(ctx context.Context, chaosName string, tasks *naglfarv1.ProcChaosTask) error {
 	// TODO: implement me after https://github.com/PingCAP-QE/Naglfar/pull/84 merged
 	return nil
 }

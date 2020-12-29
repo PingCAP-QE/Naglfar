@@ -23,15 +23,20 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// ProcChaosTask represent a task to kill some processes once or in period.
 type ProcChaosTask struct {
+	// Pattern is a grep pattern to match process. For example, use 'tidb-server' to match tidb server process.
 	Pattern string `json:"pattern"`
 
+	// Nodes are resources chosen to kill subprocesses in its container.
+	// Only one node will be chosen in a period.
 	Nodes []string `json:"nodes"`
 
-	// KillAll means kill all process matching pattern
+	// KillAll means kill all processes matching pattern in container, default false.
 	// +optional
 	KillAll bool `json:"killAll,omitempty"`
 
+	// Period is the period of task. Empty period means applying task only once.
 	// +optional
 	Period util.Duration `json:"period,omitempty"`
 }
