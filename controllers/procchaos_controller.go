@@ -37,8 +37,6 @@ import (
 
 const findProcScript = "find-proc.sh"
 
-const tinyDuration = time.Microsecond
-
 // ProcChaosReconciler reconciles a ProcChaos object
 type ProcChaosReconciler struct {
 	client.Client
