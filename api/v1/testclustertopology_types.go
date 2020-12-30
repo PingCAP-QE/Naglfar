@@ -15,6 +15,8 @@
 package v1
 
 import (
+	"reflect"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -53,39 +55,42 @@ type TiDBSpec struct {
 	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
-	StatusPort int `json:"statusPort,omitempty"`
+	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
 
-	DeployDir string `json:"deployDir"`
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+
 	// +optional
-	DataDir string `json:"dataDir,omitempty"`
-	// +optional
-	LogDir string `json:"logDir,omitempty"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
 }
 
 type PDSpec struct {
 	Host string `json:"host"`
 
 	// +optional
-	ClientPort int `json:"clientPort,omitempty"`
+	ClientPort int `json:"clientPort,omitempty" yaml:"client_port,omitempty"`
 	// +optional
-	PeerPort int `json:"peerPort,omitempty"`
+	PeerPort int `json:"peerPort,omitempty" yaml:"peer_port,omitempty"`
 
-	DeployDir string `json:"deployDir"`
-	DataDir   string `json:"dataDir"`
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir,omitempty" yaml:"data_dir,omitempty"`
+
 	// +optional
-	LogDir string `json:"logDir,omitempty"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
 }
 
 type TiKVSpec struct {
 	Host string `json:"host"`
+
 	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
-	StatusPort int    `json:"statusPort,omitempty"`
-	DeployDir  string `json:"deployDir"`
-	DataDir    string `json:"dataDir"`
+	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
+
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir" yaml:"data_dir"`
+
 	// +optional
-	LogDir string `json:"logDir,omitempty"`
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
 }
 
 type PumpSpec struct {
@@ -131,9 +136,16 @@ type GrafanaSpec struct {
 	DeployDir string `json:"deployDir"`
 }
 
+type Global struct {
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir" yaml:"data_dir"`
+}
+
 type TiDBCluster struct {
 	Version TiDBClusterVersion `json:"version"`
 
+	// +optional
+	Global *Global `json:"global,omitempty"`
 	// +optional
 	ServerConfigs ServerConfigs `json:"serverConfigs,omitempty"`
 
@@ -166,23 +178,19 @@ type TiDBCluster struct {
 }
 
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
+	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField}
 	result := map[string]struct{}{
 		c.Control: {},
 	}
-	for _, item := range c.TiDB {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.TiKV {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.PD {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.Monitor {
-		result[item.Host] = struct{}{}
-	}
-	for _, item := range c.Grafana {
-		result[item.Host] = struct{}{}
+
+	val := reflect.ValueOf(*c)
+	for i := 0; i < val.Type().NumField(); i++ {
+		if checkIn(components, val.Type().Field(i).Name) {
+			field := val.Field(i)
+			for j := 0; j < field.Len(); j++ {
+				result[field.Index(j).FieldByName("Host").String()] = struct{}{}
+			}
+		}
 	}
 	return result
 }
@@ -208,8 +216,11 @@ type TestClusterTopologyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	PreServerConfigs *ServerConfigs      `json:"preServerConfigs,omitempty"`
-	PreVersion       *TiDBClusterVersion `json:"preVersion,omitempty"`
+	// PreTiDBCluster save tidb cluster configuration before update and scale-in/out,
+	// It is used to compare with the new configuration to see if the TestClusterTopology
+	// has been changed and what has been changed
+	PreTiDBCluster *TiDBCluster `json:"preTiDBCluster,omitempty"`
+
 	// default Pending
 	State ClusterTopologyState `json:"state,omitempty"`
 }
