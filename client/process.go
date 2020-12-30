@@ -18,9 +18,31 @@ import (
 	"context"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (c *Client) CreateProcChaos(ctx context.Context, chaosName string, tasks *naglfarv1.ProcChaosTask) error {
-	// TODO: implement me after https://github.com/PingCAP-QE/Naglfar/pull/84 merged
-	return nil
+func (c *Client) CreateProcChaos(ctx context.Context, chaosName string, tasks ...*naglfarv1.ProcChaosTask) error {
+	procChaos := &naglfarv1.ProcChaos{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      chaosName,
+		},
+		Spec: naglfarv1.ProcChaosSpec{
+			Request: requestName,
+			Tasks:   tasks,
+		},
+	}
+
+	return c.Create(ctx, procChaos)
+}
+
+func (c *Client) DeleteProcChaos(ctx context.Context, chaosName string) error {
+	procChaos := &naglfarv1.ProcChaos{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      chaosName,
+		},
+	}
+
+	return c.Delete(ctx, procChaos)
 }
