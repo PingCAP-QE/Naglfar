@@ -83,7 +83,7 @@ func (r *TestClusterTopology) ValidateCreate() error {
 func (r *TestClusterTopology) ValidateUpdate(old runtime.Object) error {
 	testclustertopologylog.Info("validate update", "name", r.Name)
 	tct := old.(*TestClusterTopology)
-	if tct.Status.PreTiDBCluster == nil || r.Spec.TiDBCluster == nil {
+	if r.Spec.TiDBCluster == nil || tct.Status.PreTiDBCluster == nil {
 		return nil
 	}
 
@@ -188,33 +188,6 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
 		}
 	}
 	return false
-}
-
-// checkInclusion check if pre include cur
-func checkInclusion(pre *TiDBCluster, cur *TiDBCluster) bool {
-	checkComponents := []string{TiDBField, PDField, TiKVField}
-	preVal := reflect.ValueOf(*pre)
-	curVal := reflect.ValueOf(*cur)
-	for i := 0; i < len(checkComponents); i++ {
-		preField := preVal.FieldByName(checkComponents[i])
-		curField := curVal.FieldByName(checkComponents[i])
-		if !preField.IsValid() || !curField.IsValid() {
-			continue
-		}
-		var isExist bool
-		for j := 0; j < preField.Len(); j++ {
-			for k := 0; k < curField.Len(); k++ {
-				if reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
-					isExist = true
-					break
-				}
-			}
-		}
-		if !isExist {
-			return false
-		}
-	}
-	return true
 }
 
 // getEmptyRequiredFields return which required fields are empty

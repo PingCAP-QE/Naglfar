@@ -509,7 +509,7 @@ func (c *ClusterManager) diffServerConfigs(pre naglfarv1.ServerConfigs, cur nagl
 }
 
 func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
-	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
+	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, getInsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
 	if err != nil {
@@ -522,7 +522,7 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 }
 
 func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
-	clientConfig, err := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
+	clientConfig, err := auth.PrivateKey("root", insecureKeyPath, getInsecureIgnoreHostKey())
 	if err != nil {
 		return fmt.Errorf("generate client privatekey failed: %s", err)
 	}
@@ -537,8 +537,12 @@ func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
 	return nil
 }
 
+func getInsecureIgnoreHostKey() ssh.HostKeyCallback {
+	return ssh.InsecureIgnoreHostKey()
+}
+
 func (c *ClusterManager) writeTemporaryTopologyMetaOnControl(out []byte, clusterName string) error {
-	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, ssh.InsecureIgnoreHostKey())
+	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, getInsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
 	if err != nil {
