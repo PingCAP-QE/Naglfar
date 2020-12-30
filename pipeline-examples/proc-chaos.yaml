@@ -1,0 +1,15 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: ProcChaos
+metadata:
+  name: tidb-cluster-chaos
+  namespace: test-tidb-cluster
+spec:
+  request: test-tidb-cluster
+  tasks:
+    - pattern: tikv-server
+      nodes: [n1]
+    - pattern: tidb-server
+      nodes: [n1, n2]
+      killAll: true
+      period: 1m
+
