@@ -16,9 +16,12 @@ package client
 
 import (
 	"context"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/kubeutil"
 )
 
 func (c *Client) CreateProcChaos(ctx context.Context, chaosName string, tasks ...*naglfarv1.ProcChaosTask) error {
@@ -33,7 +36,9 @@ func (c *Client) CreateProcChaos(ctx context.Context, chaosName string, tasks ..
 		},
 	}
 
-	return c.Create(ctx, procChaos)
+	return kubeutil.Retry(3, time.Second, func() error {
+		return c.Create(ctx, procChaos)
+	})
 }
 
 func (c *Client) DeleteProcChaos(ctx context.Context, chaosName string) error {
@@ -44,5 +49,7 @@ func (c *Client) DeleteProcChaos(ctx context.Context, chaosName string) error {
 		},
 	}
 
-	return c.Delete(ctx, procChaos)
+	return kubeutil.Retry(3, time.Second, func() error {
+		return c.Delete(ctx, procChaos)
+	})
 }
