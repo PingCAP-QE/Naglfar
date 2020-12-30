@@ -6,6 +6,9 @@ metadata:
 spec:
   resourceRequest: cluster-1
   tidbCluster:
+    global:
+      deployDir: "/tidb-deploy"
+      dataDir: "/tidb-data"
     serverConfigs:
       tidb: |-
         log.slow-threshold: 300
