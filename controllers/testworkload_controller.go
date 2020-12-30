@@ -250,11 +250,12 @@ func (r *TestWorkloadReconciler) reconcileFinish(workload *naglfarv1.TestWorkloa
 }
 
 func (r *TestWorkloadReconciler) setContainerSpec(containerSpec *naglfarv1.TestResourceStatus, testWorkload *naglfarv1.TestWorkload, workloadSpec *naglfarv1.TestWorkloadItemSpec) {
-	var envs []string
-	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarClusterNs, testWorkload.Namespace))
-	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestResourceRequestName, workloadSpec.DockerContainer.ResourceRequest.Name))
-	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadName, testWorkload.Name))
-	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadItem, workloadSpec.Name))
+	envs := []string{
+		fmt.Sprintf("%s=%s", NaglfarClusterNs, testWorkload.Namespace),
+		fmt.Sprintf("%s=%s", NaglfarTestResourceRequestName, workloadSpec.DockerContainer.ResourceRequest.Name),
+		fmt.Sprintf("%s=%s", NaglfarTestWorkloadName, testWorkload.Name),
+		fmt.Sprintf("%s=%s", NaglfarTestWorkloadItem, workloadSpec.Name),
+	}
 	for _, item := range testWorkload.Spec.ClusterTopologiesRefs {
 		envs = append(envs, fmt.Sprintf("%s=%s", item.AliasName, item.Name))
 	}
