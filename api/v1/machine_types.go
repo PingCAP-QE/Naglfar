@@ -94,6 +94,7 @@ type MachineSpec struct {
 	// +optional
 	DockerPort int `json:"dockerPort"`
 
+	// default is 1.25, cannot be smaller than 1.25
 	// +optional
 	DockerVersion string `json:"dockerVersion,omitempty"`
 
