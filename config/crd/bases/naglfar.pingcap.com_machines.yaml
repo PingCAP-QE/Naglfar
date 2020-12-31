@@ -44,6 +44,7 @@ spec:
               description: default false
               type: boolean
             dockerVersion:
+              description: default is 1.25, cannot be smaller than 1.25
               type: string
             exclusiveDisks:
               items:

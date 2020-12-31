@@ -237,6 +237,14 @@ spec:
         status:
           description: TestClusterTopologyStatus defines the observed state of TestClusterTopology
           properties:
+            offlineList:
+              items:
+                type: string
+              type: array
+            pendingOfflineList:
+              items:
+                type: string
+              type: array
             preTiDBCluster:
               description: PreTiDBCluster save tidb cluster configuration before update
                 and scale-in/out, It is used to compare with the new configuration

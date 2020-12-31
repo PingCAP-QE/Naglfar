@@ -221,6 +221,10 @@ type TestClusterTopologyStatus struct {
 	// has been changed and what has been changed
 	PreTiDBCluster *TiDBCluster `json:"preTiDBCluster,omitempty"`
 
+	// +optional
+	PendingOfflineList []string `json:"pendingOfflineList,omitempty"`
+	// +optional
+	OfflineList []string `json:"offlineList,omitempty"`
 	// default Pending
 	State ClusterTopologyState `json:"state,omitempty"`
 }

@@ -124,9 +124,26 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			}
 			return ctrl.Result{}, nil
 		}
-
 		// cluster config no change
 		if !tiup.IsClusterConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+			var rr naglfarv1.TestResourceRequest
+			if err := r.Get(ctx, types.NamespacedName{
+				Namespace: req.Namespace,
+				Name:      ct.Spec.ResourceRequest,
+			}, &rr); err != nil {
+				return ctrl.Result{}, err
+			}
+			isRequeue, result, err := r.pruneTiDBCluster(ctx, &ct, &rr)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.Status().Update(ctx, &ct); err != nil {
+				log.Error(err, "unable to update TestClusterTopology")
+				return ctrl.Result{}, err
+			}
+			if isRequeue {
+				return result, nil
+			}
 			return ctrl.Result{}, nil
 		}
 
@@ -366,6 +383,57 @@ func hostname2ClusterIP(resourceList naglfarv1.TestResourceList) map[string]stri
 	return result
 }
 
+func (r *TestClusterTopologyReconciler) pruneTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isRequeue bool, result ctrl.Result, err error) {
+	log := r.Log.WithValues("pruneTiDBCluster", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+
+	var resourceList naglfarv1.TestResourceList
+	var resources []*naglfarv1.TestResource
+	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+		log.Error(err, "unable to list child resources")
+	}
+	resources = filterClusterResources(ct, resourceList)
+
+	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+
+	pendingOfflineList, err := tiupCtl.GetNodeStatusList(log, ct.Name, "Pending")
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	tmp, err := tiupCtl.GetNodeStatusList(log, ct.Name, "Offline")
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	var offlineList []string
+	for i := 0; i < len(tmp); i++ {
+		isExist := false
+		for j := 0; j < len(pendingOfflineList); j++ {
+			if tmp[i] == pendingOfflineList[j] {
+				isExist = true
+			}
+		}
+		if !isExist {
+			offlineList = append(offlineList, tmp[i])
+		}
+	}
+	ct.Status.PendingOfflineList = pendingOfflineList
+	ct.Status.OfflineList = offlineList
+	if len(pendingOfflineList) != 0 || len(offlineList) != 0 {
+		log.Info("cluster is trying prune", "PendingOfflineList", pendingOfflineList, "OfflineList", offlineList)
+		return true, ctrl.Result{RequeueAfter: time.Second * 10}, err
+	}
+
+	err = tiupCtl.PruneCluster(log, ct.Name, ct)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	return false, ctrl.Result{}, err
+}
 func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isOk bool, result ctrl.Result, err error) {
 
 	if tiup.IsServerConfigModified(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs) {
