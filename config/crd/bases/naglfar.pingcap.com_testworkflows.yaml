@@ -61,6 +61,35 @@ spec:
                         description: TestClusterTopologySpec defines the desired state
                           of TestClusterTopology
                         properties:
+                          flinkCluster:
+                            properties:
+                              jobManager:
+                                properties:
+                                  config:
+                                    type: string
+                                  host:
+                                    type: string
+                                  webPort:
+                                    type: integer
+                                required:
+                                - host
+                                type: object
+                              taskManager:
+                                items:
+                                  properties:
+                                    config:
+                                      type: string
+                                    host:
+                                      type: string
+                                  required:
+                                  - host
+                                  type: object
+                                type: array
+                              version:
+                                type: string
+                            required:
+                            - version
+                            type: object
                           resourceRequest:
                             description: ResourceRequest cannot be empty if the tidbCluster
                               field is set

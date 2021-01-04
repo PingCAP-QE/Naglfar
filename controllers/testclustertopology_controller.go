@@ -17,6 +17,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -27,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/flink"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
@@ -104,6 +106,16 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}
 				r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("cluster %s is installed", ct.Name))
+			case ct.Spec.FlinkCluster != nil:
+				requeue, err := r.installFlinkCluster(ctx, &ct, &rr)
+				if err != nil {
+					r.Recorder.Event(&ct, "Warning", "Install", err.Error())
+					return ctrl.Result{}, err
+				}
+				if requeue {
+					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+				r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("cluster %s is installed", ct.Name))
 			}
 			ct.Status.State = naglfarv1.ClusterTopologyStateReady
 			if err := r.Status().Update(ctx, &ct); err != nil {
@@ -116,7 +128,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		}
 	case naglfarv1.ClusterTopologyStateReady:
 		// first create
-		if ct.Status.PreTiDBCluster == nil {
+		if ct.Status.PreTiDBCluster == nil && ct.Spec.TiDBCluster != nil {
 			ct.Status.PreTiDBCluster = ct.Spec.TiDBCluster.DeepCopy()
 			if err := r.Status().Update(ctx, &ct); err != nil {
 				log.Error(err, "unable to update TestClusterTopology")
@@ -179,8 +191,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	}
 
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, resources, ct)
-
+	requeue, err = r.initResource(ctx, ct, resources)
 	if requeue {
 		return true, err
 	}
@@ -243,7 +254,7 @@ func (r *TestClusterTopologyReconciler) scaleOutTiDBCluster(ctx context.Context,
 		log.Error(err, "unable to list child resources")
 	}
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, resources, ct)
+	requeue, err = r.initResource(ctx, ct, resources)
 	if requeue {
 		return true, err
 	}
@@ -289,6 +300,8 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 				// we ignore cluster not exist error
 				return tiup.IgnoreClusterNotExist(err)
 			}
+		case ct.Spec.FlinkCluster != nil:
+			log.Info("flink cluster is uninstalled")
 		}
 	}
 	return nil
@@ -313,29 +326,34 @@ func (s strSet) add(elem string) strSet {
 }
 
 func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1.TestResource) (indexes map[string]strSet, err error) {
-	spec, _, err := tiup.BuildSpecification(ctf, trs, true)
-	if err != nil {
-		return nil, err
-	}
 	indexes = make(map[string]strSet)
-	for _, item := range trs {
-		indexes[item.Name] = make(strSet, 0)
-	}
-	for _, item := range spec.TiDBServers {
-		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
-		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.StatusPort))
-	}
-	for _, item := range spec.PDServers {
-		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.ClientPort))
-	}
-	for _, item := range spec.TiKVServers {
-		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.StatusPort))
-	}
-	for _, item := range spec.Grafana {
-		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
-	}
-	for _, item := range spec.Monitors {
-		indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+	switch {
+	case ctf.TiDBCluster != nil:
+		spec, _, err := tiup.BuildSpecification(ctf, trs, true)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range trs {
+			indexes[item.Name] = make(strSet, 0)
+		}
+		for _, item := range spec.TiDBServers {
+			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+		}
+		for _, item := range spec.PDServers {
+			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.ClientPort))
+		}
+		for _, item := range spec.Grafana {
+			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+		}
+		for _, item := range spec.Monitors {
+			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+		}
+	case ctf.FlinkCluster != nil:
+		spec, _, err := flink.BuildSpecification(ctf, trs, true)
+		if err != nil {
+			return nil, err
+		}
+		indexes[spec.JobManager.Host] = indexes[spec.JobManager.Host].add(fmt.Sprintf("%d/tcp", spec.JobManager.WebPort))
 	}
 	return
 }
@@ -405,7 +423,13 @@ func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, c
 }
 
 func filterClusterResources(ct *naglfarv1.TestClusterTopology, resourceList naglfarv1.TestResourceList) []*naglfarv1.TestResource {
-	allHosts := ct.Spec.TiDBCluster.AllHosts()
+	var allHosts map[string]struct{}
+	switch {
+	case ct.Spec.TiDBCluster != nil:
+		allHosts = ct.Spec.TiDBCluster.AllHosts()
+	case ct.Spec.FlinkCluster != nil:
+		allHosts = ct.Spec.FlinkCluster.AllHosts()
+	}
 	result := make([]*naglfarv1.TestResource, 0)
 	for idx := range resourceList.Items {
 		item := &resourceList.Items[idx]
@@ -416,7 +440,19 @@ func filterClusterResources(ct *naglfarv1.TestClusterTopology, resourceList nagl
 	return result
 }
 
-func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, resources []*naglfarv1.TestResource, ct *naglfarv1.TestClusterTopology) (bool, error) {
+func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
+	var requeue bool
+	var err error
+	switch {
+	case ct.Spec.TiDBCluster != nil:
+		requeue, err = r.initTiDBResources(ctx, ct, resources)
+	case ct.Spec.FlinkCluster != nil:
+		requeue, err = r.initFlinkResources(ctx, ct, resources)
+	}
+	return requeue, err
+}
+
+func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
 	var requeue bool
 	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
 	if err != nil {
@@ -446,4 +482,79 @@ func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, resour
 		}
 	}
 	return requeue, nil
+}
+
+func (r *TestClusterTopologyReconciler) initFlinkResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
+	var requeue bool
+	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return requeue, fmt.Errorf("index exposed ports failed: %v", err)
+	}
+	image := flink.BaseImageName + ct.Spec.FlinkCluster.Version
+	for _, resource := range resources {
+		switch resource.Status.State {
+		case naglfarv1.ResourceUninitialized:
+			requeue = true
+			if resource.Status.Image == "" {
+				resource.Status.Image = image
+				if resource.Name == ct.Spec.FlinkCluster.JobManager.Host {
+					resource.Status.Command = []string{"jobmanager"}
+					resource.Status.HostName = "jobmanager"
+					config := ct.Spec.FlinkCluster.JobManager.Config
+					if ct.Spec.FlinkCluster.JobManager.WebPort != 0 {
+						config += "\njobmanager.web.port: " + strconv.Itoa(ct.Spec.FlinkCluster.JobManager.WebPort)
+					}
+					config = "jobmanager.rpc.address: jobmanager\n" + config
+					resource.Status.Envs = []string{"FLINK_PROPERTIES=" + config}
+				} else {
+					resource.Status.Command = []string{"taskmanager"}
+					for i := 0; i < len(ct.Spec.FlinkCluster.TaskManager); i++ {
+						if resource.Name == ct.Spec.FlinkCluster.TaskManager[i].Host {
+							config := ct.Spec.FlinkCluster.TaskManager[i].Config
+							config = "jobmanager.rpc.address: jobmanager\n" + config
+							resource.Status.Envs = []string{"FLINK_PROPERTIES=" + config}
+							break
+						}
+					}
+				}
+				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
+				resource.Status.ExposedPorts = append(resource.Status.ExposedPorts, naglfarv1.SSHPort)
+				err := r.Status().Update(ctx, resource)
+				if err != nil {
+					return false, err
+				}
+			}
+		case naglfarv1.ResourceReady:
+			if resource.Status.Image != image {
+				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
+			}
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
+		}
+	}
+	return requeue, nil
+}
+
+func (r *TestClusterTopologyReconciler) installFlinkCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
+	log := r.Log.WithValues("installFlinkCluster", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+	var resourceList naglfarv1.TestResourceList
+	var resources []*naglfarv1.TestResource
+	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+		log.Error(err, "unable to list child resources")
+	}
+	resources = filterClusterResources(ct, resourceList)
+
+	requeue, err = r.initResource(ctx, ct, resources)
+	if requeue {
+		return true, err
+	}
+
+	flinkCtl, err := flink.MakeClusterManager(log, ct.Spec.DeepCopy(), resources, hostname2ClusterIP(resourceList))
+	if err != nil {
+		return false, err
+	}
+	return false, flinkCtl.InstallCluster(ctx, log)
 }

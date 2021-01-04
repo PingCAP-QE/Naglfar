@@ -538,7 +538,6 @@ func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
 	return nil
 }
 
-
 func insecureIgnoreHostKey() ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		return nil
