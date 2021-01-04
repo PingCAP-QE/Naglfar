@@ -430,6 +430,21 @@ spec:
               - ready
               - updating
               type: string
+            tiDBCluster:
+              description: Info provide some information to help users understand
+                the internal state of the cluster
+              properties:
+                offlineList:
+                  description: tikvs in offline state, like [172.16.0.1:20160]
+                  items:
+                    type: string
+                  type: array
+                pendingOfflineList:
+                  description: tikvs in pendingOffline state, like [172.16.0.1:20160]
+                  items:
+                    type: string
+                  type: array
+              type: object
           type: object
       type: object
   version: v1

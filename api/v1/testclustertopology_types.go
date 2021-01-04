@@ -208,6 +208,16 @@ type TestClusterTopologySpec struct {
 	TiDBCluster *TiDBCluster `json:"tidbCluster,omitempty"`
 }
 
+type TiDBClusterInfo struct {
+	// tikvs in pendingOffline state, like [172.16.0.1:20160]
+	// +optional
+	PendingOfflineList []string `json:"pendingOfflineList,omitempty"`
+
+	// tikvs in offline state, like [172.16.0.1:20160]
+	// +optional
+	OfflineList []string `json:"offlineList,omitempty"`
+}
+
 // +kubebuilder:validation:Enum=pending;ready;updating
 type ClusterTopologyState string
 
@@ -221,6 +231,9 @@ type TestClusterTopologyStatus struct {
 	// has been changed and what has been changed
 	PreTiDBCluster *TiDBCluster `json:"preTiDBCluster,omitempty"`
 
+	// Info provide some information to help users understand the internal state of the cluster
+	// +optional
+	TiDBClusterInfo TiDBClusterInfo `json:"tiDBCluster,omitempty"`
 	// default Pending
 	State ClusterTopologyState `json:"state,omitempty"`
 }

@@ -108,6 +108,10 @@ func (r *TestClusterTopology) ValidateUpdate(old runtime.Object) error {
 		return fmt.Errorf("you must fill %v", result)
 	}
 
+	if IsScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) && (len(r.Status.TiDBClusterInfo.PendingOfflineList) != 0 || len(r.Status.TiDBClusterInfo.OfflineList) != 0) {
+		return fmt.Errorf("you must wait scale-in tikvs %v,%v complete the region migration", r.Status.TiDBClusterInfo.PendingOfflineList, r.Status.TiDBClusterInfo.OfflineList)
+	}
+
 	// TODO(user): fill in your validation logic upon object update.
 	return nil
 }
@@ -252,4 +256,8 @@ func checkIn(lists []string, str string) bool {
 		}
 	}
 	return false
+}
+
+func IsScaleIn(pre *TiDBCluster, cur *TiDBCluster) bool {
+	return len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
 }
