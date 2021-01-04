@@ -108,8 +108,8 @@ func (r *TestClusterTopology) ValidateUpdate(old runtime.Object) error {
 		return fmt.Errorf("you must fill %v", result)
 	}
 
-	if IsScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) && (len(r.Status.Info.PendingOfflineList) != 0 || len(r.Status.Info.OfflineList) != 0) {
-		return fmt.Errorf("you must wait scale-in tikvs %v,%v complete the region migration", r.Status.Info.PendingOfflineList, r.Status.Info.OfflineList)
+	if IsScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) && (len(r.Status.TiDBClusterInfo.PendingOfflineList) != 0 || len(r.Status.TiDBClusterInfo.OfflineList) != 0) {
+		return fmt.Errorf("you must wait scale-in tikvs %v,%v complete the region migration", r.Status.TiDBClusterInfo.PendingOfflineList, r.Status.TiDBClusterInfo.OfflineList)
 	}
 
 	// TODO(user): fill in your validation logic upon object update.

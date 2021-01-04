@@ -208,12 +208,13 @@ type TestClusterTopologySpec struct {
 	TiDBCluster *TiDBCluster `json:"tidbCluster,omitempty"`
 }
 
-type Info struct {
-	// +optional
+type TiDBClusterInfo struct {
 	// tikvs in pendingOffline state, like [172.16.0.1:20160]
-	PendingOfflineList []string `json:"pendingOfflineList,omitempty"`
 	// +optional
+	PendingOfflineList []string `json:"pendingOfflineList,omitempty"`
+
 	// tikvs in offline state, like [172.16.0.1:20160]
+	// +optional
 	OfflineList []string `json:"offlineList,omitempty"`
 }
 
@@ -232,7 +233,7 @@ type TestClusterTopologyStatus struct {
 
 	// Info provide some information to help users understand the internal state of the cluster
 	// +optional
-	Info Info `json:"info,omitempty"`
+	TiDBClusterInfo TiDBClusterInfo `json:"tiDBCluster,omitempty"`
 	// default Pending
 	State ClusterTopologyState `json:"state,omitempty"`
 }

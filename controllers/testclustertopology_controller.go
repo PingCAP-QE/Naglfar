@@ -431,8 +431,8 @@ func (r *TestClusterTopologyReconciler) checkTiKVFinishedScaleIn(ctx context.Con
 			offlineList = append(offlineList, tmp[i])
 		}
 	}
-	ct.Status.Info.PendingOfflineList = pendingOfflineList
-	ct.Status.Info.OfflineList = offlineList
+	ct.Status.TiDBClusterInfo.PendingOfflineList = pendingOfflineList
+	ct.Status.TiDBClusterInfo.OfflineList = offlineList
 	if len(pendingOfflineList) != 0 || len(offlineList) != 0 {
 		log.Info("cluster is trying prune", "PendingOfflineList", pendingOfflineList, "OfflineList", offlineList)
 		return false, ctrl.Result{RequeueAfter: time.Second * 10}, err
