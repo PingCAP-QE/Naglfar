@@ -70,7 +70,8 @@ var _ webhook.Validator = &TestClusterTopology{}
 func (r *TestClusterTopology) ValidateCreate() error {
 	testclustertopologylog.Info("validate create", "name", r.Name)
 
-	if checkClusterNumber(r) {
+	// check the number of clusters contained in submitted yaml
+	if r.Spec.FlinkCluster != nil && r.Spec.TiDBCluster != nil {
 		return fmt.Errorf("only one cluster can be created at a time")
 	}
 
@@ -275,14 +276,6 @@ func checkIn(lists []string, str string) bool {
 		if lists[i] == str {
 			return true
 		}
-	}
-	return false
-}
-
-// checkClusterNumber check the number of clusters contained in submitted yaml
-func checkClusterNumber(tct *TestClusterTopology) bool {
-	if tct.Spec.FlinkCluster != nil && tct.Spec.TiDBCluster != nil {
-		return true
 	}
 	return false
 }

@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -30,7 +31,6 @@ import (
 	"github.com/PingCAP-QE/Naglfar/pkg/flink"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
-	"github.com/go-logr/logr"
 )
 
 // TestClusterTopologyReconciler reconciles a TestClusterTopology object
@@ -628,7 +628,6 @@ func (r *TestClusterTopologyReconciler) initFlinkResources(ctx context.Context, 
 					}
 				}
 				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
-				resource.Status.ExposedPorts = append(resource.Status.ExposedPorts, naglfarv1.SSHPort)
 				err := r.Status().Update(ctx, resource)
 				if err != nil {
 					return false, err
@@ -661,10 +660,5 @@ func (r *TestClusterTopologyReconciler) installFlinkCluster(ctx context.Context,
 	if requeue {
 		return true, err
 	}
-
-	flinkCtl, err := flink.MakeClusterManager(log, ct.Spec.DeepCopy(), resources, hostname2ClusterIP(resourceList))
-	if err != nil {
-		return false, err
-	}
-	return false, flinkCtl.InstallCluster(ctx, log)
+	return false, nil
 }
