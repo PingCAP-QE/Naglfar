@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -31,6 +30,7 @@ import (
 	"github.com/PingCAP-QE/Naglfar/pkg/flink"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
+	"github.com/go-logr/logr"
 )
 
 // TestClusterTopologyReconciler reconciles a TestClusterTopology object
@@ -115,7 +115,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 				if requeue {
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}
-				r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("cluster %s is installed", ct.Name))
+				r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("flink cluster %s is installed", ct.Name))
 			}
 			ct.Status.State = naglfarv1.ClusterTopologyStateReady
 			if err := r.Status().Update(ctx, &ct); err != nil {
@@ -128,52 +128,57 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		}
 	case naglfarv1.ClusterTopologyStateReady:
 		// first create
-		if ct.Status.PreTiDBCluster == nil && ct.Spec.TiDBCluster != nil {
-			ct.Status.PreTiDBCluster = ct.Spec.TiDBCluster.DeepCopy()
-			if err := r.Status().Update(ctx, &ct); err != nil {
-				log.Error(err, "unable to update TestClusterTopology")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-		// cluster config no change
-		if !tiup.IsClusterConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
-			var rr naglfarv1.TestResourceRequest
-			if err := r.Get(ctx, types.NamespacedName{
-				Namespace: req.Namespace,
-				Name:      ct.Spec.ResourceRequest,
-			}, &rr); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			isFinish, result, err := r.checkTiKVFinishedScaleIn(ctx, &ct, &rr)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := r.Status().Update(ctx, &ct); err != nil {
-				log.Error(err, "unable to update TestClusterTopology")
-				return ctrl.Result{}, err
-			}
-
-			if isFinish {
-				isOK, result, err := r.pruneTiDBCluster(ctx, &ct, &rr)
-				if err != nil {
-					r.Recorder.Event(&ct, "Warning", "Prune TiKVs", err.Error())
+		switch {
+		case ct.Spec.TiDBCluster != nil:
+			if ct.Status.PreTiDBCluster == nil {
+				ct.Status.PreTiDBCluster = ct.Spec.TiDBCluster.DeepCopy()
+				if err := r.Status().Update(ctx, &ct); err != nil {
+					log.Error(err, "unable to update TestClusterTopology")
 					return ctrl.Result{}, err
 				}
-				if isOK {
-					return ctrl.Result{}, nil
+				return ctrl.Result{}, nil
+			}
+			// cluster config no change
+			if !tiup.IsClusterConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+				var rr naglfarv1.TestResourceRequest
+				if err := r.Get(ctx, types.NamespacedName{
+					Namespace: req.Namespace,
+					Name:      ct.Spec.ResourceRequest,
+				}, &rr); err != nil {
+					return ctrl.Result{}, err
+				}
+
+				// check whether all the scale-in tikvs have migrated the region to other tikvs and are in the tombstone state. If finished, prune these useless tikvs
+				isFinish, result, err := r.checkTiKVFinishedScaleIn(ctx, &ct, &rr)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				if err := r.Status().Update(ctx, &ct); err != nil {
+					log.Error(err, "unable to update TestClusterTopology")
+					return ctrl.Result{}, err
+				}
+
+				if isFinish {
+					isOK, result, err := r.pruneTiDBCluster(ctx, &ct, &rr)
+					if err != nil {
+						r.Recorder.Event(&ct, "Warning", "Prune TiKVs", err.Error())
+						return ctrl.Result{}, err
+					}
+					if isOK {
+						return ctrl.Result{}, nil
+					}
+					return result, nil
 				}
 				return result, nil
 			}
-			return result, nil
-		}
+			log.Info("Cluster is updating", "clusterName", ct.Name)
+			ct.Status.State = naglfarv1.ClusterTopologyStateUpdating
+			if err := r.Status().Update(ctx, &ct); err != nil {
+				log.Error(err, "unable to update TestClusterTopology")
+				return ctrl.Result{}, err
+			}
+		case ct.Spec.FlinkCluster != nil:
 
-		log.Info("Cluster is updating", "clusterName", ct.Name)
-		ct.Status.State = naglfarv1.ClusterTopologyStateUpdating
-		if err := r.Status().Update(ctx, &ct); err != nil {
-			log.Error(err, "unable to update TestClusterTopology")
-			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	case naglfarv1.ClusterTopologyStateUpdating:

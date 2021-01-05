@@ -3,10 +3,11 @@ package flink
 import (
 	"context"
 	"fmt"
+	"time"
+
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/creasty/defaults"
 	"github.com/go-logr/logr"
-	"time"
 )
 
 const (
