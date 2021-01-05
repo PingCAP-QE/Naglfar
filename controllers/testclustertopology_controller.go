@@ -17,7 +17,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	"strconv"
 	"time"
 
@@ -30,6 +29,7 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/flink"
+	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	dm "github.com/PingCAP-QE/Naglfar/pkg/tiup/dm"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )

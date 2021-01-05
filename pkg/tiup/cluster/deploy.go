@@ -667,7 +667,7 @@ func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles
 }
 
 func (c *ClusterManager) shouldPatch(version naglfarv1.TiDBClusterVersion) bool {
-	return len(version.TiDBDownloadURL) != 0 || len(version.PDDownloadUrl) != 0 || len(version.TiKVDownloadURL) != 0
+	return version.TiDBDownloadURL != "" || version.PDDownloadUrl != "" || version.TiKVDownloadURL != ""
 }
 
 func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBClusterVersion) error {
@@ -683,21 +683,21 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 	commands := []string{"set -ex", "rm -rf components && mkdir components"}
 	var patchComponents []component
 	var patchComponentNames []string
-	if len(version.TiDBDownloadURL) != 0 {
+	if version.TiDBDownloadURL != "" {
 		patchComponents = append(patchComponents, component{
 			componentName: "tidb-server",
 			downloadURL:   version.TiDBDownloadURL,
 		})
 		patchComponentNames = append(patchComponentNames, "tidb-server")
 	}
-	if len(version.TiKVDownloadURL) != 0 {
+	if version.TiKVDownloadURL != "" {
 		patchComponents = append(patchComponents, component{
 			componentName: "tikv-server",
 			downloadURL:   version.TiKVDownloadURL,
 		})
 		patchComponentNames = append(patchComponentNames, "tikv-server")
 	}
-	if len(version.PDDownloadUrl) != 0 {
+	if version.PDDownloadUrl != "" {
 		patchComponents = append(patchComponents, component{
 			componentName: "pd-server",
 			downloadURL:   version.PDDownloadUrl,
@@ -710,11 +710,7 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 		if err != nil {
 			return err
 		}
-		commands = append(commands,
-			fmt.Sprintf(`curl -O %s`, downloadURL))
-		commands = append(commands, c.GenUnzipCommand(path.Base(u.Path), "components"))
-		commands = append(commands, fmt.Sprintf("rm -rf components/%s", component.componentName))
-		commands = append(commands, fmt.Sprintf("mv components/bin/%s components/%s", component.componentName, component.componentName))
+		commands = append(commands, fmt.Sprintf(`curl -O %s`, downloadURL), c.GenUnzipCommand(path.Base(u.Path), "components"), fmt.Sprintf("rm -rf components/%s", component.componentName), fmt.Sprintf("mv components/bin/%s components/%s", component.componentName, component.componentName))
 	}
 	commands = append(commands, "cd components && tar zcf patch.tar.gz "+strings.Join(patchComponentNames, " "))
 	for _, component := range patchComponentNames {

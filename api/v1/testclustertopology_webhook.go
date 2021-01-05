@@ -73,17 +73,7 @@ var _ webhook.Validator = &TestClusterTopology{}
 func (r *TestClusterTopology) ValidateCreate() error {
 	testclustertopologylog.Info("validate create", "name", r.Name)
 
-	// check the number of clusters contained in submitted yaml
-	clusterNum := 0
-	if r.Spec.FlinkCluster != nil {
-		clusterNum++
-	}
-	if r.Spec.TiDBCluster != nil {
-		clusterNum++
-	}
-	if r.Spec.DMCluster != nil {
-		clusterNum++
-	}
+	clusterNum := countClusterNum(r)
 	if clusterNum > 1 {
 		return fmt.Errorf("only one cluster can be created at a time")
 	}
@@ -295,4 +285,19 @@ func checkIn(lists []string, str string) bool {
 
 func IsScaleIn(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
+}
+
+// countClusterNum count the number of clusters in submitted  yaml
+func countClusterNum(tct *TestClusterTopology) int {
+	clusterNum := 0
+	if tct.Spec.FlinkCluster != nil {
+		clusterNum++
+	}
+	if tct.Spec.TiDBCluster != nil {
+		clusterNum++
+	}
+	if tct.Spec.DMCluster != nil {
+		clusterNum++
+	}
+	return clusterNum
 }

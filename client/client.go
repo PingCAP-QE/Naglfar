@@ -17,7 +17,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	"os"
 	"time"
 
@@ -32,6 +31,7 @@ import (
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/controllers"
 	"github.com/PingCAP-QE/Naglfar/pkg/kubeutil"
+	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
 

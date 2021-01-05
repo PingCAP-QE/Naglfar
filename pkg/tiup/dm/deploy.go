@@ -90,7 +90,7 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.DMSe
 	return nil
 }
 
-func setMasterConfig(spec *tiupSpec.Specification, configStr string, index int) error {
+func setMasterConfig(spec *tiupSpec.Specification, masterConfig string, index int) error {
 	unmarshalMasterConfigToMap := func(data []byte, object *map[string]interface{}) error {
 		err := yaml.Unmarshal(data, object)
 		return err
@@ -103,7 +103,7 @@ func setMasterConfig(spec *tiupSpec.Specification, configStr string, index int) 
 		config string
 	}{{
 		&config,
-		configStr,
+		masterConfig,
 	}} {
 		err := unmarshalMasterConfigToMap([]byte(item.config), item.object)
 		if err != nil {
@@ -114,7 +114,7 @@ func setMasterConfig(spec *tiupSpec.Specification, configStr string, index int) 
 	return nil
 }
 
-func setWorkerConfig(spec *tiupSpec.Specification, configStr string, index int) error {
+func setWorkerConfig(spec *tiupSpec.Specification, workerConfig string, index int) error {
 	unmarshalWorkerConfigToMap := func(data []byte, object *map[string]interface{}) error {
 		err := yaml.Unmarshal(data, object)
 		return err
@@ -127,7 +127,7 @@ func setWorkerConfig(spec *tiupSpec.Specification, configStr string, index int) 
 		config string
 	}{{
 		&config,
-		configStr,
+		workerConfig,
 	}} {
 		err := unmarshalWorkerConfigToMap([]byte(item.config), item.object)
 		if err != nil {
@@ -183,14 +183,14 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 		if err := setMasterConfig(&spec, item.Config, index); err != nil {
-			err = fmt.Errorf("set PumpConfigs failed: %v", err)
+			err = fmt.Errorf("set MasterConfigs failed: %v", err)
 			return spec, nil, err
 		}
 	}
 	for index, item := range ctf.DMCluster.Worker {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
-			return spec, nil, fmt.Errorf("master node not found: `%s`", item.Host)
+			return spec, nil, fmt.Errorf("worker node not found: `%s`", item.Host)
 		}
 		spec.Workers = append(spec.Workers, tiupSpec.WorkerSpec{
 			Host:            hostName(item.Host, node.ClusterIP),
@@ -202,7 +202,7 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 		if err := setWorkerConfig(&spec, item.Config, index); err != nil {
-			err = fmt.Errorf("set PumpConfigs failed: %v", err)
+			err = fmt.Errorf("set WorkerConfigs failed: %v", err)
 			return spec, nil, err
 		}
 	}
