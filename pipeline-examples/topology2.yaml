@@ -1,0 +1,18 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestClusterTopology
+metadata:
+  name: tct
+  namespace: test
+spec:
+  resourceRequest: tr
+  flinkCluster:
+    version: latest
+    jobManager:
+      host: n1
+      webPort: 8080
+      config: |-
+        jobmanager.web.port: 8081
+    taskManager:
+      - host: n2
+        config: |-
+          taskmanager.memory.process.size: 1500m

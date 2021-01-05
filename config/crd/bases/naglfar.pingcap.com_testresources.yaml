@@ -147,6 +147,8 @@ spec:
             hostIP:
               description: HostIP is the ip address of the host machine
               type: string
+            hostname:
+              type: string
             image:
               type: string
             imagePullPolicy:
