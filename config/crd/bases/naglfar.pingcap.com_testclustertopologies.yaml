@@ -47,6 +47,135 @@ spec:
         spec:
           description: TestClusterTopologySpec defines the desired state of TestClusterTopology
           properties:
+            dmCluster:
+              properties:
+                alertManager:
+                  items:
+                    properties:
+                      clusterPort:
+                        type: integer
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      webPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                control:
+                  description: Control machine host
+                  type: string
+                global:
+                  properties:
+                    dataDir:
+                      type: string
+                    deployDir:
+                      type: string
+                  required:
+                  - dataDir
+                  - deployDir
+                  type: object
+                grafana:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                master:
+                  items:
+                    properties:
+                      Port:
+                        type: integer
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      numaNode:
+                        type: string
+                      peerPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                monitor:
+                  items:
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                serverConfigs:
+                  properties:
+                    master:
+                      type: string
+                    worker:
+                      type: string
+                  type: object
+                version:
+                  type: string
+                worker:
+                  items:
+                    properties:
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      numaNode:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+              required:
+              - control
+              type: object
             flinkCluster:
               properties:
                 jobManager:

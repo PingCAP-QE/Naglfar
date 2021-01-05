@@ -1,4 +1,4 @@
-package tiup
+package cluster
 
 import (
 	"bytes"
@@ -301,7 +301,7 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 		if !exist {
 			return spec, nil, fmt.Errorf("grafana node not found: `%s`", item.Host)
 		}
-		spec.Grafana = append(spec.Grafana, tiupSpec.GrafanaSpec{
+		spec.Grafanas = append(spec.Grafanas, tiupSpec.GrafanaSpec{
 			Host:            hostName(item.Host, node.ClusterIP),
 			SSHPort:         22,
 			Port:            item.Port,
@@ -577,7 +577,6 @@ func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
 	}
 	return nil
 }
-
 
 func insecureIgnoreHostKey() ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {

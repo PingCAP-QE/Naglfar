@@ -36,16 +36,19 @@ func (r *TestClusterTopology) SetupWebhookWithManager(mgr ctrl.Manager) error {
 }
 
 const (
-	ControlField = "control"
-	VersionField = "Version"
-	GlobalField  = "Global"
-	TiDBField    = "TiDB"
-	TiKVField    = "TiKV"
-	PDField      = "PD"
-	PumpField    = "Pump"
-	DrainerField = "Drainer"
-	MonitorField = "Monitor"
-	GrafanaField = "Grafana"
+	ControlField      = "Control"
+	VersionField      = "Version"
+	GlobalField       = "Global"
+	TiDBField         = "TiDB"
+	TiKVField         = "TiKV"
+	PDField           = "PD"
+	PumpField         = "Pump"
+	DrainerField      = "Drainer"
+	MonitorField      = "Monitor"
+	GrafanaField      = "Grafana"
+	MasterField       = "Master"
+	WorkerField       = "Worker"
+	AlertManagerField = "AlertManager"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -71,7 +74,17 @@ func (r *TestClusterTopology) ValidateCreate() error {
 	testclustertopologylog.Info("validate create", "name", r.Name)
 
 	// check the number of clusters contained in submitted yaml
-	if r.Spec.FlinkCluster != nil && r.Spec.TiDBCluster != nil {
+	clusterNum := 0
+	if r.Spec.FlinkCluster != nil {
+		clusterNum++
+	}
+	if r.Spec.TiDBCluster != nil {
+		clusterNum++
+	}
+	if r.Spec.DMCluster != nil {
+		clusterNum++
+	}
+	if clusterNum > 1 {
 		return fmt.Errorf("only one cluster can be created at a time")
 	}
 
@@ -82,7 +95,7 @@ func (r *TestClusterTopology) ValidateCreate() error {
 			return fmt.Errorf("you must fill %v", result)
 		}
 	case r.Spec.FlinkCluster != nil:
-
+	case r.Spec.DMCluster != nil:
 	}
 
 	// TODO(user): fill in your validation logic upon object creation.
@@ -97,7 +110,7 @@ func (r *TestClusterTopology) ValidateUpdate(old runtime.Object) error {
 	case r.Spec.TiDBCluster != nil:
 		return r.validateTiDBUpdate(tct)
 	case r.Spec.FlinkCluster != nil:
-
+	case r.Spec.DMCluster != nil:
 	}
 
 	// TODO(user): fill in your validation logic upon object update.
