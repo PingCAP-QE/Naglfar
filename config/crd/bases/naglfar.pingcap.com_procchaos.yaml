@@ -41,17 +41,26 @@ spec:
               type: string
             tasks:
               items:
+                description: ProcChaosTask represent a task to kill some processes
+                  once or in period.
                 properties:
                   killAll:
-                    description: KillAll means kill all process matching pattern
+                    description: KillAll means kill all processes matching pattern
+                      in container, default false.
                     type: boolean
                   nodes:
+                    description: Nodes are resources chosen to kill subprocesses in
+                      its container. Only one node will be chosen in a period.
                     items:
                       type: string
                     type: array
                   pattern:
+                    description: Pattern is a grep pattern to match process. For example,
+                      use 'tidb-server' to match tidb server process.
                     type: string
                   period:
+                    description: Period is the period of task. Empty period means
+                      applying task only once.
                     type: string
                 required:
                 - nodes

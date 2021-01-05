@@ -102,10 +102,8 @@ func (r *ProcChaosReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, e
 
 		if task.Period != "" {
 			state.KilledTime = util.NewTime(time.Now())
-		} else {
-			if err = kill(task, state); err != nil {
-				return
-			}
+		} else if err = kill(task, state); err != nil {
+			return
 		}
 
 		err = r.Status().Update(r.Ctx, &procChaos)

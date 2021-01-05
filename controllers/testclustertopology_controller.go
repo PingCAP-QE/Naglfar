@@ -136,10 +136,37 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			}
 			return ctrl.Result{}, nil
 		}
-
 		// cluster config no change
 		if !tiup.IsClusterConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
-			return ctrl.Result{}, nil
+			var rr naglfarv1.TestResourceRequest
+			if err := r.Get(ctx, types.NamespacedName{
+				Namespace: req.Namespace,
+				Name:      ct.Spec.ResourceRequest,
+			}, &rr); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			isFinish, result, err := r.checkTiKVFinishedScaleIn(ctx, &ct, &rr)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.Status().Update(ctx, &ct); err != nil {
+				log.Error(err, "unable to update TestClusterTopology")
+				return ctrl.Result{}, err
+			}
+
+			if isFinish {
+				isOK, result, err := r.pruneTiDBCluster(ctx, &ct, &rr)
+				if err != nil {
+					r.Recorder.Event(&ct, "Warning", "Prune TiKVs", err.Error())
+					return ctrl.Result{}, err
+				}
+				if isOK {
+					return ctrl.Result{}, nil
+				}
+				return result, nil
+			}
+			return result, nil
 		}
 
 		log.Info("Cluster is updating", "clusterName", ct.Name)
@@ -382,6 +409,84 @@ func hostname2ClusterIP(resourceList naglfarv1.TestResourceList) map[string]stri
 		result[item.Name] = item.Status.ClusterIP
 	}
 	return result
+}
+
+func (r *TestClusterTopologyReconciler) checkTiKVFinishedScaleIn(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isFinish bool, result ctrl.Result, err error) {
+	log := r.Log.WithValues("checkTiKVFinishedScaleIn", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+
+	var resourceList naglfarv1.TestResourceList
+	var resources []*naglfarv1.TestResource
+	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+		log.Error(err, "unable to list child resources")
+	}
+	resources = filterClusterResources(ct, resourceList)
+
+	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+
+	pendingOfflineList, err := tiupCtl.GetNodeStatusList(log, ct.Name, "Pending")
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	tmp, err := tiupCtl.GetNodeStatusList(log, ct.Name, "Offline")
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	var offlineList []string
+	for i := 0; i < len(tmp); i++ {
+		isExist := false
+		for j := 0; j < len(pendingOfflineList); j++ {
+			if tmp[i] == pendingOfflineList[j] {
+				isExist = true
+			}
+		}
+		if !isExist {
+			offlineList = append(offlineList, tmp[i])
+		}
+	}
+	ct.Status.TiDBClusterInfo.PendingOfflineList = pendingOfflineList
+	ct.Status.TiDBClusterInfo.OfflineList = offlineList
+	if len(pendingOfflineList) != 0 || len(offlineList) != 0 {
+		log.Info("cluster is trying prune", "PendingOfflineList", pendingOfflineList, "OfflineList", offlineList)
+		return false, ctrl.Result{RequeueAfter: time.Second * 10}, err
+	}
+
+	err = tiupCtl.PruneCluster(log, ct.Name, ct)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	return true, ctrl.Result{}, nil
+}
+
+func (r *TestClusterTopologyReconciler) pruneTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isOk bool, result ctrl.Result, err error) {
+	log := r.Log.WithValues("pruneTiDBCluster", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+
+	var resourceList naglfarv1.TestResourceList
+	var resources []*naglfarv1.TestResource
+	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+		log.Error(err, "unable to list child resources")
+	}
+	resources = filterClusterResources(ct, resourceList)
+
+	tiupCtl, err := tiup.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+
+	err = tiupCtl.PruneCluster(log, ct.Name, ct)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	log.Info("prune tidb cluster successfully")
+	return true, ctrl.Result{}, nil
 }
 
 func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isOk bool, result ctrl.Result, err error) {

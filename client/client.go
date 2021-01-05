@@ -41,6 +41,7 @@ type Client struct {
 
 var (
 	namespace        string
+	requestName      string
 	testWorkloadName string
 	workloadItemName string
 
@@ -139,6 +140,7 @@ func NewClient(kubeconfig string) (*Client, error) {
 
 func init() {
 	namespace = os.Getenv(controllers.NaglfarClusterNs)
+	requestName = os.Getenv(controllers.NaglfarTestResourceRequestName)
 	testWorkloadName = os.Getenv(controllers.NaglfarTestWorkloadName)
 	workloadItemName = os.Getenv(controllers.NaglfarTestWorkloadItem)
 

@@ -73,7 +73,7 @@ mod:
 	@git diff --exit-code -- go.sum go.mod
 
 # Generate code
-generate:
+generate: manifests
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
