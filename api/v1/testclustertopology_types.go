@@ -195,6 +195,38 @@ func (c *TiDBCluster) AllHosts() map[string]struct{} {
 	return result
 }
 
+type JobManagerSpec struct {
+	Host string `json:"host"`
+	// +optional
+	WebPort int `json:"webPort"`
+	// +optional
+	Config string `json:"config,omitempty"`
+}
+
+type TaskManagerSpec struct {
+	Host string `json:"host"`
+	// +optional
+	Config string `json:"config,omitempty"`
+}
+
+type FlinkCluster struct {
+	Version string `json:"version"`
+
+	JobManager JobManagerSpec `json:"jobManager,omitempty"`
+	// +optional
+	TaskManager []TaskManagerSpec `json:"taskManager,omitempty"`
+}
+
+func (c *FlinkCluster) AllHosts() map[string]struct{} {
+	result := map[string]struct{}{
+		c.JobManager.Host: {},
+	}
+	for i := 0; i < len(c.TaskManager); i++ {
+		result[c.TaskManager[i].Host] = struct{}{}
+	}
+	return result
+}
+
 // TestClusterTopologySpec defines the desired state of TestClusterTopology
 type TestClusterTopologySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -206,6 +238,9 @@ type TestClusterTopologySpec struct {
 
 	// +optional
 	TiDBCluster *TiDBCluster `json:"tidbCluster,omitempty"`
+
+	// +optional
+	FlinkCluster *FlinkCluster `json:"flinkCluster,omitempty"`
 }
 
 type TiDBClusterInfo struct {

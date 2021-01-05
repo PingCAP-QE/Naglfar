@@ -181,6 +181,9 @@ type TestResourceStatus struct {
 	HostIP string `json:"hostIP"`
 
 	// +optional
+	HostName string `json:"hostname"`
+
+	// +optional
 	Password string `json:"password"`
 
 	// +optional
@@ -256,6 +259,7 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 		exposedPorts[nat.Port(item)] = struct{}{}
 	}
 	config := &container.Config{
+		Hostname:     r.Status.HostName,
 		Image:        r.Status.Image,
 		Cmd:          r.Status.Command,
 		Env:          r.Status.Envs,
