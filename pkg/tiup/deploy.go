@@ -406,12 +406,55 @@ func (c *ClusterManager) ScaleInCluster(log logr.Logger, clusterName string, ct 
 			"command", cmd,
 			"stdout", stdStr,
 			"stderr", errStr)
-		if strings.Contains(errStr, "specify another cluster name") {
-			return ErrClusterDuplicated{clusterName: clusterName}
-		}
 		return fmt.Errorf("scale-in cluster failed(%s): %s", err, errStr)
 	}
 	return nil
+}
+
+func (c *ClusterManager) PruneCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology) error {
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster prune %s -y", clusterName)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return fmt.Errorf("prune cluster failed(%s): %s", err, errStr)
+	}
+	return nil
+}
+
+func (c *ClusterManager) GetNodeStatusList(log logr.Logger, clusterName string, status string) ([]string, error) {
+	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return []string{}, err
+	}
+	defer client.Close()
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster display %s", clusterName)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return []string{}, fmt.Errorf("scale-in cluster failed(%s): %s", err, errStr)
+	}
+	lines := strings.Split(stdStr, "\n")
+	var list []string
+	for i := 0; i < len(lines); i++ {
+		if strings.Contains(lines[i], status) {
+			parts := strings.Split(lines[i], " ")
+			list = append(list, parts[0])
+		}
+	}
+	return list, nil
 }
 
 func (c *ClusterManager) ScaleOutCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
@@ -464,9 +507,6 @@ func (c *ClusterManager) ScaleOutCluster(log logr.Logger, clusterName string, ct
 			"command", cmd,
 			"stdout", stdStr,
 			"stderr", errStr)
-		if strings.Contains(errStr, "specify another cluster name") {
-			return ErrClusterDuplicated{clusterName: clusterName}
-		}
 		return fmt.Errorf("scale-out cluster failed(%s): %s", err, errStr)
 	}
 	return nil
