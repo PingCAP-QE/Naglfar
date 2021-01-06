@@ -82,6 +82,22 @@ spec:
               type: string
             tidbCluster:
               properties:
+                cdc:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
                 control:
                   description: Control machine host
                   type: string
@@ -272,6 +288,22 @@ spec:
                 to see if the TestClusterTopology has been changed and what has been
                 changed
               properties:
+                cdc:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
                 control:
                   description: Control machine host
                   type: string

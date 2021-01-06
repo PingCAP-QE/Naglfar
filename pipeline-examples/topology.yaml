@@ -47,4 +47,8 @@ spec:
     grafana:
       - host: n2
         deployDir: /disk1/deploy/grafana-3000
-
+    cdc:
+      - host: n1
+        port: 8300
+        deployDir: /disk1/deploy/cdc
+        logDir: /disk1/deploy/cdc

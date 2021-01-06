@@ -309,6 +309,21 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
+	for _, item := range ctf.TiDBCluster.CDC {
+		node, exist := resourceMaps[item.Host]
+		if !exist {
+			return spec, nil, fmt.Errorf("cdc node not found: `%s`", item.Host)
+		}
+		spec.CDCServers = append(spec.CDCServers, tiupSpec.CDCSpec{
+			Host:            hostName(item.Host, node.ClusterIP),
+			SSHPort:         22,
+			Port:            item.Port,
+			DeployDir:       item.DeployDir,
+			LogDir:          item.LogDir,
+			ResourceControl: meta.ResourceControl{},
+		})
+	}
+
 	// set default values from tag
 	defaults.Set(&spec)
 	return
@@ -577,7 +592,6 @@ func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
 	}
 	return nil
 }
-
 
 func insecureIgnoreHostKey() ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {

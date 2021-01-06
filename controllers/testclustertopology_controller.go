@@ -380,6 +380,9 @@ func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*na
 		for _, item := range spec.Monitors {
 			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
 		}
+		for _, item := range spec.CDCServers {
+			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+		}
 	case ctf.FlinkCluster != nil:
 		spec, _, err := flink.BuildSpecification(ctf, trs, true)
 		if err != nil {

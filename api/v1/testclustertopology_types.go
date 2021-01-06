@@ -141,6 +141,18 @@ type Global struct {
 	DataDir   string `json:"dataDir" yaml:"data_dir"`
 }
 
+type CDCSpec struct {
+	Host string `json:"host"`
+
+	// +optional
+	Port int `json:"port,omitempty"`
+
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+
+	// +optional
+	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
+}
+
 type TiDBCluster struct {
 	Version TiDBClusterVersion `json:"version"`
 
@@ -175,10 +187,13 @@ type TiDBCluster struct {
 
 	// +optional
 	Grafana []GrafanaSpec `json:"grafana,omitempty"`
+
+	// +optional
+	CDC []CDCSpec `json:"cdc,omitempty"`
 }
 
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
-	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField}
+	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField, CDCField}
 	result := map[string]struct{}{
 		c.Control: {},
 	}
