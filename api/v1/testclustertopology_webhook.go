@@ -46,6 +46,7 @@ const (
 	DrainerField = "Drainer"
 	MonitorField = "Monitor"
 	GrafanaField = "Grafana"
+	TiFlashField = "TiFlash"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!

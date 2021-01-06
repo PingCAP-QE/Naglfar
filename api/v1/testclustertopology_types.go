@@ -129,6 +129,34 @@ type PrometheusSpec struct {
 	LogDir string `json:"logDir,omitempty"`
 }
 
+type TiFlashSpec struct {
+	Host string `json:"host"`
+	// +optional
+	TCPPort      int    `json:"tcpPort,omitempty"`
+	// +optional
+	HTTPPort int `json:"httpPort,omitempty"`
+	// +optional
+	ServicePort int `json:"servicePort,omitempty"`
+	// +optional
+	ProxyPort int `json:"proxyPort,omitempty"`
+	// +optional
+	ProxyStatusPort int `json:"proxyStatusPort,omitempty"`
+	// +optional
+	MetricsPort int `json:"metricsPort,omitempty"`
+
+	DeployDir string `json:"deployDir"`
+	DataDir   string `json:"dataDir"`
+
+	// +optional
+	NumaNode string `json:"numaNode,omitempty"`
+	// +optional
+	Config string `json:"config,omitempty"`
+	// +optional
+	LearnerConfig string `json:"learnerConfig,omitempty"`
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
+}
+
 type GrafanaSpec struct {
 	Host string `json:"host"`
 	// +optional
@@ -175,10 +203,13 @@ type TiDBCluster struct {
 
 	// +optional
 	Grafana []GrafanaSpec `json:"grafana,omitempty"`
+
+	// +optional
+	TiFlash []TiFlashSpec `json:"tiflash,omitempty"`
 }
 
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
-	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField}
+	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField,TiFlashField}
 	result := map[string]struct{}{
 		c.Control: {},
 	}

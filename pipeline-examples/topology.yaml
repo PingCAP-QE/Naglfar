@@ -47,4 +47,20 @@ spec:
     grafana:
       - host: n2
         deployDir: /disk1/deploy/grafana-3000
+    tiflash:
+      - host: n5
+        tcpPort: 9000
+        httpPort: 8123
+        servicePort: 3930
+        proxyPort: 20170
+        proxyStatusPort: 20292
+        metricsPort: 8234
+        deployDir: /tidb-deploy/tiflash-9000
+        dataDir: /tidb-data/tiflash-9000
+        numaNode: 0,1
+        config: |-
+          logger.level: info
+        learner_config: |-
+          log-level: info
+      - host: n4
 

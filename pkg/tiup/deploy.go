@@ -27,7 +27,7 @@ import (
 const (
 	// Our controller node and worker nodes share the same insecure_key path
 	insecureKeyPath = "/root/insecure_key"
-	ContainerImage  = "docker.io/mahjonp/base-image:latest"
+	ContainerImage  = "docker.io/cadmusjiang/base-image:latest"
 	sshTimeout      = 10 * time.Minute
 )
 
@@ -86,6 +86,54 @@ func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) e
 		}
 	}
 	spec.PumpServers[index].Config = config
+	return nil
+}
+
+func setTiFlashConfig(spec *tiupSpec.Specification, tiflashConfig string, index int) error {
+	unmarshalTiFlashConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{})
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		tiflashConfig,
+	}} {
+		err := unmarshalTiFlashConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.TiFlashServers[index].Config = config
+	return nil
+}
+
+func setTiFlashLearnerConfig(spec *tiupSpec.Specification, tiflashLearnerConfig string, index int) error {
+	unmarshalTiFlashLearnerConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{})
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		tiflashLearnerConfig,
+	}} {
+		err := unmarshalTiFlashLearnerConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.TiFlashServers[index].LearnerConfig = config
 	return nil
 }
 
@@ -309,6 +357,38 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
+
+	for index, item := range ctf.TiDBCluster.TiFlash {
+		node, exist := resourceMaps[item.Host]
+		if !exist {
+			return spec, nil, fmt.Errorf("tiflash node not found: `%s`", item.Host)
+		}
+		spec.TiFlashServers = append(spec.TiFlashServers, tiupSpec.TiFlashSpec{
+			Host:                 hostName(item.Host, node.ClusterIP),
+			SSHPort:              22,
+			TCPPort:              item.TCPPort,
+			HTTPPort:             item.HTTPPort,
+			FlashServicePort:     item.ServicePort,
+			FlashProxyPort:       item.ProxyPort,
+			FlashProxyStatusPort: item.ProxyStatusPort,
+			StatusPort:           item.ProxyStatusPort,
+			DeployDir:            item.DeployDir,
+			DataDir:              item.DataDir,
+			LogDir:               item.LogDir,
+			NumaNode:             item.NumaNode,
+			ResourceControl:      meta.ResourceControl{},
+		})
+		if err := setTiFlashConfig(&spec, ctf.TiDBCluster.TiFlash[index].Config, index); err != nil {
+			err = fmt.Errorf("set TiFlashConfigs failed: %v", err)
+			return spec, nil, err
+		}
+		if err := setTiFlashLearnerConfig(&spec, ctf.TiDBCluster.TiFlash[index].LearnerConfig, index); err != nil {
+			err = fmt.Errorf("set TiFlashLearnerConfigs failed: %v", err)
+			return spec, nil, err
+		}
+	}
+
+
 	// set default values from tag
 	defaults.Set(&spec)
 	return
