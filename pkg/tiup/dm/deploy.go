@@ -3,63 +3,20 @@ package tiup
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"strings"
-	"time"
 
 	"github.com/bramvdbogaerde/go-scp"
 	"github.com/bramvdbogaerde/go-scp/auth"
 	"github.com/creasty/defaults"
 	"github.com/go-logr/logr"
 	"github.com/pingcap/tiup/pkg/meta"
-	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	sshUtil "github.com/PingCAP-QE/Naglfar/pkg/ssh"
+	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	tiupSpec "github.com/pingcap/tiup/components/dm/spec"
 )
-
-const (
-	// Our controller node and worker nodes share the same insecure_key path
-	insecureKeyPath = "/root/insecure_key"
-	ContainerImage  = "docker.io/mahjonp/base-image:latest"
-	sshTimeout      = 10 * time.Minute
-)
-
-type ErrClusterDuplicated struct {
-	clusterName string
-}
-
-type ErrClusterNotExist struct {
-	clusterName string
-}
-
-func (e ErrClusterDuplicated) Error() string {
-	return fmt.Sprintf("cluster name %s is duplicated", e.clusterName)
-}
-
-func (e ErrClusterNotExist) Error() string {
-	return fmt.Sprintf("cluster name %s is not exist", e.clusterName)
-}
-
-// IgnoreClusterDuplicated returns nil on ClusterDuplicated errors
-// All other values that are not NotFound errors or nil are returned unmodified.
-func IgnoreClusterDuplicated(err error) error {
-	if _, ok := err.(ErrClusterDuplicated); ok {
-		return nil
-	}
-	return err
-}
-
-// IgnoreClusterNotExist returns nil on IgnoreClusterNotExist errors
-// All other values that are not NotFound errors or nil are returned unmodified.
-func IgnoreClusterNotExist(err error) error {
-	if _, ok := err.(ErrClusterNotExist); ok {
-		return nil
-	}
-	return err
-}
 
 func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.DMServerConfigs) error {
 	unmarshalServerConfigToMaps := func(data []byte, object *map[string]interface{}) error {
@@ -287,7 +244,7 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 	if err := c.writeTopologyFileOnControl(outfile); err != nil {
 		return err
 	}
-	if err := c.deployCluster(log, clusterName, version); IgnoreClusterDuplicated(err) != nil {
+	if err := c.deployCluster(log, clusterName, version); tiup.IgnoreClusterDuplicated(err) != nil {
 		return err
 	}
 	if err := c.startCluster(clusterName); err != nil {
@@ -297,7 +254,7 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
@@ -312,7 +269,7 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 			"stderr", errStr)
 		// catch Error: dm cluster `xxx` not exists
 		if strings.Contains(errStr, "not exists") {
-			return ErrClusterNotExist{clusterName: clusterName}
+			return tiup.ErrClusterNotExist{ClusterName: clusterName}
 		}
 		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
 	}
@@ -320,7 +277,7 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 }
 
 func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
-	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, insecureIgnoreHostKey())
+	clientConfig, _ := auth.PrivateKey("root", tiup.InsecureKeyPath, tiup.InsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
 	if err != nil {
@@ -332,19 +289,13 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 	return nil
 }
 
-func insecureIgnoreHostKey() ssh.HostKeyCallback {
-	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		return nil
-	}
-}
-
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	cmd := fmt.Sprintf("/root/.tiup/bin/tiup dm deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup dm deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, tiup.InsecureKeyPath)
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		log.Error(err, "run command on remote failed",
@@ -353,7 +304,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 			"stdout", stdStr,
 			"stderr", errStr)
 		if strings.Contains(errStr, "specify another cluster name") {
-			return ErrClusterDuplicated{clusterName: clusterName}
+			return tiup.ErrClusterDuplicated{ClusterName: clusterName}
 		}
 		return fmt.Errorf("deploy cluster failed(%s): %s", err, errStr)
 	}
@@ -361,7 +312,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 }
 
 func (c *ClusterManager) startCluster(clusterName string) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}

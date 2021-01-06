@@ -29,6 +29,7 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/flink"
+	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	dm "github.com/PingCAP-QE/Naglfar/pkg/tiup/dm"
 	"github.com/PingCAP-QE/Naglfar/pkg/util"
@@ -342,7 +343,7 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 			}
 			if err := tiupCtl.UninstallCluster(ct.Name); err != nil {
 				// we ignore cluster not exist error
-				return cluster.IgnoreClusterNotExist(err)
+				return tiup.IgnoreClusterNotExist(err)
 			}
 		case ct.Spec.FlinkCluster != nil:
 			log.Info("flink cluster is uninstalled")
@@ -353,7 +354,7 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 			}
 			if err := tiupCtl.UninstallCluster(ct.Name); err != nil {
 				// we ignore cluster not exist error
-				return dm.IgnoreClusterNotExist(err)
+				return tiup.IgnoreClusterNotExist(err)
 			}
 		}
 	}
@@ -401,6 +402,9 @@ func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*na
 		for _, item := range spec.Monitors {
 			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
 		}
+		for idx := range indexes {
+			indexes[idx] = indexes[idx].add(naglfarv1.SSHPort)
+		}
 	case ctf.FlinkCluster != nil:
 		spec, _, err := flink.BuildSpecification(ctf, trs, true)
 		if err != nil {
@@ -429,6 +433,9 @@ func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*na
 		}
 		for _, item := range spec.Monitors {
 			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
+		}
+		for idx := range indexes {
+			indexes[idx] = indexes[idx].add(naglfarv1.SSHPort)
 		}
 	}
 	return
@@ -619,18 +626,17 @@ func (r *TestClusterTopologyReconciler) initTiUPResources(ctx context.Context, c
 		case naglfarv1.ResourceUninitialized:
 			requeue = true
 			if resource.Status.Image == "" {
-				resource.Status.Image = cluster.ContainerImage
+				resource.Status.Image = tiup.ContainerImage
 				resource.Status.CapAdd = []string{"SYS_ADMIN"}
 				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
 				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
-				resource.Status.ExposedPorts = append(resource.Status.ExposedPorts, naglfarv1.SSHPort)
 				err := r.Status().Update(ctx, resource)
 				if err != nil {
 					return false, err
 				}
 			}
 		case naglfarv1.ResourceReady:
-			if resource.Status.Image != cluster.ContainerImage {
+			if resource.Status.Image != tiup.ContainerImage {
 				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
 			}
 		case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
