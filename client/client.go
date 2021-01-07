@@ -31,7 +31,7 @@ import (
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/controllers"
 	"github.com/PingCAP-QE/Naglfar/pkg/kubeutil"
-	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
+	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
 
@@ -65,7 +65,7 @@ func (c *Client) GetTiDBClusterTopology(ctx context.Context, clusterName string)
 	if err != nil {
 		return nil, err
 	}
-	spec, _, err := tiup.BuildSpecification(&topology.Spec, resources, false)
+	spec, _, err := cluster.BuildSpecification(&topology.Spec, resources, false)
 	return &spec, err
 }
 
