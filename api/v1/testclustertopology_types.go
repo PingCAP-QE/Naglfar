@@ -132,7 +132,7 @@ type PrometheusSpec struct {
 type TiFlashSpec struct {
 	Host string `json:"host"`
 	// +optional
-	TCPPort      int    `json:"tcpPort,omitempty"`
+	TCPPort int `json:"tcpPort,omitempty"`
 	// +optional
 	HTTPPort int `json:"httpPort,omitempty"`
 	// +optional
@@ -209,7 +209,7 @@ type TiDBCluster struct {
 }
 
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
-	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField,TiFlashField}
+	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField, TiFlashField}
 	result := map[string]struct{}{
 		c.Control: {},
 	}

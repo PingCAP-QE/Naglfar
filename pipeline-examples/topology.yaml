@@ -57,10 +57,9 @@ spec:
         metricsPort: 8234
         deployDir: /tidb-deploy/tiflash-9000
         dataDir: /tidb-data/tiflash-9000
-        numaNode: 0,1
         config: |-
           logger.level: info
-        learner_config: |-
+        learnerConfig: |-
           log-level: info
       - host: n4
 

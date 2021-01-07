@@ -22,7 +22,6 @@ import (
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
 
-
 func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) error {
 	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
 		err := yaml.Unmarshal(data, object)
@@ -345,7 +344,6 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			return spec, nil, err
 		}
 	}
-
 
 	// set default values from tag
 	defaults.Set(&spec)
