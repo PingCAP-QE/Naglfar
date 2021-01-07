@@ -258,6 +258,109 @@ func (c *FlinkCluster) AllHosts() map[string]struct{} {
 	return result
 }
 
+type DMServerConfigs struct {
+	// +optional
+	Master string `json:"master,omitempty"`
+	// +optional
+	Worker string `json:"worker,omitempty"`
+}
+
+type AlertManagerSpec struct {
+	Host string `json:"host"`
+
+	// +optional
+	WebPort int `json:"webPort,omitempty"`
+	// +optional
+	ClusterPort int `json:"clusterPort,omitempty"`
+
+	DeployDir string `json:"deployDir"`
+	DataDir   string `json:"dataDir"`
+
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
+}
+
+type MasterSpec struct {
+	Host string `json:"host"`
+
+	// +optional
+	Port int `json:"Port,omitempty" yaml:"port,omitempty"`
+	// +optional
+	PeerPort int `json:"peerPort,omitempty" yaml:"peer_port,omitempty"`
+
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir" yaml:"data_dir"`
+
+	// +optional
+	NumaNode string `json:"numaNode,omitempty"`
+	// +optional
+	Config string `json:"config,omitempty"`
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
+}
+
+type WorkerSpec struct {
+	Host string `json:"host"`
+	// +optional
+	Port int `json:"port,omitempty"`
+
+	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	DataDir   string `json:"dataDir" yaml:"data_dir"`
+
+	// +optional
+	LogDir string `json:"logDir,omitempty"`
+	// +optional
+	NumaNode string `json:"numaNode,omitempty"`
+	// +optional
+	Config string `json:"config,omitempty"`
+}
+
+type DMCluster struct {
+	Version string `json:"version,omitempty"`
+
+	// +optional
+	Global *Global `json:"global,omitempty"`
+
+	// +optional
+	ServerConfigs DMServerConfigs `json:"serverConfigs,omitempty"`
+
+	// Control machine host
+	Control string `json:"control"`
+
+	// +optional
+	Master []MasterSpec `json:"master,omitempty"`
+
+	// +optional
+	Worker []WorkerSpec `json:"worker,omitempty"`
+
+	// +optional
+	AlertManager []AlertManagerSpec `json:"alertManager,omitempty"`
+
+	// +optional
+	Monitor []PrometheusSpec `json:"monitor,omitempty"`
+
+	// +optional
+	Grafana []GrafanaSpec `json:"grafana,omitempty"`
+}
+
+func (c *DMCluster) AllHosts() map[string]struct{} {
+	components := []string{MasterField, WorkerField, MonitorField, GrafanaField, AlertManagerField}
+	result := map[string]struct{}{
+		c.Control: {},
+	}
+
+	val := reflect.ValueOf(*c)
+	for i := 0; i < val.Type().NumField(); i++ {
+		if checkIn(components, val.Type().Field(i).Name) {
+			field := val.Field(i)
+			for j := 0; j < field.Len(); j++ {
+				result[field.Index(j).FieldByName("Host").String()] = struct{}{}
+			}
+		}
+	}
+	return result
+}
+
 // TestClusterTopologySpec defines the desired state of TestClusterTopology
 type TestClusterTopologySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -272,6 +375,9 @@ type TestClusterTopologySpec struct {
 
 	// +optional
 	FlinkCluster *FlinkCluster `json:"flinkCluster,omitempty"`
+
+	// +optional
+	DMCluster *DMCluster `json:"dmCluster,omitempty"`
 }
 
 type TiDBClusterInfo struct {
