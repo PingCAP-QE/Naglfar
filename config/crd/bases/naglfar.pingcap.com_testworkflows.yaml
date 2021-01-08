@@ -383,8 +383,6 @@ spec:
                                       type: string
                                     metricsPort:
                                       type: integer
-                                    numaNode:
-                                      type: string
                                     proxyPort:
                                       type: integer
                                     proxyStatusPort:
@@ -610,8 +608,6 @@ spec:
                                       type: string
                                     metricsPort:
                                       type: integer
-                                    numaNode:
-                                      type: string
                                     proxyPort:
                                       type: integer
                                     proxyStatusPort:

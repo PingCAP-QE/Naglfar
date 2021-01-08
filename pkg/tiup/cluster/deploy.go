@@ -332,7 +332,6 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			DeployDir:            item.DeployDir,
 			DataDir:              item.DataDir,
 			LogDir:               item.LogDir,
-			NumaNode:             item.NumaNode,
 			ResourceControl:      meta.ResourceControl{},
 		})
 		if err := setTiFlashConfig(&spec, ctf.TiDBCluster.TiFlash[index].Config, index); err != nil {

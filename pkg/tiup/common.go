@@ -11,7 +11,7 @@ import (
 const (
 	// Our controller node and worker nodes share the same insecure_key path
 	InsecureKeyPath = "/root/insecure_key"
-	ContainerImage  = "docker.io/cadmusjiang/base-image:latest"
+	ContainerImage  = "docker.io/pingcapqe/base-image:latest"
 	SshTimeout      = 10 * time.Minute
 )
 

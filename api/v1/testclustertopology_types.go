@@ -148,8 +148,6 @@ type TiFlashSpec struct {
 	DataDir   string `json:"dataDir"`
 
 	// +optional
-	NumaNode string `json:"numaNode,omitempty"`
-	// +optional
 	Config string `json:"config,omitempty"`
 	// +optional
 	LearnerConfig string `json:"learnerConfig,omitempty"`
