@@ -402,6 +402,14 @@ func indexResourceExposedPorts(ctf *naglfarv1.TestClusterTopologySpec, trs []*na
 		for _, item := range spec.Monitors {
 			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.Port))
 		}
+		for _, item := range spec.TiFlashServers {
+			indexes[item.Host] = indexes[item.Host].add(fmt.Sprintf("%d/tcp", item.TCPPort)).
+				add(fmt.Sprintf("%d/tcp", item.HTTPPort)).
+				add(fmt.Sprintf("%d/tcp", item.StatusPort)).
+				add(fmt.Sprintf("%d/tcp", item.FlashServicePort)).
+				add(fmt.Sprintf("%d/tcp", item.FlashProxyPort)).
+				add(fmt.Sprintf("%d/tcp", item.FlashProxyStatusPort))
+		}
 		for idx := range indexes {
 			indexes[idx] = indexes[idx].add(naglfarv1.SSHPort)
 		}

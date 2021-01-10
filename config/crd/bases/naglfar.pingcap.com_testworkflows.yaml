@@ -364,6 +364,39 @@ spec:
                                   - host
                                   type: object
                                 type: array
+                              tiflash:
+                                items:
+                                  properties:
+                                    config:
+                                      type: string
+                                    dataDir:
+                                      type: string
+                                    deployDir:
+                                      type: string
+                                    host:
+                                      type: string
+                                    httpPort:
+                                      type: integer
+                                    learnerConfig:
+                                      type: string
+                                    logDir:
+                                      type: string
+                                    metricsPort:
+                                      type: integer
+                                    proxyPort:
+                                      type: integer
+                                    proxyStatusPort:
+                                      type: integer
+                                    servicePort:
+                                      type: integer
+                                    tcpPort:
+                                      type: integer
+                                  required:
+                                  - dataDir
+                                  - deployDir
+                                  - host
+                                  type: object
+                                type: array
                               tikv:
                                 description: TiKV machine hosts
                                 items:
@@ -552,6 +585,39 @@ spec:
                                     statusPort:
                                       type: integer
                                   required:
+                                  - deployDir
+                                  - host
+                                  type: object
+                                type: array
+                              tiflash:
+                                items:
+                                  properties:
+                                    config:
+                                      type: string
+                                    dataDir:
+                                      type: string
+                                    deployDir:
+                                      type: string
+                                    host:
+                                      type: string
+                                    httpPort:
+                                      type: integer
+                                    learnerConfig:
+                                      type: string
+                                    logDir:
+                                      type: string
+                                    metricsPort:
+                                      type: integer
+                                    proxyPort:
+                                      type: integer
+                                    proxyStatusPort:
+                                      type: integer
+                                    servicePort:
+                                      type: integer
+                                    tcpPort:
+                                      type: integer
+                                  required:
+                                  - dataDir
                                   - deployDir
                                   - host
                                   type: object

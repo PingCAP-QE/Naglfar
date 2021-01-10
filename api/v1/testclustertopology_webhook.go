@@ -49,6 +49,7 @@ const (
 	MasterField       = "Master"
 	WorkerField       = "Worker"
 	AlertManagerField = "AlertManager"
+	TiFlashField      = "TiFlash"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
