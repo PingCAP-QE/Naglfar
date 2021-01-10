@@ -1,69 +1,26 @@
-package tiup
+package cluster
 
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"net/url"
 	"path"
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/bramvdbogaerde/go-scp"
 	"github.com/bramvdbogaerde/go-scp/auth"
 	"github.com/creasty/defaults"
 	"github.com/go-logr/logr"
 	"github.com/pingcap/tiup/pkg/meta"
-	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v2"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	sshUtil "github.com/PingCAP-QE/Naglfar/pkg/ssh"
+	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
-
-const (
-	// Our controller node and worker nodes share the same insecure_key path
-	insecureKeyPath = "/root/insecure_key"
-	ContainerImage  = "docker.io/mahjonp/base-image:latest"
-	sshTimeout      = 10 * time.Minute
-)
-
-type ErrClusterDuplicated struct {
-	clusterName string
-}
-
-type ErrClusterNotExist struct {
-	clusterName string
-}
-
-func (e ErrClusterDuplicated) Error() string {
-	return fmt.Sprintf("cluster name %s is duplicated", e.clusterName)
-}
-
-func (e ErrClusterNotExist) Error() string {
-	return fmt.Sprintf("cluster name %s is not exist", e.clusterName)
-}
-
-// IgnoreClusterDuplicated returns nil on ClusterDuplicated errors
-// All other values that are not NotFound errors or nil are returned unmodified.
-func IgnoreClusterDuplicated(err error) error {
-	if _, ok := err.(ErrClusterDuplicated); ok {
-		return nil
-	}
-	return err
-}
-
-// IgnoreClusterNotExist returns nil on IgnoreClusterNotExist errors
-// All other values that are not NotFound errors or nil are returned unmodified.
-func IgnoreClusterNotExist(err error) error {
-	if _, ok := err.(ErrClusterNotExist); ok {
-		return nil
-	}
-	return err
-}
 
 func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) error {
 	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
@@ -86,6 +43,54 @@ func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) e
 		}
 	}
 	spec.PumpServers[index].Config = config
+	return nil
+}
+
+func setTiFlashConfig(spec *tiupSpec.Specification, tiflashConfig string, index int) error {
+	unmarshalTiFlashConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{})
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		tiflashConfig,
+	}} {
+		err := unmarshalTiFlashConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.TiFlashServers[index].Config = config
+	return nil
+}
+
+func setTiFlashLearnerConfig(spec *tiupSpec.Specification, tiflashLearnerConfig string, index int) error {
+	unmarshalTiFlashLearnerConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{})
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		tiflashLearnerConfig,
+	}} {
+		err := unmarshalTiFlashLearnerConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.TiFlashServers[index].LearnerConfig = config
 	return nil
 }
 
@@ -301,7 +306,7 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 		if !exist {
 			return spec, nil, fmt.Errorf("grafana node not found: `%s`", item.Host)
 		}
-		spec.Grafana = append(spec.Grafana, tiupSpec.GrafanaSpec{
+		spec.Grafanas = append(spec.Grafanas, tiupSpec.GrafanaSpec{
 			Host:            hostName(item.Host, node.ClusterIP),
 			SSHPort:         22,
 			Port:            item.Port,
@@ -322,6 +327,35 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
+	}
+
+	for index, item := range ctf.TiDBCluster.TiFlash {
+		node, exist := resourceMaps[item.Host]
+		if !exist {
+			return spec, nil, fmt.Errorf("tiflash node not found: `%s`", item.Host)
+		}
+		spec.TiFlashServers = append(spec.TiFlashServers, tiupSpec.TiFlashSpec{
+			Host:                 hostName(item.Host, node.ClusterIP),
+			SSHPort:              22,
+			TCPPort:              item.TCPPort,
+			HTTPPort:             item.HTTPPort,
+			FlashServicePort:     item.ServicePort,
+			FlashProxyPort:       item.ProxyPort,
+			FlashProxyStatusPort: item.ProxyStatusPort,
+			StatusPort:           item.ProxyStatusPort,
+			DeployDir:            item.DeployDir,
+			DataDir:              item.DataDir,
+			LogDir:               item.LogDir,
+			ResourceControl:      meta.ResourceControl{},
+		})
+		if err := setTiFlashConfig(&spec, ctf.TiDBCluster.TiFlash[index].Config, index); err != nil {
+			err = fmt.Errorf("set TiFlashConfigs failed: %v", err)
+			return spec, nil, err
+		}
+		if err := setTiFlashLearnerConfig(&spec, ctf.TiDBCluster.TiFlash[index].LearnerConfig, index); err != nil {
+			err = fmt.Errorf("set TiFlashLearnerConfigs failed: %v", err)
+			return spec, nil, err
+		}
 	}
 
 	// set default values from tag
@@ -358,7 +392,7 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 	if err := c.writeTopologyFileOnControl(outfile); err != nil {
 		return err
 	}
-	if err := c.deployCluster(log, clusterName, version.Version); IgnoreClusterDuplicated(err) != nil {
+	if err := c.deployCluster(log, clusterName, version.Version); tiup.IgnoreClusterDuplicated(err) != nil {
 		return err
 	}
 	if err := c.startCluster(clusterName); err != nil {
@@ -408,7 +442,7 @@ func (c *ClusterManager) ScaleInCluster(log logr.Logger, clusterName string, ct 
 		nodesStr += " --node " + nodes[i]
 	}
 
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
@@ -427,7 +461,7 @@ func (c *ClusterManager) ScaleInCluster(log logr.Logger, clusterName string, ct 
 }
 
 func (c *ClusterManager) PruneCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
@@ -446,7 +480,7 @@ func (c *ClusterManager) PruneCluster(log logr.Logger, clusterName string, ct *n
 }
 
 func (c *ClusterManager) GetNodeStatusList(log logr.Logger, clusterName string, status string) ([]string, error) {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return []string{}, err
 	}
@@ -509,12 +543,12 @@ func (c *ClusterManager) ScaleOutCluster(log logr.Logger, clusterName string, ct
 	if err != nil {
 		return err
 	}
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster scale-out %s /root/scale-out.yaml -i %s -y", clusterName, insecureKeyPath)
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster scale-out %s /root/scale-out.yaml -i %s -y", clusterName, tiup.InsecureKeyPath)
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		log.Error(err, "run command on remote failed",
@@ -528,7 +562,7 @@ func (c *ClusterManager) ScaleOutCluster(log logr.Logger, clusterName string, ct
 }
 
 func (c *ClusterManager) UninstallCluster(clusterName string) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
@@ -543,7 +577,7 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 			"stderr", errStr)
 		// catch Error: tidb cluster `xxx` not exists
 		if strings.Contains(errStr, "not exists") {
-			return ErrClusterNotExist{clusterName: clusterName}
+			return tiup.ErrClusterNotExist{ClusterName: clusterName}
 		}
 		return fmt.Errorf("cannot run remote command `%s`: %s", cmd, err)
 	}
@@ -565,7 +599,7 @@ func (c *ClusterManager) diffServerConfigs(pre naglfarv1.ServerConfigs, cur nagl
 }
 
 func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
-	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, insecureIgnoreHostKey())
+	clientConfig, _ := auth.PrivateKey("root", tiup.InsecureKeyPath, tiup.InsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
 	if err != nil {
@@ -578,7 +612,7 @@ func (c *ClusterManager) writeTopologyFileOnControl(out []byte) error {
 }
 
 func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
-	clientConfig, err := auth.PrivateKey("root", insecureKeyPath, insecureIgnoreHostKey())
+	clientConfig, err := auth.PrivateKey("root", tiup.InsecureKeyPath, tiup.InsecureIgnoreHostKey())
 	if err != nil {
 		return fmt.Errorf("generate client privatekey failed: %s", err)
 	}
@@ -593,14 +627,8 @@ func (c *ClusterManager) writeScaleOutFileOnControl(out []byte) error {
 	return nil
 }
 
-func insecureIgnoreHostKey() ssh.HostKeyCallback {
-	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		return nil
-	}
-}
-
 func (c *ClusterManager) writeTemporaryTopologyMetaOnControl(out []byte, clusterName string) error {
-	clientConfig, _ := auth.PrivateKey("root", insecureKeyPath, insecureIgnoreHostKey())
+	clientConfig, _ := auth.PrivateKey("root", tiup.InsecureKeyPath, tiup.InsecureIgnoreHostKey())
 	client := scp.NewClient(fmt.Sprintf("%s:%d", c.control.HostIP, c.control.SSHPort), &clientConfig)
 	err := client.Connect()
 	if err != nil {
@@ -614,12 +642,12 @@ func (c *ClusterManager) writeTemporaryTopologyMetaOnControl(out []byte, cluster
 }
 
 func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, version string) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, insecureKeyPath)
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, tiup.InsecureKeyPath)
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		log.Error(err, "run command on remote failed",
@@ -628,7 +656,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 			"stdout", stdStr,
 			"stderr", errStr)
 		if strings.Contains(errStr, "specify another cluster name") {
-			return ErrClusterDuplicated{clusterName: clusterName}
+			return tiup.ErrClusterDuplicated{ClusterName: clusterName}
 		}
 		return fmt.Errorf("deploy cluster failed(%s): %s", err, errStr)
 	}
@@ -636,7 +664,7 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 }
 
 func (c *ClusterManager) startCluster(clusterName string) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
@@ -655,7 +683,7 @@ func (c *ClusterManager) startCluster(clusterName string) error {
 }
 
 func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles []string) error {
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
@@ -682,7 +710,7 @@ func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles
 }
 
 func (c *ClusterManager) shouldPatch(version naglfarv1.TiDBClusterVersion) bool {
-	return len(version.TiDBDownloadURL) != 0 || len(version.PDDownloadUrl) != 0 || len(version.TiKVDownloadURL) != 0
+	return version.TiDBDownloadURL != "" || version.PDDownloadUrl != "" || version.TiKVDownloadURL != ""
 }
 
 func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBClusterVersion) error {
@@ -690,7 +718,7 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 		componentName string
 		downloadURL   string
 	}
-	client, err := sshUtil.NewSSHClient("root", insecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
 	}
@@ -698,21 +726,21 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 	commands := []string{"set -ex", "rm -rf components && mkdir components"}
 	var patchComponents []component
 	var patchComponentNames []string
-	if len(version.TiDBDownloadURL) != 0 {
+	if version.TiDBDownloadURL != "" {
 		patchComponents = append(patchComponents, component{
 			componentName: "tidb-server",
 			downloadURL:   version.TiDBDownloadURL,
 		})
 		patchComponentNames = append(patchComponentNames, "tidb-server")
 	}
-	if len(version.TiKVDownloadURL) != 0 {
+	if version.TiKVDownloadURL != "" {
 		patchComponents = append(patchComponents, component{
 			componentName: "tikv-server",
 			downloadURL:   version.TiKVDownloadURL,
 		})
 		patchComponentNames = append(patchComponentNames, "tikv-server")
 	}
-	if len(version.PDDownloadUrl) != 0 {
+	if version.PDDownloadUrl != "" {
 		patchComponents = append(patchComponents, component{
 			componentName: "pd-server",
 			downloadURL:   version.PDDownloadUrl,
@@ -725,11 +753,7 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 		if err != nil {
 			return err
 		}
-		commands = append(commands,
-			fmt.Sprintf(`curl -O %s`, downloadURL))
-		commands = append(commands, c.GenUnzipCommand(path.Base(u.Path), "components"))
-		commands = append(commands, fmt.Sprintf("rm -rf components/%s", component.componentName))
-		commands = append(commands, fmt.Sprintf("mv components/bin/%s components/%s", component.componentName, component.componentName))
+		commands = append(commands, fmt.Sprintf(`curl -O %s`, downloadURL), c.GenUnzipCommand(path.Base(u.Path), "components"), fmt.Sprintf("rm -rf components/%s", component.componentName), fmt.Sprintf("mv components/bin/%s components/%s", component.componentName, component.componentName))
 	}
 	commands = append(commands, "cd components && tar zcf patch.tar.gz "+strings.Join(patchComponentNames, " "))
 	for _, component := range patchComponentNames {

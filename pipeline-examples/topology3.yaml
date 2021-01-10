@@ -1,0 +1,41 @@
+apiVersion: naglfar.pingcap.com/v1
+kind: TestClusterTopology
+metadata:
+  name: tct3
+  namespace: test
+spec:
+  resourceRequest: tr
+  dmCluster:
+    global:
+      deployDir: "/tidb-deploy"
+      dataDir: "/tidb-data"
+    serverConfigs:
+      master: |-
+        log-level: info
+    version: nightly
+    control: n7
+    master:
+      - host: n7
+        deployDir: /disk1/deploy/master
+        dataDir: /disk1/data/master
+        config: |-
+          log-level: info
+      - host: n6
+    worker:
+      - host: n7
+        config: |-
+          log-level: info
+        deployDir: /disk1/deploy/worker
+    monitor:
+      - host: n7
+        deployDir: /disk1/deploy/prometheus-8249
+        dataDir: /disk1/deploy/prometheus-8249/data
+    grafana:
+      - host: n7
+        deployDir: /disk1/deploy/grafana-3000
+    alertManager:
+      - host: n7
+        deployDir: /disk1/deploy/alert
+        dataDir: /disk1/deploy/alert/data
+
+

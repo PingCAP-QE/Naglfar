@@ -52,3 +52,18 @@ spec:
         port: 8300
         deployDir: /disk1/deploy/cdc
         logDir: /disk1/deploy/cdc
+    tiflash:
+      - host: n5
+        tcpPort: 9000
+        httpPort: 8123
+        servicePort: 3930
+        proxyPort: 20170
+        proxyStatusPort: 20292
+        metricsPort: 8234
+        deployDir: /tidb-deploy/tiflash-9000
+        dataDir: /tidb-data/tiflash-9000
+        config: |-
+          logger.level: info
+        learnerConfig: |-
+          log-level: info
+      - host: n4
