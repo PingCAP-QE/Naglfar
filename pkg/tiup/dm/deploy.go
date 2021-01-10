@@ -155,7 +155,6 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			Port:            item.Port,
 			DeployDir:       item.DeployDir,
 			LogDir:          item.LogDir,
-			NumaNode:        item.NumaNode,
 			ResourceControl: meta.ResourceControl{},
 		})
 		if err := setWorkerConfig(&spec, item.Config, index); err != nil {
