@@ -314,6 +314,20 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
+	for _, item := range ctf.TiDBCluster.CDC {
+		node, exist := resourceMaps[item.Host]
+		if !exist {
+			return spec, nil, fmt.Errorf("cdc node not found: `%s`", item.Host)
+		}
+		spec.CDCServers = append(spec.CDCServers, tiupSpec.CDCSpec{
+			Host:            hostName(item.Host, node.ClusterIP),
+			SSHPort:         22,
+			Port:            item.Port,
+			DeployDir:       item.DeployDir,
+			LogDir:          item.LogDir,
+			ResourceControl: meta.ResourceControl{},
+		})
+	}
 
 	for index, item := range ctf.TiDBCluster.TiFlash {
 		node, exist := resourceMaps[item.Host]
