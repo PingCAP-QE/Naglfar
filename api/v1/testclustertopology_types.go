@@ -305,8 +305,6 @@ type MasterSpec struct {
 	DataDir   string `json:"dataDir" yaml:"data_dir"`
 
 	// +optional
-	NumaNode string `json:"numaNode,omitempty"`
-	// +optional
 	Config string `json:"config,omitempty"`
 	// +optional
 	LogDir string `json:"logDir,omitempty"`
@@ -322,8 +320,6 @@ type WorkerSpec struct {
 
 	// +optional
 	LogDir string `json:"logDir,omitempty"`
-	// +optional
-	NumaNode string `json:"numaNode,omitempty"`
 	// +optional
 	Config string `json:"config,omitempty"`
 }
@@ -394,6 +390,9 @@ type TestClusterTopologySpec struct {
 }
 
 type TiDBClusterInfo struct {
+	//optional
+	IsScaling bool `json:"isScaling,omitempty"`
+
 	// tikvs in pendingOffline state, like [172.16.0.1:20160]
 	// +optional
 	PendingOfflineList []string `json:"pendingOfflineList,omitempty"`

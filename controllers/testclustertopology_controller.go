@@ -152,36 +152,45 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			}
 			// cluster config no change
 			if !cluster.IsClusterConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
-				var rr naglfarv1.TestResourceRequest
-				if err := r.Get(ctx, types.NamespacedName{
-					Namespace: req.Namespace,
-					Name:      ct.Spec.ResourceRequest,
-				}, &rr); err != nil {
-					return ctrl.Result{}, err
-				}
-
-				// check whether all the scale-in tikvs have migrated the region to other tikvs and are in the tombstone state. If finished, prune these useless tikvs
-				isFinish, result, err := r.checkTiKVFinishedScaleIn(ctx, &ct, &rr)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				if err := r.Status().Update(ctx, &ct); err != nil {
-					log.Error(err, "unable to update TestClusterTopology")
-					return ctrl.Result{}, err
-				}
-
-				if isFinish {
-					isOK, result, err := r.pruneTiDBCluster(ctx, &ct, &rr)
-					if err != nil {
-						r.Recorder.Event(&ct, "Warning", "Prune TiKVs", err.Error())
+				if ct.Status.TiDBClusterInfo.IsScaling {
+					var rr naglfarv1.TestResourceRequest
+					if err := r.Get(ctx, types.NamespacedName{
+						Namespace: req.Namespace,
+						Name:      ct.Spec.ResourceRequest,
+					}, &rr); err != nil {
 						return ctrl.Result{}, err
 					}
-					if isOK {
-						return ctrl.Result{}, nil
+
+					// check whether all the scale-in tikvs have migrated the region to other tikvs and are in the tombstone state. If finished, prune these useless tikvs
+					isFinish, err := r.checkTiKVFinishedScaleIn(ctx, &ct, &rr)
+					if err != nil {
+						return ctrl.Result{}, err
 					}
-					return result, nil
+					if err := r.Status().Update(ctx, &ct); err != nil {
+						log.Error(err, "unable to update TestClusterTopology")
+						return ctrl.Result{}, err
+					}
+
+					if isFinish {
+						isOK, result, err := r.pruneTiDBCluster(ctx, &ct, &rr)
+						if err != nil {
+							r.Recorder.Event(&ct, "Warning", "Prune TiKVs", err.Error())
+							return ctrl.Result{}, err
+						}
+						if isOK {
+							ct.Status.TiDBClusterInfo.IsScaling = false
+							if err := r.Status().Update(ctx, &ct); err != nil {
+								log.Error(err, "unable to update TestClusterTopology")
+								return ctrl.Result{}, err
+							}
+							return ctrl.Result{}, nil
+						}
+						return result, nil
+					} else {
+						return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+					}
 				}
-				return result, nil
+				return ctrl.Result{}, nil
 			}
 			log.Info("Cluster is updating", "clusterName", ct.Name)
 			ct.Status.State = naglfarv1.ClusterTopologyStateUpdating
@@ -201,6 +210,10 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			Name:      ct.Spec.ResourceRequest,
 		}, &rr); err != nil {
 			return ctrl.Result{}, err
+		}
+
+		if cluster.IsScaleIn(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+			ct.Status.TiDBClusterInfo.IsScaling = true
 		}
 
 		isOK, result, err := r.updateTiDBCluster(ctx, &ct, &rr)
@@ -478,7 +491,7 @@ func hostname2ClusterIP(resourceList naglfarv1.TestResourceList) map[string]stri
 	return result
 }
 
-func (r *TestClusterTopologyReconciler) checkTiKVFinishedScaleIn(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isFinish bool, result ctrl.Result, err error) {
+func (r *TestClusterTopologyReconciler) checkTiKVFinishedScaleIn(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isFinish bool, err error) {
 	log := r.Log.WithValues("checkTiKVFinishedScaleIn", types.NamespacedName{
 		Namespace: ct.Namespace,
 		Name:      ct.Name,
@@ -493,16 +506,16 @@ func (r *TestClusterTopologyReconciler) checkTiKVFinishedScaleIn(ctx context.Con
 
 	tiupCtl, err := cluster.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
 	if err != nil {
-		return false, ctrl.Result{}, err
+		return false, err
 	}
 
 	pendingOfflineList, err := tiupCtl.GetNodeStatusList(log, ct.Name, "Pending")
 	if err != nil {
-		return false, ctrl.Result{}, err
+		return false, err
 	}
 	tmp, err := tiupCtl.GetNodeStatusList(log, ct.Name, "Offline")
 	if err != nil {
-		return false, ctrl.Result{}, err
+		return false, err
 	}
 	var offlineList []string
 	for i := 0; i < len(tmp); i++ {
@@ -520,14 +533,10 @@ func (r *TestClusterTopologyReconciler) checkTiKVFinishedScaleIn(ctx context.Con
 	ct.Status.TiDBClusterInfo.OfflineList = offlineList
 	if len(pendingOfflineList) != 0 || len(offlineList) != 0 {
 		log.Info("cluster is trying prune", "PendingOfflineList", pendingOfflineList, "OfflineList", offlineList)
-		return false, ctrl.Result{RequeueAfter: time.Second * 10}, err
+		return false, nil
 	}
 
-	err = tiupCtl.PruneCluster(log, ct.Name, ct)
-	if err != nil {
-		return false, ctrl.Result{}, err
-	}
-	return true, ctrl.Result{}, nil
+	return true, nil
 }
 
 func (r *TestClusterTopologyReconciler) pruneTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isOk bool, result ctrl.Result, err error) {

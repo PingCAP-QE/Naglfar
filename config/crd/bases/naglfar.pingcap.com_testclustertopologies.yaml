@@ -112,8 +112,6 @@ spec:
                         type: string
                       logDir:
                         type: string
-                      numaNode:
-                        type: string
                       peerPort:
                         type: integer
                     required:
@@ -162,8 +160,6 @@ spec:
                       host:
                         type: string
                       logDir:
-                        type: string
-                      numaNode:
                         type: string
                       port:
                         type: integer
@@ -690,6 +686,9 @@ spec:
               description: Info provide some information to help users understand
                 the internal state of the cluster
               properties:
+                isScaling:
+                  description: optional
+                  type: boolean
                 offlineList:
                   description: tikvs in offline state, like [172.16.0.1:20160]
                   items:
