@@ -8,11 +8,37 @@ metadata:
   creationTimestamp: null
   name: testresources.naglfar.pingcap.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.state
+    description: the state of resource
+    name: State
+    type: string
+  - JSONPath: .status.hostIP
+    description: the host ip of resource
+    name: HostIP
+    type: string
+  - JSONPath: .status.sshPort
+    description: the ssh port of resource
+    name: SSHPort
+    type: integer
+  - JSONPath: .status.clusterIP
+    description: the cluster ip of resource
+    name: ClusterIP
+    type: string
+  - JSONPath: .status.portBindings
+    description: the port bindings of resource
+    name: PortBindings
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: naglfar.pingcap.com
   names:
     kind: TestResource
     listKind: TestResourceList
     plural: testresources
+    shortNames:
+    - tr
     singular: testresource
   scope: Namespaced
   subresources:
@@ -36,7 +62,7 @@ spec:
         spec:
           description: TestResourceSpec defines the desired state of TestResource
           properties:
-            cpuPercent:
+            cores:
               format: int32
               type: integer
             disks:
@@ -54,24 +80,51 @@ spec:
                     type: string
                 type: object
               type: object
+            machine:
+              description: If sets, it means the static machine is required
+              type: string
             machineSelector:
               type: string
             memory:
               type: string
-            testMachineResource:
-              description: If sets, it means the static machine is required
-              type: string
           required:
-          - cpuPercent
+          - cores
           - memory
           type: object
         status:
           description: TestResourceStatus defines the observed state of TestResource
           properties:
             binds:
+              description: List of volume bindings for this container
               items:
                 type: string
               type: array
+            capAdd:
+              description: List of kernel capabilities to add to the container
+              items:
+                type: string
+              type: array
+            claimRef:
+              description: Records which CR uses this test resource For example, if
+                workloada uses this resource, if workloadb wants to uses this resource
+                too, it needs to wait workloada clean the `claimRef` field of this
+                resource
+              properties:
+                name:
+                  type: string
+                namespace:
+                  type: string
+                uid:
+                  description: UID is a type that holds unique ID values, including
+                    UUIDs.  Because we don't ONLY use UUIDs, this is an alias to string.  Being
+                    a type captures intent and helps make sure that UIDs and names
+                    do not get conflated.
+                  type: string
+              required:
+              - name
+              - namespace
+              - uid
+              type: object
             clusterIP:
               description: ClusterIP is the ip address of the container in the overlay(or
                 calico) network
@@ -84,12 +137,28 @@ spec:
               items:
                 type: string
               type: array
+            exitCode:
+              description: means the container's exit code
+              type: integer
+            exposedPorts:
+              items:
+                type: string
+              type: array
             hostIP:
               description: HostIP is the ip address of the host machine
               type: string
+            hostname:
+              type: string
             image:
               type: string
+            imagePullPolicy:
+              description: default IfNotPresent
+              enum:
+              - Always
+              - IfNotPresent
+              type: string
             mount:
+              description: Mounts specs used by the container
               items:
                 properties:
                   readOnly:
@@ -105,8 +174,20 @@ spec:
               type: array
             password:
               type: string
+            phase:
+              description: ResourcePhase tells us the running state of resource workload,
+                eg. whether the resource is pending, running, exit with error or exit
+                normally
+              enum:
+              - pending
+              - running
+              - failed
+              - succeeded
+              type: string
+            portBindings:
+              type: string
             privilege:
-              description: Container configuration section default false
+              description: default false
               type: boolean
             sshPort:
               type: integer
@@ -120,6 +201,8 @@ spec:
               - finish
               - destroy
               type: string
+          required:
+          - exitCode
           type: object
       type: object
   version: v1

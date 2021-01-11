@@ -1,0 +1,24 @@
+# permissions for end users to edit procchaos.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: procchaos-editor-role
+rules:
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - procchaos
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - naglfar.pingcap.com
+  resources:
+  - procchaos/status
+  verbs:
+  - get

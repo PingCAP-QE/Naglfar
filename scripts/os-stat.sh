@@ -9,7 +9,6 @@ set -e
 
 
 # General OS props
-HOST=$HOSTNAME
 ARCHITECTURE=$(uname -m)
 
 
@@ -17,10 +16,15 @@ ARCHITECTURE=$(uname -m)
 memTotal=$(egrep '^MemTotal:' /proc/meminfo | awk '{print $2}')
 
 # CPU
-cpuThreads=$(grep processor /proc/cpuinfo | wc -l)
+cpuThreads=$(grep "^processor" /proc/cpuinfo | wc -l)
 
 # Disk
-disksJson=$(for d in $(df -P -x tmpfs -x devtmpfs -x ecryptfs -x nfs -x cifs -T \
+disksJson=$(for d in $(df -P -T \
+| grep -v tmpfs \
+| grep -v ecryptfs \
+| grep -v nfs \
+| grep -v cifs \
+| grep -v overlay \
 | tail -n+2 \
 | awk '{print "" "\""$1"\"" ": {\"filesystem\":" "\""$2"\"" ", \"total\":" "\""$3"KiB\"" ", \"used\":" "\""$4"KiB\"" ", \"mountPoint\":" "\""$7"\"" "},"}'); \
 do echo $d; done | sed '$s/.$//')
@@ -28,7 +32,6 @@ do echo $d; done | sed '$s/.$//')
 # Final result in JSON
 JSON="
 {
-  \"hostname\": \"$HOST\",
   \"architecture\": \"$ARCHITECTURE\",
   \"memory\": \""$memTotal"KiB\",
   \"threads\": $cpuThreads,

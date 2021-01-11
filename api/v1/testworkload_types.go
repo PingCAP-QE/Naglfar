@@ -1,18 +1,16 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v1
 
@@ -24,14 +22,16 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	TestWorkloadStatePending TestWorkloadState = "pending"
-	TestWorkloadStateRunning                   = "running"
-	TestWorkloadStateFinish                    = "finish"
+	TestWorkloadStatePending   = TestWorkloadState("pending")
+	TestWorkloadStateRunning   = TestWorkloadState("running")
+	TestWorkloadStateSucceeded = TestWorkloadState("succeeded")
+	TestWorkloadStateFailed    = TestWorkloadState("failed")
 )
 
 type ClusterTopologyRef struct {
-	Name      string `json:"name"`
-	AliasName string `json:"aliasName"`
+	Name string `json:"name"`
+	// +optional
+	AliasName string `json:"aliasName,omitempty"`
 }
 
 type ResourceRequestRef struct {
@@ -39,10 +39,11 @@ type ResourceRequestRef struct {
 	Node string `json:"node"`
 }
 
-type DockerContainerSpec struct {
-	Name            string             `json:"name"`
+type ContainerSpec struct {
 	ResourceRequest ResourceRequestRef `json:"resourceRequest"`
 	Image           string             `json:"image"`
+	// +optional
+	ImagePullPolicy PullImagePolicy `json:"imagePullPolicy,omitempty"`
 	// +optional
 	Command []string `json:"command,omitempty"`
 }
@@ -51,7 +52,7 @@ type TestWorkloadItemSpec struct {
 	Name string `json:"name"`
 
 	// +optional
-	DockerContainer *DockerContainerSpec `json:"dockerContainer,omitempty"`
+	DockerContainer *ContainerSpec `json:"dockerContainer,omitempty"`
 }
 
 // TestWorkloadSpec defines the desired state of TestWorkload
@@ -70,13 +71,17 @@ type TestWorkloadSpec struct {
 	TeardownTestClusterTopology []string `json:"teardownTestClusterTopology,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=pending;running;finish;fail
+// +kubebuilder:validation:Enum=pending;running;succeeded;failed
 type TestWorkloadState string
 
 type TestWorkloadResult struct {
 	// plain text format
 	// +optional
 	PlainText string `json:"plainText,omitempty"`
+}
+
+type WorkloadStatus struct {
+	Phase ResourcePhase `json:"phase"`
 }
 
 // TestWorkloadStatus defines the observed state of TestWorkload
@@ -88,13 +93,20 @@ type TestWorkloadStatus struct {
 	// +optional
 	State TestWorkloadState `json:"state"`
 
+	// Record status of each workloads
+	// +optional
+	WorkloadStatus map[string]WorkloadStatus `json:"workloadStatus,omitempty"`
+
 	// Save the results passed through
 	// +optional
 	Results map[string]TestWorkloadResult `json:"results,omitempty"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName="tw"
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state",description="the state of workload"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // TestWorkload is the Schema for the testworkloads API
 type TestWorkload struct {

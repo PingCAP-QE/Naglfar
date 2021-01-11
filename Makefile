@@ -12,16 +12,23 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 CONTROLLER_GEN=$(GOBIN)/controller-gen
+PACKR=$(GOBIN)/packr
 
-all: manager
+all: manager kubectl-naglfar
 
 # Run tests
 test: generate fmt vet manifests
 	go test ./... -coverprofile cover.out
 
 # Build manager binary
-manager: generate fmt vet
+manager: mod generate fmt vet
 	go build -o bin/manager main.go
+
+pack: mod generate fmt vet
+	$(PACKR) build -o bin/manager main.go
+
+kubectl-naglfar: mod generate fmt vet
+	go build -o bin/naglfar cmd/kubectl-naglfar/main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -50,6 +57,8 @@ upgrade: deploy
 manifests:
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
+format: vet fmt
+
 # Run go fmt against code
 fmt:
 	go fmt ./...
@@ -58,8 +67,13 @@ fmt:
 vet:
 	go vet ./...
 
+mod:
+	@echo "go mod tidy"
+	GO111MODULE=on go mod tidy
+	@git diff --exit-code -- go.sum go.mod
+
 # Generate code
-generate:
+generate: manifests
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
@@ -71,4 +85,58 @@ docker-push:
 	docker push ${IMG}
 
 log:
-	kubectl logs deployment/naglfar-controller-manager -n naglfar-system -c manager
+	kubectl logs -f deployment/naglfar-controller-manager -n naglfar-system -c manager
+
+gen-proto:
+	protoc --go_out=plugins=grpc:. pkg/chaos/pb/chaos.proto
+
+install-controller-gen:
+ifeq (, $(shell which controller-gen))
+	@{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+endif
+
+install-kustomize:
+ifeq (, $(shell which kustomize))
+	@{ \
+	set -e ;\
+	KUSTOMIZE_TMP_DIR=$$(mktemp -d) ;\
+	cd $$KUSTOMIZE_TMP_DIR ;\
+	wget https://github.com/kubernetes-sigs/kustomize/archive/kustomize/v3.8.8.tar.gz; \
+	tar xvf v3.8.8.tar.gz; \
+	cd kustomize-kustomize-v3.8.8/kustomize/; \
+	go install; \
+	rm -rf $$KUSTOMIZE_TMP_DIR ;\
+	}
+endif
+
+install-protoc-gen:
+ifeq (, $(shell which protoc-gen-go))
+	@{ \
+	set -e ;\
+	PROTOC_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$PROTOC_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/golang/protobuf/protoc-gen-go@v1.2.0 ;\
+	rm -rf $$PROTOC_GEN_TMP_DIR ;\
+	}
+endif
+
+
+install-packr:
+ifeq (, $(shell which packr))
+	@{ \
+	set -e ;\
+	PACKER_TMP_DIR=$$(mktemp -d) ;\
+	cd $$PACKER_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/gobuffalo/packr/packr@v0.2.5 ;\
+	rm -rf $$PACKER_TMP_DIR ;\
+	}
+endif

@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -35,9 +36,48 @@ type RelationshipStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	MachineToResources map[string]ResourceRefList `json:"machineToResources"`
 	ResourceToMachine  map[string]MachineRef      `json:"resourceToMachine"`
+
+	// accepted requests(satisfied and not deployed)
+	AcceptedRequests AcceptResources `json:"acceptedRequests"`
+
+	// exclusive lock: machine name -> request ref
+	MachineLocks map[string]ref.Ref `json:"machineLock"`
+}
+
+type AcceptResources []ref.Ref
+
+// IfExist predicates whether r is exist
+func (a *AcceptResources) IfExist(r ref.Ref) bool {
+	if a == nil {
+		return false
+	}
+	for _, item := range *a {
+		if item == r {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *AcceptResources) Remove(r ref.Ref) {
+	newA := make(AcceptResources, 0)
+	for _, item := range *a {
+		if item != r {
+			newA = append(newA, item)
+		}
+	}
+	*a = newA
 }
 
 type ResourceRefList []ResourceRef
+
+func (r ResourceRefList) Clone() ResourceRefList {
+	resources := make(ResourceRefList, 0)
+	for _, ref := range r {
+		resources = append(resources, ref)
+	}
+	return resources
+}
 
 type MachineRef struct {
 	ref.Ref `json:",inline"`
@@ -50,17 +90,17 @@ type ResourceRef struct {
 }
 
 type ResourceBinding struct {
-	Memory BytesSize              `json:"memory"`
+	Memory util.BytesSize         `json:"memory"`
 	CPUSet []int                  `json:"cpuSet,omitempty"`
 	Disks  map[string]DiskBinding `json:"disks,omitempty"`
 }
 
 type DiskBinding struct {
-	Kind       DiskKind  `json:"kind"`
-	Size       BytesSize `json:"size"`
-	Device     string    `json:"device"`
-	OriginPath string    `json:"originPath"`
-	MountPath  string    `json:"mountPath"`
+	Kind       DiskKind       `json:"kind"`
+	Size       util.BytesSize `json:"size"`
+	Device     string         `json:"device"`
+	OriginPath string         `json:"originPath"`
+	MountPath  string         `json:"mountPath"`
 }
 
 // +kubebuilder:object:root=true

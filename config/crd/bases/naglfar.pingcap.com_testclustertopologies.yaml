@@ -10,7 +10,7 @@ metadata:
 spec:
   additionalPrinterColumns:
   - JSONPath: .status.state
-    description: state of the cluster topology
+    description: the state of cluster topology
     name: State
     type: string
   - JSONPath: .metadata.creationTimestamp
@@ -21,6 +21,8 @@ spec:
     kind: TestClusterTopology
     listKind: TestClusterTopologyList
     plural: testclustertopologies
+    shortNames:
+    - tct
     singular: testclustertopology
   scope: Namespaced
   subresources:
@@ -45,15 +47,42 @@ spec:
         spec:
           description: TestClusterTopologySpec defines the desired state of TestClusterTopology
           properties:
-            resourceRequest:
-              description: ResourceRequest cannot be empty if the tidbCluster field
-                is set
-              type: string
-            tidbCluster:
+            dmCluster:
               properties:
+                alertManager:
+                  items:
+                    properties:
+                      clusterPort:
+                        type: integer
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      webPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
                 control:
                   description: Control machine host
                   type: string
+                global:
+                  properties:
+                    dataDir:
+                      type: string
+                    deployDir:
+                      type: string
+                  required:
+                  - dataDir
+                  - deployDir
+                  type: object
                 grafana:
                   items:
                     properties:
@@ -61,6 +90,185 @@ spec:
                         type: string
                       host:
                         type: string
+                      port:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                master:
+                  items:
+                    properties:
+                      Port:
+                        type: integer
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      peerPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                monitor:
+                  items:
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                serverConfigs:
+                  properties:
+                    master:
+                      type: string
+                    worker:
+                      type: string
+                  type: object
+                version:
+                  type: string
+                worker:
+                  items:
+                    properties:
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+              required:
+              - control
+              type: object
+            flinkCluster:
+              properties:
+                jobManager:
+                  properties:
+                    config:
+                      type: string
+                    host:
+                      type: string
+                    webPort:
+                      type: integer
+                  required:
+                  - host
+                  type: object
+                taskManager:
+                  items:
+                    properties:
+                      config:
+                        type: string
+                      host:
+                        type: string
+                    required:
+                    - host
+                    type: object
+                  type: array
+                version:
+                  type: string
+              required:
+              - version
+              type: object
+            resourceRequest:
+              description: ResourceRequest cannot be empty if the tidbCluster field
+                is set
+              type: string
+            tidbCluster:
+              properties:
+                cdc:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                control:
+                  description: Control machine host
+                  type: string
+                drainer:
+                  items:
+                    properties:
+                      commitTS:
+                        format: int64
+                        type: integer
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      port:
+                        type: integer
+                      sshPort:
+                        type: integer
+                    required:
+                    - config
+                    - dataDir
+                    - host
+                    type: object
+                  type: array
+                global:
+                  properties:
+                    dataDir:
+                      type: string
+                    deployDir:
+                      type: string
+                  required:
+                  - dataDir
+                  - deployDir
+                  type: object
+                grafana:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      port:
+                        type: integer
                     required:
                     - deployDir
                     - host
@@ -77,17 +285,20 @@ spec:
                         type: string
                       logDir:
                         type: string
+                      port:
+                        type: integer
                     required:
                     - dataDir
                     - deployDir
                     - host
-                    - logDir
                     type: object
                   type: array
                 pd:
                   description: PD machine hosts
                   items:
                     properties:
+                      clientPort:
+                        type: integer
                       dataDir:
                         type: string
                       deployDir:
@@ -96,11 +307,31 @@ spec:
                         type: string
                       logDir:
                         type: string
+                      peerPort:
+                        type: integer
                     required:
-                    - dataDir
                     - deployDir
                     - host
-                    - logDir
+                    type: object
+                  type: array
+                pump:
+                  items:
+                    properties:
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      port:
+                        type: integer
+                      sshPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - host
                     type: object
                   type: array
                 serverConfigs:
@@ -116,18 +347,52 @@ spec:
                   description: TiDB machine hosts
                   items:
                     properties:
-                      dataDir:
-                        type: string
                       deployDir:
                         type: string
                       host:
                         type: string
                       logDir:
                         type: string
+                      port:
+                        type: integer
+                      statusPort:
+                        type: integer
                     required:
                     - deployDir
                     - host
-                    - logDir
+                    type: object
+                  type: array
+                tiflash:
+                  items:
+                    properties:
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      httpPort:
+                        type: integer
+                      learnerConfig:
+                        type: string
+                      logDir:
+                        type: string
+                      metricsPort:
+                        type: integer
+                      proxyPort:
+                        type: integer
+                      proxyStatusPort:
+                        type: integer
+                      servicePort:
+                        type: integer
+                      tcpPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
                     type: object
                   type: array
                 tikv:
@@ -143,24 +408,25 @@ spec:
                       logDir:
                         type: string
                       port:
-                        description: default 20160
                         type: integer
                       statusPort:
-                        description: default 20180
                         type: integer
                     required:
                     - dataDir
                     - deployDir
                     - host
-                    - logDir
-                    - port
-                    - statusPort
                     type: object
                   type: array
                 version:
                   description: 'TODO: add a deploy version spec: clusterName, base
                     version, component versions(for PR and self build version) etc.'
                   properties:
+                    pdDownloadURL:
+                      type: string
+                    tidbDownloadURL:
+                      type: string
+                    tikvDownloadURL:
+                      type: string
                     version:
                       type: string
                   required:
@@ -174,12 +440,266 @@ spec:
         status:
           description: TestClusterTopologyStatus defines the observed state of TestClusterTopology
           properties:
+            preTiDBCluster:
+              description: PreTiDBCluster save tidb cluster configuration before update
+                and scale-in/out, It is used to compare with the new configuration
+                to see if the TestClusterTopology has been changed and what has been
+                changed
+              properties:
+                cdc:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                control:
+                  description: Control machine host
+                  type: string
+                drainer:
+                  items:
+                    properties:
+                      commitTS:
+                        format: int64
+                        type: integer
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      port:
+                        type: integer
+                      sshPort:
+                        type: integer
+                    required:
+                    - config
+                    - dataDir
+                    - host
+                    type: object
+                  type: array
+                global:
+                  properties:
+                    dataDir:
+                      type: string
+                    deployDir:
+                      type: string
+                  required:
+                  - dataDir
+                  - deployDir
+                  type: object
+                grafana:
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                monitor:
+                  items:
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                pd:
+                  description: PD machine hosts
+                  items:
+                    properties:
+                      clientPort:
+                        type: integer
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      peerPort:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                pump:
+                  items:
+                    properties:
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      port:
+                        type: integer
+                      sshPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - host
+                    type: object
+                  type: array
+                serverConfigs:
+                  properties:
+                    pd:
+                      type: string
+                    tidb:
+                      type: string
+                    tikv:
+                      type: string
+                  type: object
+                tidb:
+                  description: TiDB machine hosts
+                  items:
+                    properties:
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                      statusPort:
+                        type: integer
+                    required:
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                tiflash:
+                  items:
+                    properties:
+                      config:
+                        type: string
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      httpPort:
+                        type: integer
+                      learnerConfig:
+                        type: string
+                      logDir:
+                        type: string
+                      metricsPort:
+                        type: integer
+                      proxyPort:
+                        type: integer
+                      proxyStatusPort:
+                        type: integer
+                      servicePort:
+                        type: integer
+                      tcpPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                tikv:
+                  description: TiKV machine hosts
+                  items:
+                    properties:
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      port:
+                        type: integer
+                      statusPort:
+                        type: integer
+                    required:
+                    - dataDir
+                    - deployDir
+                    - host
+                    type: object
+                  type: array
+                version:
+                  description: 'TODO: add a deploy version spec: clusterName, base
+                    version, component versions(for PR and self build version) etc.'
+                  properties:
+                    pdDownloadURL:
+                      type: string
+                    tidbDownloadURL:
+                      type: string
+                    tikvDownloadURL:
+                      type: string
+                    version:
+                      type: string
+                  required:
+                  - version
+                  type: object
+              required:
+              - control
+              - version
+              type: object
             state:
               description: default Pending
               enum:
               - pending
               - ready
+              - updating
               type: string
+            tiDBCluster:
+              description: Info provide some information to help users understand
+                the internal state of the cluster
+              properties:
+                isScaling:
+                  description: optional
+                  type: boolean
+                offlineList:
+                  description: tikvs in offline state, like [172.16.0.1:20160]
+                  items:
+                    type: string
+                  type: array
+                pendingOfflineList:
+                  description: tikvs in pendingOffline state, like [172.16.0.1:20160]
+                  items:
+                    type: string
+                  type: array
+              type: object
           type: object
       type: object
   version: v1

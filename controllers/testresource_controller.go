@@ -1,31 +1,26 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
 	docker "github.com/docker/docker/client"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,7 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	dockerutil "github.com/PingCAP-QE/Naglfar/pkg/docker-util"
 	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 const resourceFinalizer = "testresource.naglfar.pingcap.com"
@@ -46,25 +43,6 @@ const clusterNetwork = "naglfar-overlay"
 var relationshipName = types.NamespacedName{
 	Namespace: "default",
 	Name:      "machine-testresource",
-}
-
-func stringsContains(list []string, target string) bool {
-	for _, elem := range list {
-		if elem == target {
-			return true
-		}
-	}
-	return false
-}
-
-func stringsRemove(list []string, target string) []string {
-	newList := make([]string, 0, len(list)-1)
-	for _, elem := range list {
-		if target != elem {
-			newList = append(newList, elem)
-		}
-	}
-	return newList
 }
 
 func refsRemove(list naglfarv1.ResourceRefList, resource ref.Ref) naglfarv1.ResourceRefList {
@@ -121,13 +99,13 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		err = client.IgnoreNotFound(err)
 		return
 	}
-	if resource.ObjectMeta.DeletionTimestamp.IsZero() && !stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
+	if resource.ObjectMeta.DeletionTimestamp.IsZero() && !util.StringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
 		resource.ObjectMeta.Finalizers = append(resource.ObjectMeta.Finalizers, resourceFinalizer)
 		err = r.Update(r.Ctx, resource)
 		return
 	}
 
-	if !resource.ObjectMeta.DeletionTimestamp.IsZero() && stringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
+	if !resource.ObjectMeta.DeletionTimestamp.IsZero() && util.StringsContains(resource.ObjectMeta.Finalizers, resourceFinalizer) {
 		var relation *naglfarv1.Relationship
 
 		if relation, err = r.getRelationship(); err != nil {
@@ -139,15 +117,18 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 
 		if machineRef, ok := relation.Status.ResourceToMachine[resourceKey]; ok {
 			var machine naglfarv1.Machine
+			var requeue bool
 			if err = r.Get(r.Ctx, machineRef.Namespaced(), &machine); err != nil {
 				// TODO: deal with not found
 				return
 			}
 
-			result.Requeue, err = r.finalize(resource, &machine)
-
-			if result.Requeue || err != nil {
+			requeue, err = r.finalize(resource, &machine)
+			if err != nil {
 				return
+			}
+			if requeue {
+				return ctrl.Result{RequeueAfter: time.Second}, nil
 			}
 
 			machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
@@ -158,7 +139,7 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 			}
 		}
 
-		resource.ObjectMeta.Finalizers = stringsRemove(resource.ObjectMeta.Finalizers, resourceFinalizer)
+		resource.ObjectMeta.Finalizers = util.StringsRemove(resource.ObjectMeta.Finalizers, resourceFinalizer)
 		err = r.Update(r.Ctx, resource)
 		return
 	}
@@ -172,8 +153,6 @@ func (r *TestResourceReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return r.reconcileStatePending(log, resource)
 	case naglfarv1.ResourceUninitialized:
 		return r.reconcileStateUninitialized(log, resource)
-	case naglfarv1.ResourceFail:
-		return r.reconcileStateFail(log, resource)
 	case naglfarv1.ResourceReady:
 		return r.reconcileStateReady(log, resource)
 	case naglfarv1.ResourceFinish:
@@ -212,10 +191,11 @@ func (r *TestResourceReconciler) removeContainer(resource *naglfarv1.TestResourc
 }
 
 func (r *TestResourceReconciler) finalize(resource *naglfarv1.TestResource, machine *naglfarv1.Machine) (requeue bool, err error) {
-	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
 	if err != nil {
 		return
 	}
+	defer dockerClient.Close()
 
 	if err = r.removeContainer(resource, dockerClient); err != nil {
 		err = client.IgnoreNotFound(err)
@@ -301,7 +281,7 @@ func (r *TestResourceReconciler) resourceOverflow(rest *naglfarv1.AvailableResou
 	return binding, false
 }
 
-func (r *TestResourceReconciler) requestResource(log logr.Logger, resource *naglfarv1.TestResource) (hostIP string, err error) {
+func (r *TestResourceReconciler) requestResource(resource *naglfarv1.TestResource) (hostIP string, err error) {
 	relation, err := r.getRelationship()
 	if err != nil {
 		return
@@ -321,66 +301,11 @@ func (r *TestResourceReconciler) requestResource(log logr.Logger, resource *nagl
 		return
 	}
 
-	var machines []naglfarv1.Machine
-	if resource.Spec.TestMachineResource != "" {
-		if err = r.Get(r.Ctx, types.NamespacedName{Namespace: "default", Name: resource.Spec.TestMachineResource}, machine); err != nil {
-			log.Error(err, fmt.Sprintf("unable to fetch Machine %s", resource.Spec.TestMachineResource))
-			return
-		}
-
-		machines = append(machines, *machine)
-	} else {
-		var machineList naglfarv1.MachineList
-		options := make([]client.ListOption, 0)
-		if resource.Spec.MachineSelector != "" {
-			options = append(options, client.MatchingLabels{"type": resource.Spec.MachineSelector})
-		}
-
-		if err = r.List(r.Ctx, &machineList, options...); err != nil {
-			log.Error(err, "unable to list machines")
-			return
-		}
-
-		machines = machineList.Items
-	}
-
-	for _, *machine = range machines {
-		machineRef := ref.CreateRef(&machine.ObjectMeta)
-		machineKey := machineRef.Key()
-		resources, ok := relation.Status.MachineToResources[machineKey]
-		if !ok {
-			continue
-		}
-
-		binding, overflow := r.resourceOverflow(machine.Rest(resources), resource)
-		if overflow {
-			continue
-		}
-
-		relation.Status.ResourceToMachine[resourceKey] = naglfarv1.MachineRef{
-			Ref:     machineRef,
-			Binding: *binding,
-		}
-
-		relation.Status.MachineToResources[machineKey] = append(
-			relation.Status.MachineToResources[machineKey],
-			naglfarv1.ResourceRef{
-				Ref:     resourceRef,
-				Binding: *binding,
-			},
-		)
-
-		if err = r.Status().Update(r.Ctx, relation); err != nil {
-			return
-		}
-		hostIP = machine.Spec.Host
-		break
-	}
 	return
 }
 
-func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	ip, err := r.requestResource(log, resource)
+func (r *TestResourceReconciler) reconcileStatePending(_ logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	ip, err := r.requestResource(resource)
 	if err != nil {
 		return
 	}
@@ -388,12 +313,10 @@ func (r *TestResourceReconciler) reconcileStatePending(log logr.Logger, resource
 	if ip != "" {
 		resource.Status.HostIP = ip
 		resource.Status.State = naglfarv1.ResourceUninitialized
-	} else {
-		resource.Status.State = naglfarv1.ResourceFail
+		err = r.Status().Update(r.Ctx, resource)
+		return
 	}
-
-	err = r.Status().Update(r.Ctx, resource)
-	return
+	return ctrl.Result{RequeueAfter: time.Second}, nil
 }
 
 func (r *TestResourceReconciler) getResourceBinding(resourceRef ref.Ref) (binding *naglfarv1.ResourceBinding, err error) {
@@ -426,22 +349,7 @@ func (r *TestResourceReconciler) getHostMachine(resourceRef ref.Ref) (*naglfarv1
 	return &machine, err
 }
 
-func (r *TestResourceReconciler) pullImageIfNotExist(dockerClient docker.APIClient, config *container.Config) error {
-	_, _, err := dockerClient.ImageInspectWithRaw(r.Ctx, config.Image)
-	if !docker.IsErrImageNotFound(err) {
-		return err
-	}
-	reader, err := dockerClient.ImagePull(r.Ctx, config.Image, dockerTypes.ImagePullOptions{})
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-	var b bytes.Buffer
-	_, err = io.Copy(&b, reader)
-	return err
-}
-
-func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
+func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResource, dockerClient *dockerutil.Client) (err error) {
 	containerName := resource.ContainerName()
 
 	binding, err := r.getResourceBinding(ref.CreateRef(&resource.ObjectMeta))
@@ -451,7 +359,8 @@ func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResourc
 	}
 
 	config, hostConfig := resource.ContainerConfig(binding)
-	if err = r.pullImageIfNotExist(dockerClient, config); err != nil {
+	if err = dockerClient.PullImageByPolicy(config.Image, resource.Status.ImagePullPolicy); err != nil {
+		r.Eventer.Event(resource, "Warning", "pullImage", fmt.Sprintf("pulling image %s failed: %s", config.Image, err.Error()))
 		return
 	}
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
@@ -467,7 +376,7 @@ func (r *TestResourceReconciler) createContainer(resource *naglfarv1.TestResourc
 	return
 }
 
-func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource, dockerClient docker.APIClient) (err error) {
+func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource, dockerClient *dockerutil.Client) (err error) {
 	containerName := resource.ContainerCleanerName()
 
 	binding, err := r.getResourceBinding(ref.CreateRef(&resource.ObjectMeta))
@@ -477,6 +386,11 @@ func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource,
 	}
 
 	config, hostConfig := resource.ContainerCleanerConfig(binding)
+
+	if err = dockerClient.PullImageByPolicy(config.Image, resource.Status.ImagePullPolicy); err != nil {
+		r.Eventer.Event(resource, "Warning", "pullImage", fmt.Sprintf("pulling image %s failed: %s", config.Image, err.Error()))
+		return
+	}
 
 	resp, err := dockerClient.ContainerCreate(r.Ctx, config, hostConfig, nil, containerName)
 	if err != nil {
@@ -491,20 +405,28 @@ func (r *TestResourceReconciler) createCleaner(resource *naglfarv1.TestResource,
 	return
 }
 
+// reconcileStateUninitialized reconcile state on uninitialized:
+// uninitialized -> ready: if container stays running
+// uninitialized -> finish: if container ends running
 func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	if resource.Status.Phase == "" {
+		resource.Status.Phase = naglfarv1.ResourcePhasePending
+		err = r.Status().Update(r.Ctx, resource)
+		return
+	}
 	if resource.Status.Image == "" {
 		return
 	}
-
 	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
 	if err != nil {
 		return
 	}
 
-	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
 	if err != nil {
 		return
 	}
+	defer dockerClient.Close()
 
 	containerName := resource.ContainerName()
 	var stats dockerTypes.ContainerJSON
@@ -512,6 +434,7 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 
 	if err != nil {
 		if !docker.IsErrContainerNotFound(err) {
+			r.Eventer.Eventf(resource, "Warning", "CreateContainer", "create container %s error: %s", containerName, err)
 			return
 		}
 
@@ -523,8 +446,18 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	}
 
 	if timeIsZero(stats.State.StartedAt) {
+		_, ok := stats.NetworkSettings.Networks[clusterNetwork]
+		if !ok {
+			err = dockerClient.NetworkConnect(r.Ctx, clusterNetwork, containerName, nil)
+			if err == nil {
+				result.Requeue = true
+			}
+			return
+		}
 		err = dockerClient.ContainerStart(r.Ctx, containerName, dockerTypes.ContainerStartOptions{})
-		if err == nil {
+		if err != nil {
+			r.Eventer.Eventf(resource, "Warning", "StartContainer", "start container %s error: %s", containerName, err)
+		} else {
 			result.Requeue = true
 		}
 		return
@@ -537,12 +470,14 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 	}
 
 	if stats.State.Running {
+		if resource.Status.Phase != naglfarv1.ResourcePhaseRunning {
+			resource.Status.Phase = naglfarv1.ResourcePhaseRunning
+			err = r.Status().Update(r.Ctx, resource)
+			return
+		}
 		network, ok := stats.NetworkSettings.Networks[clusterNetwork]
 		if !ok {
-			err = dockerClient.NetworkConnect(r.Ctx, clusterNetwork, containerName, nil)
-			if err == nil {
-				result.Requeue = true
-			}
+			err = fmt.Errorf("network configuration error, miss %s network", clusterNetwork)
 			return
 		}
 		resource.Status.ClusterIP = network.IPAddress
@@ -550,32 +485,40 @@ func (r *TestResourceReconciler) reconcileStateUninitialized(log logr.Logger, re
 		if ports, ok := stats.NetworkSettings.Ports[naglfarv1.SSHPort]; ok && len(ports) > 0 {
 			resource.Status.SSHPort, _ = strconv.Atoi(ports[0].HostPort)
 		}
+		for port, hostPorts := range stats.NetworkSettings.Ports {
+			if len(resource.Status.PortBindings) == 0 {
+				resource.Status.PortBindings = fmt.Sprintf("%s:%s", port, hostPorts[0].HostPort)
+			} else {
+				resource.Status.PortBindings = fmt.Sprintf("%s,%s:%s", resource.Status.PortBindings, port, hostPorts[0].HostPort)
+			}
+		}
 	}
 
 	if !timeIsZero(stats.State.FinishedAt) {
 		resource.Status.State = naglfarv1.ResourceFinish
+		resource.Status.ExitCode = stats.State.ExitCode
+		switch resource.Status.ExitCode {
+		case 0:
+			resource.Status.Phase = naglfarv1.ResourcePhaseSucceeded
+		default:
+			resource.Status.Phase = naglfarv1.ResourcePhaseFailed
+		}
 	}
-
 	err = r.Status().Update(r.Ctx, resource)
 	return
 }
 
-// TODO: complete reconcileStateFail
-func (r *TestResourceReconciler) reconcileStateFail(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
-	return
-}
-
-// TODO: complete reconcileStateReady
 func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
 	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
 	if err != nil {
 		return
 	}
 
-	dockerClient, err := docker.NewClient(machine.DockerURL(), machine.Spec.DockerVersion, nil, nil)
+	dockerClient, err := machine.DockerClient()
 	if err != nil {
 		return
 	}
+	defer dockerClient.Close()
 
 	containerName := resource.ContainerName()
 	stats, err := dockerClient.ContainerInspect(r.Ctx, containerName)
@@ -596,6 +539,13 @@ func (r *TestResourceReconciler) reconcileStateReady(log logr.Logger, resource *
 
 	if !timeIsZero(stats.State.FinishedAt) {
 		resource.Status.State = naglfarv1.ResourceFinish
+		resource.Status.ExitCode = stats.State.ExitCode
+		switch resource.Status.ExitCode {
+		case 0:
+			resource.Status.Phase = naglfarv1.ResourcePhaseSucceeded
+		default:
+			resource.Status.Phase = naglfarv1.ResourcePhaseFailed
+		}
 	}
 
 	if resource.Status.State != naglfarv1.ResourceReady {
@@ -615,14 +565,22 @@ func (r *TestResourceReconciler) reconcileStateFinish(log logr.Logger, resource 
 }
 
 func (r *TestResourceReconciler) reconcileStateDestroy(log logr.Logger, resource *naglfarv1.TestResource) (result ctrl.Result, err error) {
+	var requeue bool
 	machine, err := r.getHostMachine(ref.CreateRef(&resource.ObjectMeta))
 	if err != nil {
 		return
 	}
-	result.Requeue, err = r.finalize(resource, machine)
-	if result.Requeue || err != nil {
+
+	requeue, err = r.finalize(resource, machine)
+	if err != nil {
 		return
 	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+	r.Eventer.Event(resource, "Normal", "uninstall", "uninstall resource successfully")
+	// clear all container spec
+	resource.Status.ResourceContainerSpec = naglfarv1.ResourceContainerSpec{}
 	resource.Status.State = naglfarv1.ResourceUninitialized
 	err = r.Status().Update(r.Ctx, resource)
 	return

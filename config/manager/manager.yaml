@@ -28,7 +28,7 @@ spec:
         args:
         - --enable-leader-election
         image: naglfar:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: manager
         resources:
           requests:

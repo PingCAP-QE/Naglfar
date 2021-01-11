@@ -1,18 +1,16 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package controllers
 
@@ -25,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 )
 
 // RelationshipReconciler reconciles a relationship object
@@ -54,7 +53,10 @@ func (r *RelationshipReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 		return
 	}
 
-	if relation.Status.MachineToResources == nil || relation.Status.ResourceToMachine == nil {
+	if relation.Status.MachineToResources == nil ||
+		relation.Status.ResourceToMachine == nil ||
+		relation.Status.AcceptedRequests == nil ||
+		relation.Status.MachineLocks == nil {
 		if relation.Status.MachineToResources == nil {
 			log.Info("initialize MachineToResources")
 			relation.Status.MachineToResources = make(map[string]naglfarv1.ResourceRefList)
@@ -63,7 +65,14 @@ func (r *RelationshipReconciler) Reconcile(req ctrl.Request) (result ctrl.Result
 			log.Info("initialize ResourceToMachine")
 			relation.Status.ResourceToMachine = make(map[string]naglfarv1.MachineRef)
 		}
-
+		if relation.Status.AcceptedRequests == nil {
+			log.Info("initialize AcceptedRequests")
+			relation.Status.AcceptedRequests = make(naglfarv1.AcceptResources, 0)
+		}
+		if relation.Status.MachineLocks == nil {
+			log.Info("initialize machineLock")
+			relation.Status.MachineLocks = make(map[string]ref.Ref)
+		}
 		err = r.Status().Update(ctx, relation)
 	}
 

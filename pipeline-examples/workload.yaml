@@ -10,7 +10,6 @@ spec:
   workloads:
     - name: naglfar-demo
       dockerContainer:
-        name: naglfar-demo
         resourceRequest:
           name: tidb-cluster
           node: n3

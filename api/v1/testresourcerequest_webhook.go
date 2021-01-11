@@ -1,22 +1,22 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v1
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -56,8 +56,9 @@ func (r *TestResourceRequest) ValidateCreate() error {
 			return err
 		}
 	}
-	// TODO(user): fill in your validation logic upon object creation.
-	return nil
+	// check items
+	err := r.checkItems()
+	return err
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
@@ -65,6 +66,21 @@ func (r *TestResourceRequest) ValidateUpdate(old runtime.Object) error {
 	testresourcerequestlog.Info("validate update", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object update.
+	return nil
+}
+
+func (r *TestResourceRequest) checkItems() error {
+	machinesLogicNames := make(map[string]struct{})
+	for _, item := range r.Spec.Machines {
+		machinesLogicNames[item.Name] = struct{}{}
+	}
+	for _, item := range r.Spec.Items {
+		if item.Spec.Machine != "" {
+			if _, exist := machinesLogicNames[item.Spec.Machine]; !exist {
+				return fmt.Errorf("no exist machine item: %s", item.Spec.Machine)
+			}
+		}
+	}
 	return nil
 }
 

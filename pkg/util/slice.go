@@ -14,25 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package util
 
-import (
-	"fmt"
-	"time"
-)
-
-func retry(attempts int, sleep time.Duration, f func() error) (err error) {
-	for i := 0; ; i++ {
-		err = f()
-		if err == nil {
-			return
+func StringsContains(list []string, target string) bool {
+	for _, elem := range list {
+		if elem == target {
+			return true
 		}
-
-		if i >= (attempts - 1) {
-			break
-		}
-
-		time.Sleep(sleep)
 	}
-	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+	return false
+}
+
+func StringsRemove(list []string, target string) []string {
+	newList := make([]string, 0, len(list)-1)
+	for _, elem := range list {
+		if target != elem {
+			newList = append(newList, elem)
+		}
+	}
+	return newList
 }

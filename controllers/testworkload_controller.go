@@ -1,18 +1,16 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package controllers
 
@@ -29,13 +27,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 const (
-	testWorkloadFinalizer   = "testworkload.naglfar.pingcap.com"
-	NaglfarClusterNs        = "NAGLFAR_CLUSTER_NS"
-	NaglfarTestWorkloadName = "NAGLFAR_TESTWORKLOAD_NAME"
-	NaglfarTestWorkloadItem = "NAGLFAR_TESTWORKLOAD_WORKLOAD_ITEM"
+	testWorkloadFinalizer          = "testworkload.naglfar.pingcap.com"
+	NaglfarClusterNs               = "NAGLFAR_CLUSTER_NS"
+	NaglfarTestResourceRequestName = "NAGLFAR_TEST_RESOURCE_REQUEST_NAME"
+	NaglfarTestWorkloadName        = "NAGLFAR_TESTWORKLOAD_NAME"
+	NaglfarTestWorkloadItem        = "NAGLFAR_TESTWORKLOAD_WORKLOAD_ITEM"
 )
 
 // TestWorkloadReconciler reconciles a TestWorkload object
@@ -65,19 +66,19 @@ func (r *TestWorkloadReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	if workload.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !stringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
+		if !util.StringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
 			workload.ObjectMeta.Finalizers = append(workload.ObjectMeta.Finalizers, testWorkloadFinalizer)
 			if err := r.Update(ctx, workload); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 	} else {
-		if stringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
+		if util.StringsContains(workload.ObjectMeta.Finalizers, testWorkloadFinalizer) {
 			if err := r.uninstallWorkload(ctx, workload); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
-		workload.Finalizers = stringsRemove(workload.Finalizers, testWorkloadFinalizer)
+		workload.Finalizers = util.StringsRemove(workload.Finalizers, testWorkloadFinalizer)
 		if err := r.Update(ctx, workload); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -86,13 +87,14 @@ func (r *TestWorkloadReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	switch workload.Status.State {
 	case "":
 		workload.Status.State = naglfarv1.TestWorkloadStatePending
+		workload.Status.WorkloadStatus = make(map[string]naglfarv1.WorkloadStatus)
 		err := r.Status().Update(ctx, workload)
 		return ctrl.Result{}, err
 	case naglfarv1.TestWorkloadStatePending:
 		return r.reconcilePending(ctx, workload)
 	case naglfarv1.TestWorkloadStateRunning:
 		return r.reconcileRunning(ctx, workload)
-	case naglfarv1.TestWorkloadStateFinish:
+	case naglfarv1.TestWorkloadStateSucceeded, naglfarv1.TestWorkloadStateFailed:
 		return r.reconcileFinish(workload)
 	}
 	return ctrl.Result{}, nil
@@ -109,15 +111,18 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 			Name:      item.Name,
 		}] = struct{}{}
 	}
-	allReady, err := r.checkTopologiesReady(ctx, clusterTopologies)
+	topologies, allReady, err := r.checkTopologiesReady(ctx, clusterTopologies)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if !allReady {
-		r.Recorder.Event(workload, "Warning", "Waiting", "not all clusters are ready")
+		r.Recorder.Event(workload, "Warning", "Precondition", "not all clusters are ready")
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	r.Recorder.Event(workload, "Normal", "Install", "clusters are all ready")
+	var resourceList naglfarv1.TestResourceList
+	if err := r.List(ctx, &resourceList, client.InNamespace(workload.Namespace)); err != nil {
+		return ctrl.Result{}, err
+	}
 	var installedCount = 0
 	for _, item := range workload.Spec.Workloads {
 		workloadNode, err := r.getWorkloadRequestNode(ctx, workload.Namespace, item.DockerContainer)
@@ -126,23 +131,40 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 		}
 		if workloadNode == nil {
 			err := fmt.Errorf("cannot find the resource %s", item.DockerContainer.ResourceRequest.Name)
-			r.Recorder.Event(workload, "Warning", "Inspect", err.Error())
+			r.Recorder.Event(workload, "Warning", "Precondition", err.Error())
 			return ctrl.Result{}, err
 		}
+		if workloadNode.Status.ClaimRef != nil && *workloadNode.Status.ClaimRef != ref.CreateRef(&workload.ObjectMeta) {
+			r.Recorder.Eventf(workload, "Warning", "Precondition", "node %s is occupied by %s",
+				ref.CreateRef(&workloadNode.ObjectMeta).Key(),
+				workloadNode.Status.ClaimRef.Key())
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 		switch workloadNode.Status.State {
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail:
+		case naglfarv1.ResourceDestroy:
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		case naglfarv1.ResourcePending:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
 		case naglfarv1.ResourceUninitialized:
 			if workloadNode.Status.Image == "" {
-				workloadNode.Status.Image, workloadNode.Status.Command, workloadNode.Status.Envs = r.getContainerConfig(workload, item.DockerContainer)
-				r.Recorder.Event(workload, "Normal", "Install", fmt.Sprintf("installing the workload: %s", item.Name))
+				self := ref.CreateRef(&workload.ObjectMeta)
+				// claim occupy
+				workloadNode.Status.ClaimRef = &self
+
+				r.setContainerSpec(&workloadNode.Status, workload, &item)
+				topologyEnvs, err := r.buildTopologyEnvs(&workload.Spec, topologies, resourceList)
+				if err != nil {
+					r.Recorder.Event(workload, "Warning", "Precondition", err.Error())
+					return ctrl.Result{}, err
+				}
+				workloadNode.Status.Envs = append(workloadNode.Status.Envs, topologyEnvs...)
 				if err := r.Status().Update(ctx, workloadNode); err != nil {
 					return ctrl.Result{}, err
 				}
+				r.Recorder.Event(workload, "Normal", "Install", fmt.Sprintf("preparing the workload: %s", item.Name))
 			} else if workloadNode.Status.Image != item.DockerContainer.Image {
-				err := fmt.Errorf("install the workload %s/%s failed, resource %s has installed a conflict image",
-					workload.Name, item.Name, workloadNode.Name)
-				r.Recorder.Event(workload, "Warning", "Install", err.Error())
+				err := fmt.Errorf("resource %s has installed a conflict image", workloadNode.Name)
+				r.Recorder.Event(workload, "Warning", "Precondition", err.Error())
 				return ctrl.Result{}, err
 			}
 		case naglfarv1.ResourceReady, naglfarv1.ResourceFinish:
@@ -166,7 +188,11 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 
 // 1. poll the state of workload resource nodes, if all workloads have finished, set itself to `finish`
 func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload *naglfarv1.TestWorkload) (ctrl.Result, error) {
-	var finishedCount = 0
+	var (
+		phaseChangedWorkloads = 0
+		succeededWorkloads    = 0
+		failedWorkloads       = 0
+	)
 	for _, item := range workload.Spec.Workloads {
 		workloadNode, err := r.getWorkloadRequestNode(ctx, workload.Namespace, item.DockerContainer)
 		if err != nil {
@@ -178,23 +204,43 @@ func (r *TestWorkloadReconciler) reconcileRunning(ctx context.Context, workload 
 			return ctrl.Result{}, err
 		}
 		switch workloadNode.Status.State {
-		case naglfarv1.ResourcePending, naglfarv1.ResourceFail, naglfarv1.ResourceUninitialized:
+		case naglfarv1.ResourcePending, naglfarv1.ResourceDestroy:
 			panic(fmt.Sprintf("there's a bug, it shouldn't see the `%s` state", workloadNode.Status.State))
-		case naglfarv1.ResourceReady:
-			// no nothing
-		case naglfarv1.ResourceFinish:
-			finishedCount += 1
+		case naglfarv1.ResourceUninitialized, naglfarv1.ResourceReady, naglfarv1.ResourceFinish:
+			if workload.Status.WorkloadStatus == nil {
+				workload.Status.WorkloadStatus = make(map[string]naglfarv1.WorkloadStatus)
+			}
+			if _, exist := workload.Status.WorkloadStatus[item.Name]; !exist {
+				phaseChangedWorkloads += 1
+				workload.Status.WorkloadStatus[item.Name] = naglfarv1.WorkloadStatus{Phase: naglfarv1.ResourcePhasePending}
+			}
+			if workload.Status.WorkloadStatus[item.Name].Phase != workloadNode.Status.Phase {
+				workload.Status.WorkloadStatus[item.Name] = naglfarv1.WorkloadStatus{Phase: workloadNode.Status.Phase}
+				phaseChangedWorkloads += 1
+			}
+			switch workloadNode.Status.Phase {
+			case naglfarv1.ResourcePhaseSucceeded:
+				succeededWorkloads += 1
+				r.Recorder.Eventf(workload, "Normal", "Workload", "workload %s succeeded", item.Name)
+			case naglfarv1.ResourcePhaseFailed:
+				failedWorkloads += 1
+				r.Recorder.Eventf(workload, "Warning", "Workload", "workload %s failed", item.Name)
+			}
 		default:
 			panic(fmt.Sprintf("it's a bug, we forget to process the `%s` state", workloadNode.Status.State))
 		}
 	}
-	if finishedCount == len(workload.Spec.Workloads) {
-		workload.Status.State = naglfarv1.TestWorkloadStateFinish
-		if err := r.Status().Update(ctx, workload); err != nil {
-			return ctrl.Result{}, err
+	// only need update the status if exist workloads which changed since last
+	if phaseChangedWorkloads != 0 {
+		if succeededWorkloads == len(workload.Spec.Workloads) {
+			workload.Status.State = naglfarv1.TestWorkloadStateSucceeded
+			r.Recorder.Event(workload, "Normal", "Finish", "all workloads finished")
+		} else if succeededWorkloads+failedWorkloads == len(workload.Spec.Workloads) {
+			workload.Status.State = naglfarv1.TestWorkloadStateFailed
+			r.Recorder.Event(workload, "Normal", "Finish", "all workloads finished")
 		}
-		r.Recorder.Event(workload, "Normal", "Finish", "all workload has been finished")
-		return ctrl.Result{}, nil
+		err := r.Status().Update(ctx, workload)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	}
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
@@ -203,21 +249,23 @@ func (r *TestWorkloadReconciler) reconcileFinish(workload *naglfarv1.TestWorkloa
 	return ctrl.Result{}, nil
 }
 
-func (r *TestWorkloadReconciler) getContainerConfig(
-	testWorkload *naglfarv1.TestWorkload,
-	workloadSpec *naglfarv1.DockerContainerSpec) (image string, command []string, envs []string) {
-	image, command = workloadSpec.Image, workloadSpec.Command
-	envs = []string{}
-	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarClusterNs, testWorkload.Namespace))
-	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadName, testWorkload.Name))
-	envs = append(envs, fmt.Sprintf("%s=%s", NaglfarTestWorkloadItem, workloadSpec.Name))
+func (r *TestWorkloadReconciler) setContainerSpec(containerSpec *naglfarv1.TestResourceStatus, testWorkload *naglfarv1.TestWorkload, workloadSpec *naglfarv1.TestWorkloadItemSpec) {
+	envs := []string{
+		fmt.Sprintf("%s=%s", NaglfarClusterNs, testWorkload.Namespace),
+		fmt.Sprintf("%s=%s", NaglfarTestResourceRequestName, workloadSpec.DockerContainer.ResourceRequest.Name),
+		fmt.Sprintf("%s=%s", NaglfarTestWorkloadName, testWorkload.Name),
+		fmt.Sprintf("%s=%s", NaglfarTestWorkloadItem, workloadSpec.Name),
+	}
 	for _, item := range testWorkload.Spec.ClusterTopologiesRefs {
 		envs = append(envs, fmt.Sprintf("%s=%s", item.AliasName, item.Name))
 	}
+
+	containerSpec.Image, containerSpec.ImagePullPolicy = workloadSpec.DockerContainer.Image, workloadSpec.DockerContainer.ImagePullPolicy
+	containerSpec.Command, containerSpec.Envs = workloadSpec.DockerContainer.Command, envs
 	return
 }
 
-func (r *TestWorkloadReconciler) getWorkloadRequestNode(ctx context.Context, ns string, workloadSpec *naglfarv1.DockerContainerSpec) (*naglfarv1.TestResource, error) {
+func (r *TestWorkloadReconciler) getWorkloadRequestNode(ctx context.Context, ns string, workloadSpec *naglfarv1.ContainerSpec) (*naglfarv1.TestResource, error) {
 	resourceRequest := new(naglfarv1.TestResourceRequest)
 	err := r.Get(ctx, types.NamespacedName{
 		Namespace: ns,
@@ -234,17 +282,21 @@ func (r *TestWorkloadReconciler) getWorkloadRequestNode(ctx context.Context, ns 
 	return &workloadNode, err
 }
 
-func (r *TestWorkloadReconciler) checkTopologiesReady(ctx context.Context, clusterTopologies map[types.NamespacedName]struct{}) (bool, error) {
+func (r *TestWorkloadReconciler) checkTopologiesReady(ctx context.Context, clusterTopologies map[types.NamespacedName]struct{}) (
+	topologies []*naglfarv1.TestClusterTopology,
+	ready bool,
+	err error) {
 	for objectKey := range clusterTopologies {
 		topology := new(naglfarv1.TestClusterTopology)
 		if err := r.Get(ctx, objectKey, topology); err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if topology.Status.State != naglfarv1.ClusterTopologyStateReady {
-			return false, nil
+			return nil, false, nil
 		}
+		topologies = append(topologies, topology)
 	}
-	return true, nil
+	return topologies, true, nil
 }
 
 func (r *TestWorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -256,18 +308,48 @@ func (r *TestWorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *TestWorkloadReconciler) uninstallWorkload(ctx context.Context, workload *naglfarv1.TestWorkload) error {
 	for _, item := range workload.Spec.Workloads {
 		workloadNode, err := r.getWorkloadRequestNode(ctx, workload.Namespace, item.DockerContainer)
-		if err != nil {
+		if client.IgnoreNotFound(err) != nil {
 			return err
 		}
 		if workloadNode == nil {
 			continue
 		}
-		if workloadNode.Status.State.IsInstalled() {
+		if workloadNode.Status.State.CouldUninstall() {
 			workloadNode.Status.State = naglfarv1.ResourceDestroy
+			// release claim
+			workloadNode.Status.ClaimRef = nil
 			if r.Status().Update(ctx, workloadNode); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (r *TestWorkloadReconciler) buildTopologyEnvs(spec *naglfarv1.TestWorkloadSpec,
+	topologies []*naglfarv1.TestClusterTopology,
+	list naglfarv1.TestResourceList) (envs []string, err error) {
+	var resources = make([]*naglfarv1.TestResource, 0)
+	for idx := range list.Items {
+		resources = append(resources, &list.Items[idx])
+	}
+	for _, topoRef := range spec.ClusterTopologiesRefs {
+		for _, topo := range topologies {
+			if topo.Name == topoRef.Name {
+				var prefix = topoRef.Name
+				if len(topoRef.AliasName) != 0 {
+					prefix = topoRef.AliasName
+				}
+				es, err := BuildInjectEnvs(topo, resources)
+				if err != nil {
+					return nil, err
+				}
+				for _, env := range es {
+					envs = append(envs, fmt.Sprintf("%s_%s", prefix, env))
+				}
+				break
+			}
+		}
+	}
+	return
 }

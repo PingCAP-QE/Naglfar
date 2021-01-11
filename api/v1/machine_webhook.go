@@ -1,30 +1,29 @@
-/*
-
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v1
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/docker/go-units"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/PingCAP-QE/Naglfar/pkg/util"
 )
 
 // log is for logging in this package.
@@ -46,20 +45,12 @@ var _ webhook.Defaulter = &Machine{}
 func (r *Machine) Default() {
 	machinelog.Info("default", "name", r.Name)
 
-	if r.Spec.SSHPort == 0 {
-		r.Spec.SSHPort = 22
-	}
-
 	if r.Spec.DockerPort == 0 {
 		if r.Spec.DockerTLS {
 			r.Spec.DockerPort = 2376
 		} else {
 			r.Spec.DockerPort = 2375
 		}
-	}
-
-	if r.Spec.Timeout == "" {
-		r.Spec.Timeout = HumanDuration(10 * time.Second)
 	}
 
 	if r.Spec.Reserve == nil {
@@ -71,7 +62,11 @@ func (r *Machine) Default() {
 	}
 
 	if r.Spec.Reserve.Memory == "" {
-		r.Spec.Reserve.Memory = Size(1 * units.GiB)
+		r.Spec.Reserve.Memory = util.Size(1 * units.GiB)
+	}
+
+	if r.Spec.DockerVersion == "" {
+		r.Spec.DockerVersion = "1.25"
 	}
 	// TODO(user): fill in your defaulting logic.
 }
@@ -84,10 +79,6 @@ var _ webhook.Validator = &Machine{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Machine) ValidateCreate() error {
 	machinelog.Info("validate create", "name", r.Name)
-
-	if r.Spec.SSHPort < 0 {
-		return fmt.Errorf("invalid port %d", r.Spec.SSHPort)
-	}
 
 	if r.Spec.DockerPort < 0 {
 		return fmt.Errorf("invalid port %d", r.Spec.DockerPort)
@@ -103,10 +94,6 @@ func (r *Machine) ValidateCreate() error {
 		}
 	}
 
-	if _, err := r.Spec.Timeout.Parse(); err != nil {
-		return fmt.Errorf("fail to parse timeout(%s): %s", r.Spec.Timeout, err.Error())
-	}
-
 	// TODO(user): fill in your validation logic upon object creation.
 	return nil
 }
@@ -114,20 +101,6 @@ func (r *Machine) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Machine) ValidateUpdate(old runtime.Object) error {
 	machinelog.Info("validate update", "name", r.Name)
-
-	if _, err := r.Status.Info.Memory.ToSize(); err != nil {
-		return fmt.Errorf("invalid memory size: %s", err.Error())
-	}
-
-	for _, device := range r.Status.Info.StorageDevices {
-		if _, err := device.Total.ToSize(); err != nil {
-			return fmt.Errorf("invalid storage size: %s", err.Error())
-		}
-
-		if _, err := device.Used.ToSize(); err != nil {
-			return fmt.Errorf("invalid storage size: %s", err.Error())
-		}
-	}
 
 	return nil
 }

@@ -44,6 +44,7 @@ spec:
               description: default false
               type: boolean
             dockerVersion:
+              description: default is 1.25, cannot be smaller than 1.25
               type: string
             exclusiveDisks:
               items:
@@ -51,35 +52,25 @@ spec:
               type: array
             host:
               type: string
-            password:
-              type: string
             reserve:
               properties:
-                cpuPercent:
-                  description: default 100
+                cores:
+                  description: default 1
                   format: int32
                   type: integer
                 memory:
                   description: default 1 GiB
                   type: string
               type: object
-            sshPort:
-              description: default 22
-              minimum: 0
-              type: integer
-            timeout:
-              description: default 10s
-              type: string
-            username:
-              type: string
           required:
           - host
-          - password
-          - username
           type: object
         status:
           description: MachineStatus defines the observed state of Machine
           properties:
+            chaosPort:
+              description: exposed port of chaos daemon
+              type: integer
             info:
               properties:
                 architecture:
@@ -102,8 +93,6 @@ spec:
                     - used
                     type: object
                   type: object
-                hostname:
-                  type: string
                 memory:
                   type: string
                 threads:
@@ -111,10 +100,15 @@ spec:
                   type: integer
               required:
               - architecture
-              - hostname
               - memory
               - threads
               type: object
+            state:
+              enum:
+              - shutdown
+              - starting
+              - ready
+              type: string
           type: object
       type: object
   version: v1

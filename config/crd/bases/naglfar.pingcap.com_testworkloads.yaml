@@ -8,11 +8,21 @@ metadata:
   creationTimestamp: null
   name: testworkloads.naglfar.pingcap.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.state
+    description: the state of workload
+    name: State
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: naglfar.pingcap.com
   names:
     kind: TestWorkload
     listKind: TestWorkloadList
     plural: testworkloads
+    shortNames:
+    - tw
     singular: testworkload
   scope: Namespaced
   subresources:
@@ -45,7 +55,6 @@ spec:
                   name:
                     type: string
                 required:
-                - aliasName
                 - name
                 type: object
               type: array
@@ -65,7 +74,10 @@ spec:
                         type: array
                       image:
                         type: string
-                      name:
+                      imagePullPolicy:
+                        enum:
+                        - Always
+                        - IfNotPresent
                         type: string
                       resourceRequest:
                         properties:
@@ -79,7 +91,6 @@ spec:
                         type: object
                     required:
                     - image
-                    - name
                     - resourceRequest
                     type: object
                   name:
@@ -108,9 +119,27 @@ spec:
               enum:
               - pending
               - running
-              - finish
-              - fail
+              - succeeded
+              - failed
               type: string
+            workloadStatus:
+              additionalProperties:
+                properties:
+                  phase:
+                    description: ResourcePhase tells us the running state of resource
+                      workload, eg. whether the resource is pending, running, exit
+                      with error or exit normally
+                    enum:
+                    - pending
+                    - running
+                    - failed
+                    - succeeded
+                    type: string
+                required:
+                - phase
+                type: object
+              description: Record status of each workloads
+              type: object
           type: object
       type: object
   version: v1

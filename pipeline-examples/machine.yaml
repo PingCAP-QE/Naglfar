@@ -5,8 +5,6 @@ metadata:
   labels:
     type: physical
 spec:
-  username: root
-  password: root
   host: 172.16.0.1
   sshPort: 22
   dockerPort: 2376
