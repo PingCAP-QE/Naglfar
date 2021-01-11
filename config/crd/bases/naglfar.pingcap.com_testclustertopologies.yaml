@@ -654,7 +654,7 @@ spec:
               description: Info provide some information to help users understand
                 the internal state of the cluster
               properties:
-                isScale:
+                isScaling:
                   description: optional
                   type: boolean
                 offlineList:

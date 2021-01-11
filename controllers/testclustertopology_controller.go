@@ -152,7 +152,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			}
 			// cluster config no change
 			if !cluster.IsClusterConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
-				if ct.Status.TiDBClusterInfo.IsScale {
+				if ct.Status.TiDBClusterInfo.IsScaling {
 					var rr naglfarv1.TestResourceRequest
 					if err := r.Get(ctx, types.NamespacedName{
 						Namespace: req.Namespace,
@@ -171,13 +171,14 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 						return ctrl.Result{}, err
 					}
 
-					if isFinish  {
+					if isFinish {
 						isOK, result, err := r.pruneTiDBCluster(ctx, &ct, &rr)
 						if err != nil {
 							r.Recorder.Event(&ct, "Warning", "Prune TiKVs", err.Error())
 							return ctrl.Result{}, err
 						}
 						if isOK {
+							ct.Status.TiDBClusterInfo.IsScaling = false
 							if err := r.Status().Update(ctx, &ct); err != nil {
 								log.Error(err, "unable to update TestClusterTopology")
 								return ctrl.Result{}, err
@@ -185,8 +186,8 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 							return ctrl.Result{}, nil
 						}
 						return result, nil
-					}else {
-						return ctrl.Result{RequeueAfter: time.Second*10},nil
+					} else {
+						return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 					}
 				}
 				return ctrl.Result{}, nil
@@ -211,10 +212,9 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 
-		if cluster.IsScaleIn(ct.Status.PreTiDBCluster,ct.Spec.TiDBCluster){
-			ct.Status.TiDBClusterInfo.IsScale = true
+		if cluster.IsScaleIn(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+			ct.Status.TiDBClusterInfo.IsScaling = true
 		}
-		fmt.Println("IsScale",ct.Status.TiDBClusterInfo.IsScale)
 
 		isOK, result, err := r.updateTiDBCluster(ctx, &ct, &rr)
 		if !isOK {
@@ -530,14 +530,9 @@ func (r *TestClusterTopologyReconciler) checkTiKVFinishedScaleIn(ctx context.Con
 	ct.Status.TiDBClusterInfo.OfflineList = offlineList
 	if len(pendingOfflineList) != 0 || len(offlineList) != 0 {
 		log.Info("cluster is trying prune", "PendingOfflineList", pendingOfflineList, "OfflineList", offlineList)
-		return false,  nil
+		return false, nil
 	}
 
-	err = tiupCtl.PruneCluster(log, ct.Name, ct)
-	if err != nil {
-		return false, err
-	}
-	ct.Status.TiDBClusterInfo.IsScale = false
 	return true, nil
 }
 

@@ -376,7 +376,7 @@ type TestClusterTopologySpec struct {
 
 type TiDBClusterInfo struct {
 	//optional
-	IsScale bool `json:"isScale,omitempty"`
+	IsScaling bool `json:"isScaling,omitempty"`
 
 	// tikvs in pendingOffline state, like [172.16.0.1:20160]
 	// +optional
