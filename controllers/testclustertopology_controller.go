@@ -17,6 +17,10 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/PingCAP-QE/Naglfar/pkg/haproxy"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
+	"github.com/docker/docker/api/types/mount"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"strconv"
 	"time"
 
@@ -128,6 +132,17 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}
 				r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("dm cluster %s is installed", ct.Name))
+			case ct.Spec.HAProxy!=nil:
+				requeue, err := r.installHAProxy(ctx, &ct, &rr)
+				if err != nil {
+					r.Recorder.Event(&ct, "Warning", "Install", err.Error())
+					return ctrl.Result{}, err
+				}
+				if requeue {
+					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+				r.Recorder.Event(&ct, "Normal", "Install", fmt.Sprintf("ha proxy %s is installed", ct.Name))
+
 			}
 			ct.Status.State = naglfarv1.ClusterTopologyStateReady
 			if err := r.Status().Update(ctx, &ct); err != nil {
@@ -612,6 +627,8 @@ func filterClusterResources(ct *naglfarv1.TestClusterTopology, resourceList nagl
 		allHosts = ct.Spec.FlinkCluster.AllHosts()
 	case ct.Spec.DMCluster != nil:
 		allHosts = ct.Spec.DMCluster.AllHosts()
+	case ct.Spec.HAProxy != nil:
+		allHosts = ct.Spec.HAProxy.AllHosts()
 	}
 	result := make([]*naglfarv1.TestResource, 0)
 	for idx := range resourceList.Items {
@@ -631,6 +648,8 @@ func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, ct *na
 		requeue, err = r.initTiUPResources(ctx, ct, resources)
 	case ct.Spec.FlinkCluster != nil:
 		requeue, err = r.initFlinkResources(ctx, ct, resources)
+	case ct.Spec.HAProxy != nil:
+		requeue, err = r.initHAProxyResources(ctx, ct, resources)
 	}
 	return requeue, err
 }
@@ -657,6 +676,60 @@ func (r *TestClusterTopologyReconciler) initTiUPResources(ctx context.Context, c
 			}
 		case naglfarv1.ResourceReady:
 			if resource.Status.Image != tiup.ContainerImage {
+				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
+			}
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
+		}
+	}
+	return requeue, nil
+}
+
+func (r *TestClusterTopologyReconciler) initHAProxyResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
+	var relation naglfarv1.Relationship
+	err := r.Get(ctx, relationshipName, &relation)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		err = nil
+	}
+	machineRef := relation.Status.ResourceToMachine[ct.Spec.HAProxy.Control]
+	var machine naglfarv1.Machine
+	err = r.Get(ctx, ref.ParseKey(machineRef.Key()).Namespaced(), &machine)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		err = nil
+	}
+	err = haproxy.WriteConfigToMachine(machine.Spec.Host,ct.Spec.HAProxy.Mount.Name,ct.Spec.HAProxy.Mount.Config)
+	if err != nil{
+		return true,err
+	}
+	var requeue bool
+	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return requeue, fmt.Errorf("index exposed ports failed: %v", err)
+	}
+	for _, resource := range resources {
+		switch resource.Status.State {
+		case naglfarv1.ResourceUninitialized:
+			requeue = true
+			if resource.Status.Image == "" {
+				resource.Status.Image =  haproxy.BaseImageName+ct.Spec.HAProxy.Version
+				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
+				var mounts []naglfarv1.TestResourceMount
+				mounts = append(mounts,naglfarv1.TestResourceMount{
+					Type:     mount.TypeBind,
+					Source:   haproxy.MountDir,
+					Target:   haproxy.MountDir,
+					ReadOnly: false,
+				})
+				resource.Status.Mounts = mounts
+				err := r.Status().Update(ctx, resource)
+				if err != nil {
+					return false, err
+				}
+			}
+		case naglfarv1.ResourceReady:
+			if resource.Status.Image != haproxy.BaseImageName {
 				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
 			}
 		case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
@@ -735,6 +808,25 @@ func (r *TestClusterTopologyReconciler) installFlinkCluster(ctx context.Context,
 	return false, nil
 }
 
+func (r *TestClusterTopologyReconciler) installHAProxy(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
+	log := r.Log.WithValues("installHAProxy", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+	var resourceList naglfarv1.TestResourceList
+	var resources []*naglfarv1.TestResource
+	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+		log.Error(err, "unable to list child resources")
+	}
+	resources = filterClusterResources(ct, resourceList)
+
+	requeue, err = r.initResource(ctx, ct, resources)
+	if requeue {
+		return true, err
+	}
+	return false, nil
+}
+
 func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
 	log := r.Log.WithValues("installDMCluster", types.NamespacedName{
 		Namespace: ct.Namespace,
@@ -757,3 +849,17 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 	}
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.DMCluster.Version)
 }
+
+//func (r *TestClusterTopologyReconciler) scpHAProxyCfgToTargetMachine(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) error{
+//	var relation naglfarv1.Relationship
+//	err := r.Get(ctx, relationshipName, &relation)
+//	if apierrors.IsNotFound(err) {
+//		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+//		err = nil
+//	}
+//	machineRef := relation.Status.ResourceToMachine[ct.Spec.HAProxy.Host]
+//	machineRef.Name
+//
+//
+//
+//}

@@ -109,6 +109,8 @@ spec:
               - starting
               - ready
               type: string
+            uploadPort:
+              type: integer
           type: object
       type: object
   version: v1

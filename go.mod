@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/Microsoft/go-winio v0.4.15 // indirect
+	github.com/alecthomas/assert v0.0.0-20170929043011-405dbfeb8e38
 	github.com/bramvdbogaerde/go-scp v0.0.0-20200820121624-ded9ee94aef5
 	github.com/creasty/defaults v1.3.0
 	github.com/docker/distribution v2.7.1+incompatible // indirect

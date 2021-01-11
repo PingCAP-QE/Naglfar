@@ -370,6 +370,24 @@ func (c *DMCluster) AllHosts() map[string]struct{} {
 	return result
 }
 
+type Mount struct{
+	Name string `json:"name"`
+	Config string `json:"config"`
+}
+
+type HAProxy struct {
+	Control string `json:"control"`
+	Version string `json:"version"`
+	Mount Mount `json:"mount"`
+}
+
+func (c *HAProxy) AllHosts() map[string]struct{} {
+	result := map[string]struct{}{
+		c.Control: {},
+	}
+	return result
+}
+
 // TestClusterTopologySpec defines the desired state of TestClusterTopology
 type TestClusterTopologySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -387,6 +405,9 @@ type TestClusterTopologySpec struct {
 
 	// +optional
 	DMCluster *DMCluster `json:"dmCluster,omitempty"`
+
+	// +optional
+	HAProxy *HAProxy `json:"haProxy,omitempty"`
 }
 
 type TiDBClusterInfo struct {

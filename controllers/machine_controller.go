@@ -130,6 +130,7 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	}
 
 	machine.Status.State = naglfarv1.MachineReady
+	machine.Status.UploadPort = container.UploadPort
 
 	if err = r.Status().Update(r.Ctx, machine); err != nil {
 		log.Error(err, "unable to update Machine")
@@ -137,10 +138,22 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	return
 }
 
-func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
+func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1.Machine) (ctrl.Result, error) {
+	if machine.Status.UploadPort!=0{
+		dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
+		if err != nil {
+			return ctrl.Result{},err
+		}
+		defer dockerClient.Close()
+		machine.Status.UploadPort, err = r.createUploadDaemon(machine,dockerClient)
+		if err != nil {
+			r.Eventer.Event(machine, "Warning", "upload-daemon", err.Error())
+			return ctrl.Result{},err
+		}
+	}
 	relation, err := r.getRelationship()
 	if err != nil {
-		return
+		return ctrl.Result{},err
 	}
 
 	machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
@@ -150,7 +163,7 @@ func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1
 		err = r.Status().Update(r.Ctx, relation)
 	}
 
-	return
+	return ctrl.Result{},err
 }
 
 func (r *MachineReconciler) reconcileShutdown(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
@@ -175,6 +188,11 @@ func (r *MachineReconciler) reconcileShutdown(log logr.Logger, machine *naglfarv
 	defer dockerClient.Close()
 
 	err = r.Unlock(machine, dockerClient)
+	if err != nil {
+		return
+	}
+
+	err = r.deleteUploadDaemon(machine, dockerClient)
 	if err != nil {
 		return
 	}
@@ -289,6 +307,39 @@ func (r *MachineReconciler) tryLock(machine *naglfarv1.Machine, dockerClient *do
 	return
 }
 
+func (r *MachineReconciler) createUploadDaemon(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) (uploadPort int, err error) {
+	cfg, hostCfg := container.UploadDaemonCfg(string(machine.UID))
+	stat, err := dockerClient.Run(container.UploadDaemon, container.UploadDaemonImage, dockerutil.RunOptions{
+		Config:     cfg,
+		HostConfig: hostCfg,
+	})
+
+	if err != nil {
+		return
+	}
+
+	if stat.Config == nil || stat.Config.Labels == nil {
+		err = fmt.Errorf("invalid lock container: %s", stat.Name)
+	}
+
+	uid, ok := stat.Config.Labels[container.UploadLabel]
+	if !ok {
+		err = fmt.Errorf("container %s has no label `%s`", stat.Name, container.UploadLabel)
+		return
+	}
+
+	if uid != string(machine.UID) {
+		err = fmt.Errorf("machine(%s) occupied by other naglfar system: UID(%s)", machine.Name, machine.UID)
+		return
+	}
+
+	if ports, ok := stat.NetworkSettings.Ports[container.UploadDaemonPort]; ok && len(ports) > 0 {
+		uploadPort, _ = strconv.Atoi(ports[0].HostPort)
+	}
+
+	return
+}
+
 func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
 	if err := dockerClient.PullImageByPolicy(container.MachineStatImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
 		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineStatImage))
@@ -312,4 +363,29 @@ func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *doc
 	}
 
 	return dockerClient.ContainerRemove(r.Ctx, container.ChaosDaemon, dockerTypes.ContainerRemoveOptions{Force: true})
+}
+
+func (r *MachineReconciler) deleteUploadDaemon(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
+	if err := dockerClient.PullImageByPolicy(container.MachineStatImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
+		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineStatImage))
+		return err
+	}
+
+	info, err := dockerClient.ContainerInspect(r.Ctx, container.UploadDaemon)
+
+	if err != nil {
+		if !docker.IsErrNotFound(err) {
+			return err
+		}
+
+		// upload not found
+		return nil
+	}
+
+	if info.Config == nil || info.Config.Labels == nil || info.Config.Labels[container.UploadLabel] != string(machine.UID) {
+		// upload daemon released
+		return nil
+	}
+
+	return dockerClient.ContainerRemove(r.Ctx, container.UploadDaemon, dockerTypes.ContainerRemoveOptions{Force: true})
 }

@@ -123,6 +123,9 @@ type MachineStatus struct {
 
 	// +optional
 	Info *MachineInfo `json:"info,omitempty"`
+
+	// +optional
+	UploadPort int `json:"uploadPort"`
 }
 
 // +kubebuilder:object:root=true
