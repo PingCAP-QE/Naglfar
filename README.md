@@ -53,7 +53,7 @@ testworkloads.naglfar.pingcap.com
 ### Add Host Machine
 
 A host machine is the machine to allocate resources and execute job (cluster and workload).
-The "resources" includes memery, cpu cores and exclusive disks.
+The "resources" include memery, cpu cores and exclusive disks.
 
 There are examples crds: [pipeline-examples](https://github.com/PingCAP-QE/Naglfar/tree/master/pipeline-examples).
 You can see `machine.yaml`:
@@ -81,7 +81,7 @@ You can apply a new machine by `kubectl apply -f <file path>`, then execute `kub
 
 ### Request for Resources
 
-There are tow steps to request resources: create your k8s `Namespace` and add a `TestResouceRequest`.
+There are two steps to request resources: create your k8s `Namespace` and add a `TestResouceRequest`.
 
 ```yaml
 apiVersion: v1
@@ -123,7 +123,7 @@ spec:
 
 The disks maps custom names to exclusive disks, it's unnecessary if you do not need exclusive disks. All resources are allocated automatically, naglfar system will find machines for them.
 
-Now apply this file and checout result by `kubectl get trr test-tidb-cluster -n test-tidb-cluster`.
+Now apply this file and checkout result by `kubectl get trr test-tidb-cluster -n test-tidb-cluster`.
 
 ### Define Cluster Topology
 Once resource request is ready, you can define your cluster topology.
@@ -275,7 +275,7 @@ Then you can access the tidb endpoint by `10.0.2.213:4000`(docker swarm network)
 
 ### Apply ProcChaos
 
-The `ProcChaos` means process chaos, you can define some pattern and rules to kill processes once or in period.
+The `ProcChaos` means process chaos, you can define some patterns and rules to kill processes once or in a period.
 
 ```yaml
 apiVersion: naglfar.pingcap.com/v1
