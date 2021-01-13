@@ -215,27 +215,6 @@ spec:
                             required:
                             - version
                             type: object
-                          haProxy:
-                            properties:
-                              control:
-                                type: string
-                              mount:
-                                properties:
-                                  config:
-                                    type: string
-                                  name:
-                                    type: string
-                                required:
-                                - config
-                                - name
-                                type: object
-                              version:
-                                type: string
-                            required:
-                            - control
-                            - mount
-                            - version
-                            type: object
                           resourceRequest:
                             description: ResourceRequest cannot be empty if the tidbCluster
                               field is set
@@ -309,6 +288,22 @@ spec:
                                   - host
                                   type: object
                                 type: array
+                              haProxy:
+                                properties:
+                                  config:
+                                    type: string
+                                  host:
+                                    type: string
+                                  port:
+                                    type: integer
+                                  version:
+                                    type: string
+                                required:
+                                - config
+                                - host
+                                - port
+                                - version
+                                type: object
                               monitor:
                                 items:
                                   properties:
@@ -550,6 +545,22 @@ spec:
                                   - host
                                   type: object
                                 type: array
+                              haProxy:
+                                properties:
+                                  config:
+                                    type: string
+                                  host:
+                                    type: string
+                                  port:
+                                    type: integer
+                                  version:
+                                    type: string
+                                required:
+                                - config
+                                - host
+                                - port
+                                - version
+                                type: object
                               monitor:
                                 items:
                                   properties:
