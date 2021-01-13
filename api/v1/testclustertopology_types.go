@@ -180,6 +180,9 @@ type CDCSpec struct {
 }
 
 type TiDBCluster struct {
+	// +optional
+	UpgradePolicy string `json:"upgradePolicy"`
+
 	Version TiDBClusterVersion `json:"version"`
 
 	// +optional

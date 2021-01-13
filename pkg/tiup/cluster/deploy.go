@@ -159,6 +159,9 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 	return nil
 }
 
+func IsUpgraded(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
+	return pre.Version.Version != cur.Version.Version
+}
 func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) bool {
 	return !reflect.DeepEqual(pre, cur)
 }
@@ -428,6 +431,31 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 
 	if err := c.reloadCluster(clusterName, []string{}, roles); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (c *ClusterManager) UpgradeCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	var forceFlag string
+	if ct.Spec.TiDBCluster.UpgradePolicy == "force" {
+		forceFlag = "--force"
+	}
+
+	log.Info("cluster is upgrading", "oldVersion", ct.Status.PreTiDBCluster.Version.Version, "newVersion", ct.Spec.TiDBCluster.Version.Version)
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster upgrade %s %s %s -y", clusterName, ct.Spec.TiDBCluster.Version.Version, forceFlag)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return fmt.Errorf("upgrade cluster failed(%s): %s", err, errStr)
 	}
 	return nil
 }

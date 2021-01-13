@@ -417,6 +417,8 @@ spec:
                     - host
                     type: object
                   type: array
+                upgradePolicy:
+                  type: string
                 version:
                   description: 'TODO: add a deploy version spec: clusterName, base
                     version, component versions(for PR and self build version) etc.'
@@ -656,6 +658,8 @@ spec:
                     - host
                     type: object
                   type: array
+                upgradePolicy:
+                  type: string
                 version:
                   description: 'TODO: add a deploy version spec: clusterName, base
                     version, component versions(for PR and self build version) etc.'
