@@ -118,11 +118,16 @@ func (r *TestClusterTopology) validateTiDBUpdate(tct *TestClusterTopology) error
 		return fmt.Errorf("update unsupport components")
 	}
 
-	updatedModules := countUpdatedModules(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster)
-	if updatedModules > 1 {
+	if !checkOnlyOneUpdation(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster){
 		return fmt.Errorf("only one of [upgrade, modify serverConfigs, scale-in/out] can be executed at a time")
 	}
+	if !checkUpgradePolicy(r.Spec.TiDBCluster){
+		return fmt.Errorf("upgradePolicy must be `force` or empty")
+	}
 
+	if checkVersionDownloadURL(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+		return fmt.Errorf("don't support update downLoadURL")
+	}
 	if checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
 		return fmt.Errorf("cluster can't scale-in/out at the same time")
 	}
@@ -309,7 +314,11 @@ func checkUpgrade(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return pre.Version.Version != cur.Version.Version
 }
 
-func countUpdatedModules(pre *TiDBCluster, cur *TiDBCluster) int {
+func checkVersionDownloadURL(pre *TiDBCluster, cur *TiDBCluster) bool{
+	return pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL
+}
+
+func checkOnlyOneUpdation(pre *TiDBCluster, cur *TiDBCluster) bool {
 	updatedModules := 0
 	if checkScale(pre, cur) {
 		updatedModules++
@@ -320,5 +329,9 @@ func countUpdatedModules(pre *TiDBCluster, cur *TiDBCluster) int {
 	if checkUpgrade(pre, cur) {
 		updatedModules++
 	}
-	return updatedModules
+	return updatedModules==1
+}
+
+func checkUpgradePolicy(cur *TiDBCluster) bool{
+	return cur.UpgradePolicy=="force"||cur.UpgradePolicy==""
 }
