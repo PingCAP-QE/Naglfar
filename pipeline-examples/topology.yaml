@@ -21,6 +21,7 @@ spec:
         schedule.leader-schedule-limit: 4
         schedule.region-schedule-limit: 2048
         schedule.replica-schedule-limit: 64
+    upgradePolicy: force
     version:
       version: nightly
     control: n1

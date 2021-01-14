@@ -118,10 +118,16 @@ func (r *TestClusterTopology) validateTiDBUpdate(tct *TestClusterTopology) error
 		return fmt.Errorf("update unsupport components")
 	}
 
-	if checkScale(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) && checkServerConfigModified(&tct.Status.PreTiDBCluster.ServerConfigs, &r.Spec.TiDBCluster.ServerConfigs) {
-		return fmt.Errorf("cluster can't update and scale-in/out at the same time")
+	if !checkOnlyOneUpdation(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+		return fmt.Errorf("only one of [upgrade, modify serverConfigs, scale-in/out] can be executed at a time")
+	}
+	if !checkUpgradePolicy(r.Spec.TiDBCluster) {
+		return fmt.Errorf("upgradePolicy must be `force` or empty")
 	}
 
+	if checkVersionDownloadURL(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+		return fmt.Errorf("don't support update downLoadURL")
+	}
 	if checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
 		return fmt.Errorf("cluster can't scale-in/out at the same time")
 	}
@@ -259,7 +265,7 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 
 // checkUnsupportedComponentsChanged return if unsupported components' fields are changed
 func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	unsupportedComponents := []string{GlobalField, DrainerField, PumpField, VersionField, MonitorField, ControlField, GrafanaField}
+	unsupportedComponents := []string{GlobalField, DrainerField, PumpField, MonitorField, ControlField, GrafanaField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
 	for i := 0; i < len(unsupportedComponents); i++ {
@@ -302,4 +308,30 @@ func countClusterNum(tct *TestClusterTopology) int {
 		clusterNum++
 	}
 	return clusterNum
+}
+
+func checkUpgrade(pre *TiDBCluster, cur *TiDBCluster) bool {
+	return pre.Version.Version != cur.Version.Version
+}
+
+func checkVersionDownloadURL(pre *TiDBCluster, cur *TiDBCluster) bool {
+	return pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL
+}
+
+func checkOnlyOneUpdation(pre *TiDBCluster, cur *TiDBCluster) bool {
+	updatedModules := 0
+	if checkScale(pre, cur) {
+		updatedModules++
+	}
+	if checkServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) {
+		updatedModules++
+	}
+	if checkUpgrade(pre, cur) {
+		updatedModules++
+	}
+	return updatedModules == 1
+}
+
+func checkUpgradePolicy(cur *TiDBCluster) bool {
+	return cur.UpgradePolicy == "force" || cur.UpgradePolicy == ""
 }
