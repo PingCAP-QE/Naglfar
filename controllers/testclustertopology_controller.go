@@ -262,6 +262,28 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version)
 }
 
+func (r *TestClusterTopologyReconciler) upgradeTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
+	log := r.Log.WithValues("upgradeTiDBCluster", types.NamespacedName{
+		Namespace: ct.Namespace,
+		Name:      ct.Name,
+	})
+
+	var resourceList naglfarv1.TestResourceList
+	var resources []*naglfarv1.TestResource
+	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
+		log.Error(err, "unable to list child resources")
+		return false, err
+	}
+	resources = filterClusterResources(ct, resourceList)
+
+	tiupCtl, err := cluster.MakeClusterManager(log, ct.Spec.DeepCopy(), resources)
+
+	if err != nil {
+		return false, err
+	}
+	return false, tiupCtl.UpgradeCluster(log, ct.Name, ct, hostname2ClusterIP(resourceList))
+}
+
 func (r *TestClusterTopologyReconciler) updateServerConfigs(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
 	log := r.Log.WithValues("updateServerConfigs", types.NamespacedName{
 		Namespace: ct.Namespace,
@@ -569,6 +591,16 @@ func (r *TestClusterTopologyReconciler) pruneTiDBCluster(ctx context.Context, ct
 
 func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (isOk bool, result ctrl.Result, err error) {
 
+	if cluster.IsUpgraded(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+		requeue, err := r.upgradeTiDBCluster(ctx, ct, rr)
+		if err != nil {
+			r.Recorder.Event(ct, "Warning", "Upgrade", err.Error())
+			return false, ctrl.Result{}, err
+		}
+		if requeue {
+			return false, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
 	if cluster.IsServerConfigModified(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs) {
 		// update serverConfig
 		requeue, err := r.updateServerConfigs(ctx, ct, rr)

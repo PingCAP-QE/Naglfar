@@ -37,7 +37,7 @@ type TiDBClusterVersion struct {
 	// +optional
 	TiKVDownloadURL string `json:"tikvDownloadURL,omitempty"`
 	// +optional
-	PDDownloadUrl string `json:"pdDownloadURL,omitempty"`
+	PDDownloadURL string `json:"pdDownloadURL,omitempty"`
 }
 
 type ServerConfigs struct {
@@ -180,6 +180,9 @@ type CDCSpec struct {
 }
 
 type TiDBCluster struct {
+	// +optional
+	UpgradePolicy string `json:"upgradePolicy,omitempty"`
+
 	Version TiDBClusterVersion `json:"version"`
 
 	// +optional
