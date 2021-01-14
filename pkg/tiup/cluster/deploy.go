@@ -442,8 +442,13 @@ func (c *ClusterManager) UpgradeCluster(log logr.Logger, clusterName string, ct 
 	}
 	defer client.Close()
 
+	var forceFlag string
+	if ct.Spec.TiDBCluster.UpgradePolicy == "force" {
+		forceFlag = "--force"
+	}
+
 	log.Info("cluster is upgrading", "oldVersion", ct.Status.PreTiDBCluster.Version.Version, "newVersion", ct.Spec.TiDBCluster.Version.Version)
-	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster upgrade %s %s %s -y", clusterName, ct.Spec.TiDBCluster.Version.Version, ct.Spec.TiDBCluster.UpgradePolicy)
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster upgrade %s %s %s -y", clusterName, ct.Spec.TiDBCluster.Version.Version, forceFlag)
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
 		log.Error(err, "run command on remote failed",
