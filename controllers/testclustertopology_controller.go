@@ -270,7 +270,7 @@ func (r *TestClusterTopologyReconciler) upgradeTiDBCluster(ctx context.Context, 
 	var resources []*naglfarv1.TestResource
 	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
 		log.Error(err, "unable to list child resources")
-		return true, nil
+		return false, error
 	}
 	resources = filterClusterResources(ct, resourceList)
 
