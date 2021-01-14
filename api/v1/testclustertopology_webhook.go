@@ -329,7 +329,7 @@ func checkOnlyOneUpdation(pre *TiDBCluster, cur *TiDBCluster) bool {
 	if checkUpgrade(pre, cur) {
 		updatedModules++
 	}
-	return updatedModules == 1
+	return updatedModules <= 1
 }
 
 func checkUpgradePolicy(cur *TiDBCluster) bool {

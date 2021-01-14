@@ -31,11 +31,11 @@ const UploadPort = 31234
 func UploadDaemonCfg(upload string) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
 
-	mounts = append(mounts,mount.Mount{
-		Type:   mount.TypeBind,
-		Source: UploadPath,
-		Target: UploadPath,
-	})
+	//mounts = append(mounts,mount.Mount{
+	//	Type:   mount.TypeBind,
+	//	Source: UploadPath,
+	//	Target: UploadPath,
+	//})
 
 	config := &container.Config{
 		Image: UploadDaemonImage,
@@ -49,6 +49,7 @@ func UploadDaemonCfg(upload string) (*container.Config, *container.HostConfig) {
 			HostIP:   "0.0.0.0",
 			HostPort: strconv.Itoa(UploadPort),
 		}}},
+		Binds:  []string{UploadPath+":"+UploadPath},
 		Mounts:          mounts,
 		PublishAllPorts: true,
 		RestartPolicy: container.RestartPolicy{

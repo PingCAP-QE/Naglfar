@@ -30,10 +30,10 @@ spec:
       port: 9999
       version: latest
       config: |-
-        global   # 全局参数的设置
-             user haproxy
-             group haproxy
-             daemon
+        global
+          user haproxy
+          group haproxy
+          daemon
              nbproc 16
              maxconn 4096
 
@@ -45,9 +45,6 @@ spec:
              option abortonclose
              option dontlognull
              option httpclose
-             contimeout 5000
-             clitimeout 3000
-             srvtimeout 3000
     tikv:
       - host: n1
         port: 20160

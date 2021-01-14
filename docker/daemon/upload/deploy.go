@@ -14,6 +14,10 @@ const (
 
 func upload(w http.ResponseWriter, r *http.Request) {
 	fileName := r.Header.Get("fileName")
+	err := os.Remove(BaseDir+fileName)
+	if err != nil {
+		log.Println(err)
+	}
 	f, err := os.OpenFile(BaseDir+fileName, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		log.Println(err)

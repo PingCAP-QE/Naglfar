@@ -1,6 +1,7 @@
 package haproxy
 
 import (
+	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/container"
 	"net/http"
 	"strconv"
@@ -14,12 +15,42 @@ const (
 	FileName = "haproxy.cfg"
 )
 
-func TransferBackend(backend string) string{
+func generateFrontend(port int) string{
+	return "\nfrontend haproxy\n"+
+		"\tbind *:"+strconv.Itoa(port)+"\n"+
+		"\tdefault_backend tidbs\n"
+}
+
+func generateBackend(tidbs []string)string{
+	backend := "\nbackend tidbs\n"
+	for i:=0;i<len(tidbs);i++{
+		backend	+= "\tserver tidb"+strconv.Itoa(i)+" "+tidbs[i]+" maxconn 64"+"\n"
+	}
 	return backend
 }
 
+func GenerateHAProxyConfig(tct *naglfarv1.TiDBCluster,clusterIPMaps map[string]string)(bool,string){
+	config:=tct.HAProxy.Config+"\n"
+	config+=generateFrontend(tct.HAProxy.Port)
+	var tidbs []string
+	for i:=0;i<len(tct.TiDB);i++{
+		var port int
+		if tct.TiDB[i].Port == 0 {
+			port = 4000
+		}else {
+			port = tct.TiDB[i].Port
+		}
+		ip := clusterIPMaps[tct.TiDB[i].Host]
+		if ip ==""{
+			return true,""
+		}
+		tidbs=append(tidbs,ip+":"+strconv.Itoa(port))
+	}
+	config+=generateBackend(tidbs)
+	return false,config
+}
+
 func WriteConfigToMachine(machine string,name string,config string) error{
-	config = "global\n\tdaemon\n\tmaxconn 256\n \ndefaults\n\tmode tcp\n\ttimeout connect 5000ms\n\ttimeout client 6000000ms\n\ttimeout server 6000000ms\n\nfrontend http-in\n\tbind *:9999\n\tdefault_backend tidbs\n\nbackend tidbs\n\tserver server1 172.18.0.3:4000 maxconn 64 \n\tserver server2 172.18.0.4:4000 maxconn 64\n\tserver server3 172.18.0.5:4000 maxconn 64\n"
 	req, err := http.NewRequest("POST", "http://"+machine+":"+strconv.Itoa(container.UploadPort)+"/upload" , strings.NewReader(config))
 	if err!= nil {
 		return err
@@ -32,4 +63,3 @@ func WriteConfigToMachine(machine string,name string,config string) error{
 	defer resp.Body.Close()
 	return nil
 }
-
