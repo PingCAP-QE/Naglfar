@@ -31,20 +31,14 @@ spec:
       version: latest
       config: |-
         global
-          user haproxy
-          group haproxy
           daemon
-             nbproc 16
-             maxconn 4096
+          maxconn 256
 
         defaults
-             mode http
-             retries 3
-             option httplog
-             option redispatch
-             option abortonclose
-             option dontlognull
-             option httpclose
+          mode tcp
+          timeout connect 5000ms
+          timeout client 6000000ms
+          timeout server 6000000ms
     tikv:
       - host: n1
         port: 20160

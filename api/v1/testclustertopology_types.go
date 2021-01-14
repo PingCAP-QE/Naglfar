@@ -230,7 +230,7 @@ type TiDBCluster struct {
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
 	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField, CDCField, TiFlashField}
 	result := map[string]struct{}{
-		c.Control: {},
+		c.Control:      {},
 		c.HAProxy.Host: {},
 	}
 
@@ -378,10 +378,10 @@ func (c *DMCluster) AllHosts() map[string]struct{} {
 }
 
 type HAProxy struct {
-	Host string `json:"host"`
-	Port int `json:"port"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
 	Version string `json:"version"`
-	Config string `json:"config"`
+	Config  string `json:"config"`
 }
 
 func (c *HAProxy) AllHosts() map[string]struct{} {

@@ -17,13 +17,11 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/PingCAP-QE/Naglfar/pkg/haproxy"
-	"github.com/PingCAP-QE/Naglfar/pkg/ref"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -32,6 +30,8 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/flink"
+	"github.com/PingCAP-QE/Naglfar/pkg/haproxy"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	dm "github.com/PingCAP-QE/Naglfar/pkg/tiup/dm"
@@ -252,7 +252,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	}
 
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, ct, resources,hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
 	if requeue {
 		return true, err
 	}
@@ -337,7 +337,7 @@ func (r *TestClusterTopologyReconciler) scaleOutTiDBCluster(ctx context.Context,
 		log.Error(err, "unable to list child resources")
 	}
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, ct, resources,hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
 	if requeue {
 		return true, err
 	}
@@ -658,12 +658,12 @@ func filterClusterResources(ct *naglfarv1.TestClusterTopology, resourceList nagl
 	return result
 }
 
-func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource,clusterIPMaps map[string]string) (bool, error) {
+func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource, clusterIPMaps map[string]string) (bool, error) {
 	var requeue bool
 	var err error
 	switch {
 	case ct.Spec.TiDBCluster != nil:
-		requeue, err = r.initTiDBResources(ctx, ct, resources,clusterIPMaps)
+		requeue, err = r.initTiDBResources(ctx, ct, resources, clusterIPMaps)
 	case ct.Spec.DMCluster != nil:
 		requeue, err = r.initDMResources(ctx, ct, resources)
 	case ct.Spec.FlinkCluster != nil:
@@ -703,20 +703,20 @@ func (r *TestClusterTopologyReconciler) initDMResources(ctx context.Context, ct 
 	return requeue, nil
 }
 
-func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource,clusterIPMaps map[string]string) (bool, error) {
+func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource, clusterIPMaps map[string]string) (bool, error) {
 	var requeue bool
 	var haProxyResources []*naglfarv1.TestResource
 	var tiupResources []*naglfarv1.TestResource
-	if ct.Spec.TiDBCluster.HAProxy != nil{
-		for i:=0;i< len(resources);i++{
+	if ct.Spec.TiDBCluster.HAProxy != nil {
+		for i := 0; i < len(resources); i++ {
 			if resources[i].Name == ct.Spec.TiDBCluster.HAProxy.Host {
-				haProxyResources = append(haProxyResources,resources[i])
-			}else{
-				tiupResources = append(tiupResources,resources[i])
+				haProxyResources = append(haProxyResources, resources[i])
+			} else {
+				tiupResources = append(tiupResources, resources[i])
 			}
 		}
 	}
-	if len(tiupResources)==0{
+	if len(tiupResources) == 0 {
 		tiupResources = resources
 	}
 
@@ -761,13 +761,13 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 			r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
 			return true, nil
 		}
-		requeue, config := haproxy.GenerateHAProxyConfig(ct.Spec.TiDBCluster,clusterIPMaps)
+		requeue, config := haproxy.GenerateHAProxyConfig(ct.Spec.TiDBCluster, clusterIPMaps)
 		if requeue {
-			return true,nil
+			return true, nil
 		}
-		err = haproxy.WriteConfigToMachine(machine.Spec.Host,haproxy.FileName,config)
-		if err != nil{
-			return true,err
+		err = haproxy.WriteConfigToMachine(machine.Spec.Host, haproxy.FileName, config)
+		if err != nil {
+			return true, err
 		}
 		for _, resource := range haProxyResources {
 			if resource.Name != ct.Spec.TiDBCluster.HAProxy.Host {
@@ -777,18 +777,12 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 			case naglfarv1.ResourceUninitialized:
 				requeue = true
 				if resource.Status.Image == "" {
-					resource.Status.Image =  haproxy.BaseImageName+ct.Spec.TiDBCluster.HAProxy.Version
-					resource.Status.ExposedPorts = []string{strconv.Itoa(ct.Spec.TiDBCluster.HAProxy.Port)+"/tcp"}
+					resource.Status.Image = haproxy.BaseImageName + ct.Spec.TiDBCluster.HAProxy.Version
+					resource.Status.ExposedPorts = []string{strconv.Itoa(ct.Spec.TiDBCluster.HAProxy.Port) + "/tcp"}
 					var mounts []naglfarv1.TestResourceMount
-					//mounts = append(mounts,naglfarv1.TestResourceMount{
-					//	Type:     mount.TypeBind,
-					//	Source:   haproxy.SourceMount,
-					//	Target:   haproxy.TargetMount,
-					//	ReadOnly: false,
-					//})
-					resource.Status.Binds = []string{haproxy.SourceMount+":"+haproxy.TargetMount}
+					resource.Status.Binds = []string{haproxy.SourceMount + ":" + haproxy.TargetMount}
 					resource.Status.Mounts = mounts
-					resource.Status.Command = []string{"haproxy","-f","/usr/local/etc/haproxy/haproxy.cfg"}
+					resource.Status.Command = []string{"haproxy", "-f", "/usr/local/etc/haproxy/haproxy.cfg"}
 					err := r.Status().Update(ctx, resource)
 					if err != nil {
 						return false, err
@@ -803,8 +797,6 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 			}
 		}
 	}
-
-
 
 	return requeue, nil
 }
@@ -871,26 +863,7 @@ func (r *TestClusterTopologyReconciler) installFlinkCluster(ctx context.Context,
 	}
 	resources = filterClusterResources(ct, resourceList)
 
-	requeue, err = r.initResource(ctx, ct, resources,hostname2ClusterIP(resourceList))
-	if requeue {
-		return true, err
-	}
-	return false, nil
-}
-
-func (r *TestClusterTopologyReconciler) installHAProxy(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
-	log := r.Log.WithValues("installHAProxy", types.NamespacedName{
-		Namespace: ct.Namespace,
-		Name:      ct.Name,
-	})
-	var resourceList naglfarv1.TestResourceList
-	var resources []*naglfarv1.TestResource
-	if err := r.List(ctx, &resourceList, client.InNamespace(rr.Namespace), client.MatchingFields{resourceOwnerKey: rr.Name}); err != nil {
-		log.Error(err, "unable to list child resources")
-	}
-	resources = filterClusterResources(ct, resourceList)
-
-	requeue, err = r.initResource(ctx, ct, resources,hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
 	if requeue {
 		return true, err
 	}
@@ -909,7 +882,7 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 	}
 
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, ct, resources,hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
 	if requeue {
 		return true, err
 	}
@@ -919,17 +892,3 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 	}
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.DMCluster.Version)
 }
-
-//func (r *TestClusterTopologyReconciler) generate(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) error{
-//	var relation naglfarv1.Relationship
-//	err := r.Get(ctx, relationshipName, &relation)
-//	if apierrors.IsNotFound(err) {
-//		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
-//		err = nil
-//	}
-//	machineRef := relation.Status.ResourceToMachine[ct.Spec.HAProxy.Host]
-//	machineRef.Name
-//
-//
-//
-//}

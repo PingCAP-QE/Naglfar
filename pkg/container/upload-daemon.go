@@ -15,10 +15,11 @@
 package container
 
 import (
+	"strconv"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
-	"strconv"
 )
 
 const UploadDaemon = "upload-daemon"
@@ -26,16 +27,10 @@ const UploadDaemonPort = "6666/tcp"
 const UploadDaemonImage = "docker.io/cadmusjiang/upload-daemon:latest"
 const UploadPath = "/var/naglfar/lib"
 const UploadLabel = "upload"
-const UploadPort = 31234
+const UploadExternalPort = 31234
 
 func UploadDaemonCfg(upload string) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
-
-	//mounts = append(mounts,mount.Mount{
-	//	Type:   mount.TypeBind,
-	//	Source: UploadPath,
-	//	Target: UploadPath,
-	//})
 
 	config := &container.Config{
 		Image: UploadDaemonImage,
@@ -47,16 +42,15 @@ func UploadDaemonCfg(upload string) (*container.Config, *container.HostConfig) {
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{UploadDaemonPort: []nat.PortBinding{nat.PortBinding{
 			HostIP:   "0.0.0.0",
-			HostPort: strconv.Itoa(UploadPort),
+			HostPort: strconv.Itoa(UploadExternalPort),
 		}}},
-		Binds:  []string{UploadPath+":"+UploadPath},
+		Binds:           []string{UploadPath + ":" + UploadPath},
 		Mounts:          mounts,
 		PublishAllPorts: true,
 		RestartPolicy: container.RestartPolicy{
-			Name:              "always",
+			Name: "always",
 		},
 	}
 
 	return config, hostConfig
 }
-

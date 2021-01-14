@@ -130,7 +130,7 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	}
 
 	machine.Status.State = naglfarv1.MachineReady
-	machine.Status.UploadPort = container.UploadPort
+	machine.Status.UploadPort = container.UploadExternalPort
 
 	if err = r.Status().Update(r.Ctx, machine); err != nil {
 		log.Error(err, "unable to update Machine")
@@ -139,21 +139,21 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 }
 
 func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1.Machine) (ctrl.Result, error) {
-	if machine.Status.UploadPort!=0{
+	if machine.Status.UploadPort != 0 {
 		dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
 		if err != nil {
-			return ctrl.Result{},err
+			return ctrl.Result{}, err
 		}
 		defer dockerClient.Close()
-		machine.Status.UploadPort, err = r.createUploadDaemon(machine,dockerClient)
+		machine.Status.UploadPort, err = r.createUploadDaemon(machine, dockerClient)
 		if err != nil {
 			r.Eventer.Event(machine, "Warning", "upload-daemon", err.Error())
-			return ctrl.Result{},err
+			return ctrl.Result{}, err
 		}
 	}
 	relation, err := r.getRelationship()
 	if err != nil {
-		return ctrl.Result{},err
+		return ctrl.Result{}, err
 	}
 
 	machineKey := ref.CreateRef(&machine.ObjectMeta).Key()
@@ -163,7 +163,7 @@ func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1
 		err = r.Status().Update(r.Ctx, relation)
 	}
 
-	return ctrl.Result{},err
+	return ctrl.Result{}, err
 }
 
 func (r *MachineReconciler) reconcileShutdown(log logr.Logger, machine *naglfarv1.Machine) (result ctrl.Result, err error) {
