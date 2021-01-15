@@ -132,10 +132,6 @@ func (r *TestClusterTopology) validateTiDBUpdate(tct *TestClusterTopology) error
 		return fmt.Errorf("cluster can't scale-in/out at the same time")
 	}
 
-	if checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("immutable field is changed")
-	}
-
 	result := getEmptyRequiredFields(r.Spec.TiDBCluster)
 	if len(result) != 0 {
 		return fmt.Errorf("you must fill %v", result)
@@ -196,32 +192,6 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 			if !isExist {
 				return true
 			}
-		}
-
-	}
-	return false
-}
-
-// checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
-func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	checkComponents := []string{TiDBField, PDField, TiKVField}
-	preVal := reflect.ValueOf(*pre)
-	curVal := reflect.ValueOf(*cur)
-	for i := 0; i < len(checkComponents); i++ {
-		preField := preVal.FieldByName(checkComponents[i])
-		curField := curVal.FieldByName(checkComponents[i])
-		if !preField.IsValid() || !curField.IsValid() {
-			continue
-		}
-		for j := 0; j < preField.Len(); j++ {
-			for k := 0; k < curField.Len(); k++ {
-				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
-					if !reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
-						return true
-					}
-				}
-			}
-
 		}
 	}
 	return false
@@ -318,12 +288,35 @@ func checkVersionDownloadURL(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL
 }
 
+func checkComponentsModified(pre *TiDBCluster, cur *TiDBCluster) bool {
+	checkComponents := []string{TiDBField, PDField, TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preField := preVal.FieldByName(checkComponents[i])
+		curField := curVal.FieldByName(checkComponents[i])
+		if !preField.IsValid() || !curField.IsValid() {
+			continue
+		}
+		for j := 0; j < preField.Len(); j++ {
+			for k := 0; k < curField.Len(); k++ {
+				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+					if !reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
+						return false
+					}
+				}
+			}
+		}
+	}
+	return true
+}
+
 func checkAtMostOneKindUpdation(pre *TiDBCluster, cur *TiDBCluster) bool {
 	updatedModules := 0
 	if checkScale(pre, cur) {
 		updatedModules++
 	}
-	if checkServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) {
+	if checkServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) || checkComponentsModified(pre, cur){
 		updatedModules++
 	}
 	if checkUpgrade(pre, cur) {

@@ -22,6 +22,78 @@ import (
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
 
+func setTiKVConfig(spec *tiupSpec.Specification, tikvConfig string, index int) error {
+	unmarshalTiKVConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{})
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		tikvConfig,
+	}} {
+		err := unmarshalTiKVConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.TiKVServers[index].Config = config
+	return nil
+}
+
+func setTiDBConfig(spec *tiupSpec.Specification, tidbConfig string, index int) error {
+	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{})
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		tidbConfig,
+	}} {
+		err := unmarshalPumpConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.TiDBServers[index].Config = config
+	return nil
+}
+
+func setPDConfig(spec *tiupSpec.Specification, pdConfig string, index int) error {
+	unmarshalPDConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
+	var (
+		config = make(map[string]interface{})
+	)
+	for _, item := range []struct {
+		object *map[string]interface{}
+		config string
+	}{{
+		&config,
+		pdConfig,
+	}} {
+		err := unmarshalPDConfigToMap([]byte(item.config), item.object)
+		if err != nil {
+			return err
+		}
+	}
+	spec.PDServers[index].Config = config
+	return nil
+}
+
 func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) error {
 	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
 		err := yaml.Unmarshal(data, object)
@@ -165,6 +237,18 @@ func IsUpgraded(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) bool {
 	return !reflect.DeepEqual(pre, cur)
 }
+func IsComponentsConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
+	if !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
+		return true
+	}
+	if !reflect.DeepEqual(pre.PD, cur.PD) {
+		return true
+	}
+	if !reflect.DeepEqual(pre.TiKV, cur.TiKV) {
+		return true
+	}
+	return false
+}
 
 func IsClusterConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 	return !reflect.DeepEqual(pre, cur)
@@ -207,7 +291,7 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 	if !exist {
 		return spec, nil, fmt.Errorf("control node not found: `%s`", ctf.TiDBCluster.Control)
 	}
-	for _, item := range ctf.TiDBCluster.TiDB {
+	for index, item := range ctf.TiDBCluster.TiDB {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("tidb node not found: `%s`", item.Host)
@@ -221,8 +305,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
+		if err := setTiDBConfig(&spec, ctf.TiDBCluster.TiDB[index].Config, index); err != nil {
+			err = fmt.Errorf("set TiDbConfigs failed: %v", err)
+			return spec, nil, err
+		}
 	}
-	for _, item := range ctf.TiDBCluster.TiKV {
+	for index, item := range ctf.TiDBCluster.TiKV {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("tikv node not found: `%s`", item.Host)
@@ -237,8 +325,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
+		if err := setTiKVConfig(&spec, ctf.TiDBCluster.TiKV[index].Config, index); err != nil {
+			err = fmt.Errorf("set TiKVConfigs failed: %v", err)
+			return spec, nil, err
+		}
 	}
-	for _, item := range ctf.TiDBCluster.PD {
+	for index, item := range ctf.TiDBCluster.PD {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("pd node not found: `%s`", item.Host)
@@ -253,6 +345,10 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
+		if err := setPDConfig(&spec, ctf.TiDBCluster.PD[index].Config, index); err != nil {
+			err = fmt.Errorf("set PDConfigs failed: %v", err)
+			return spec, nil, err
+		}
 	}
 	for index, item := range ctf.TiDBCluster.Pump {
 		node, exist := resourceMaps[item.Host]
@@ -425,7 +521,7 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 		return err
 	}
 
-	roles := c.diffServerConfigs(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs)
+	roles := c.diffTiDBCluster(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
 
 	log.Info("RequestTopology is modified.", "changed roles", roles)
 
@@ -613,15 +709,15 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 	return nil
 }
 
-func (c *ClusterManager) diffServerConfigs(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) []string {
+func (c *ClusterManager) diffTiDBCluster(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) []string {
 	var roles []string
-	if !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
+	if !reflect.DeepEqual(pre.ServerConfigs.TiDB, cur.ServerConfigs.TiDB) || !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
 		roles = append(roles, "tidb")
 	}
-	if !reflect.DeepEqual(pre.PD, cur.PD) {
+	if !reflect.DeepEqual(pre.ServerConfigs.PD, cur.ServerConfigs.PD) || !reflect.DeepEqual(pre.PD, cur.PD) {
 		roles = append(roles, "pd")
 	}
-	if !reflect.DeepEqual(pre.TiKV, cur.TiKV) {
+	if !reflect.DeepEqual(pre.ServerConfigs.TiKV, cur.ServerConfigs.TiKV) || !reflect.DeepEqual(pre.TiKV, cur.TiKV) {
 		roles = append(roles, "tikv")
 	}
 	return roles
