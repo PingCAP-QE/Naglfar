@@ -22,11 +22,12 @@ import (
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
 
+func unmarshalConfigToMap (data []byte, object *map[string]interface{}) error {
+	err := yaml.Unmarshal(data, object)
+	return err
+}
+
 func setTiKVConfig(spec *tiupSpec.Specification, tikvConfig string, index int) error {
-	unmarshalTiKVConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -37,7 +38,7 @@ func setTiKVConfig(spec *tiupSpec.Specification, tikvConfig string, index int) e
 		&config,
 		tikvConfig,
 	}} {
-		err := unmarshalTiKVConfigToMap([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -47,10 +48,6 @@ func setTiKVConfig(spec *tiupSpec.Specification, tikvConfig string, index int) e
 }
 
 func setTiDBConfig(spec *tiupSpec.Specification, tidbConfig string, index int) error {
-	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -61,7 +58,7 @@ func setTiDBConfig(spec *tiupSpec.Specification, tidbConfig string, index int) e
 		&config,
 		tidbConfig,
 	}} {
-		err := unmarshalPumpConfigToMap([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -71,10 +68,6 @@ func setTiDBConfig(spec *tiupSpec.Specification, tidbConfig string, index int) e
 }
 
 func setPDConfig(spec *tiupSpec.Specification, pdConfig string, index int) error {
-	unmarshalPDConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -85,7 +78,7 @@ func setPDConfig(spec *tiupSpec.Specification, pdConfig string, index int) error
 		&config,
 		pdConfig,
 	}} {
-		err := unmarshalPDConfigToMap([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -95,10 +88,6 @@ func setPDConfig(spec *tiupSpec.Specification, pdConfig string, index int) error
 }
 
 func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) error {
-	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -109,7 +98,7 @@ func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) e
 		&config,
 		pumpConfig,
 	}} {
-		err := unmarshalPumpConfigToMap([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -119,10 +108,6 @@ func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) e
 }
 
 func setTiFlashConfig(spec *tiupSpec.Specification, tiflashConfig string, index int) error {
-	unmarshalTiFlashConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -133,7 +118,7 @@ func setTiFlashConfig(spec *tiupSpec.Specification, tiflashConfig string, index 
 		&config,
 		tiflashConfig,
 	}} {
-		err := unmarshalTiFlashConfigToMap([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -143,10 +128,6 @@ func setTiFlashConfig(spec *tiupSpec.Specification, tiflashConfig string, index 
 }
 
 func setTiFlashLearnerConfig(spec *tiupSpec.Specification, tiflashLearnerConfig string, index int) error {
-	unmarshalTiFlashLearnerConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -157,7 +138,7 @@ func setTiFlashLearnerConfig(spec *tiupSpec.Specification, tiflashLearnerConfig 
 		&config,
 		tiflashLearnerConfig,
 	}} {
-		err := unmarshalTiFlashLearnerConfigToMap([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -167,10 +148,6 @@ func setTiFlashLearnerConfig(spec *tiupSpec.Specification, tiflashLearnerConfig 
 }
 
 func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index int, clusterIPMaps ...map[string]string) error {
-	unmarshalDrainerConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -181,7 +158,7 @@ func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index 
 		&config,
 		drainerConfig,
 	}} {
-		err := unmarshalDrainerConfigToMap([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -200,10 +177,6 @@ func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index 
 }
 
 func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.ServerConfigs) error {
-	unmarshalServerConfigToMaps := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
 	var (
 		tidbConfigs = make(map[string]interface{})
 		tikvConfigs = make(map[string]interface{})
@@ -222,7 +195,7 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 		&pdConfigs,
 		serverConfigs.PD,
 	}} {
-		err := unmarshalServerConfigToMaps([]byte(item.config), item.object)
+		err := unmarshalConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
