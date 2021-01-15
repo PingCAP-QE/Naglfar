@@ -168,6 +168,14 @@ func (r *TestWorkloadReconciler) reconcilePending(ctx context.Context, workload 
 				return ctrl.Result{}, err
 			}
 		case naglfarv1.ResourceReady, naglfarv1.ResourceFinish:
+			self := ref.CreateRef(&workload.ObjectMeta)
+			// check if the workload node resource is used by a tct(ClaimRef == nil)
+			// or has occupied by another workload (Claim != self)
+			if workloadNode.Status.ClaimRef == nil || *workloadNode.Status.ClaimRef != self {
+				err := fmt.Errorf("resource %s is used by others now, wait", workloadNode.Name)
+				r.Recorder.Eventf(workload, "Warning", "Precondition", err.Error())
+				return ctrl.Result{}, err
+			}
 			installedCount += 1
 		default:
 			panic(fmt.Sprintf("there's a bug, forget to process the `%s` state", workloadNode.Status.State))

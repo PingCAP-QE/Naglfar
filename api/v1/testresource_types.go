@@ -172,7 +172,8 @@ type TestResourceStatus struct {
 	Phase ResourcePhase `json:"phase,omitempty"`
 
 	// means the container's exit code
-	ExitCode int `json:"exitCode"`
+	// +optional
+	ExitCode int `json:"exitCode,omitempty"`
 
 	ResourceContainerSpec `json:",inline"`
 
