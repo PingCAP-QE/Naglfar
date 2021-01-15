@@ -51,7 +51,7 @@ func GenerateHAProxyConfig(tct *naglfarv1.TiDBCluster, clusterIPMaps map[string]
 }
 
 func WriteConfigToMachine(machine string, name string, config string) error {
-	req, err := http.NewRequest("POST", "http://"+machine+":"+strconv.Itoa(container.UploadExternalPort)+"/upload", strings.NewReader(config))
+	req, err := http.NewRequest("POST", "http://"+machine+":"+strconv.Itoa(container.UploadDaemonExternalPort)+"/upload", strings.NewReader(config))
 	if err != nil {
 		return err
 	}

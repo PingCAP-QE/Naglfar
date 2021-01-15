@@ -23,11 +23,11 @@ import (
 )
 
 const UploadDaemon = "upload-daemon"
-const UploadDaemonPort = "6666/tcp"
 const UploadDaemonImage = "docker.io/cadmusjiang/upload-daemon:latest"
 const UploadPath = "/var/naglfar/lib"
 const UploadLabel = "upload"
-const UploadExternalPort = 31234
+const UploadDaemonInternalPort = 6666
+const UploadDaemonExternalPort = 31234
 
 func UploadDaemonCfg(upload string) (*container.Config, *container.HostConfig) {
 	mounts := make([]mount.Mount, 0)
@@ -40,9 +40,9 @@ func UploadDaemonCfg(upload string) (*container.Config, *container.HostConfig) {
 	}
 
 	hostConfig := &container.HostConfig{
-		PortBindings: nat.PortMap{UploadDaemonPort: []nat.PortBinding{nat.PortBinding{
+		PortBindings: nat.PortMap{(nat.Port)(strconv.Itoa(UploadDaemonInternalPort)+"/tcp"): []nat.PortBinding{nat.PortBinding{
 			HostIP:   "0.0.0.0",
-			HostPort: strconv.Itoa(UploadExternalPort),
+			HostPort: strconv.Itoa(UploadDaemonExternalPort),
 		}}},
 		Binds:           []string{UploadPath + ":" + UploadPath},
 		Mounts:          mounts,

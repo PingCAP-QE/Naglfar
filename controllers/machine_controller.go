@@ -23,6 +23,7 @@ import (
 
 	dockerTypes "github.com/docker/docker/api/types"
 	docker "github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -130,7 +131,7 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	}
 
 	machine.Status.State = naglfarv1.MachineReady
-	machine.Status.UploadPort = container.UploadExternalPort
+	machine.Status.UploadPort = container.UploadDaemonExternalPort
 
 	if err = r.Status().Update(r.Ctx, machine); err != nil {
 		log.Error(err, "unable to update Machine")
@@ -319,7 +320,7 @@ func (r *MachineReconciler) createUploadDaemon(machine *naglfarv1.Machine, docke
 	}
 
 	if stat.Config == nil || stat.Config.Labels == nil {
-		err = fmt.Errorf("invalid lock container: %s", stat.Name)
+		err = fmt.Errorf("invalid occupy container: %s", stat.Name)
 	}
 
 	uid, ok := stat.Config.Labels[container.UploadLabel]
@@ -333,7 +334,7 @@ func (r *MachineReconciler) createUploadDaemon(machine *naglfarv1.Machine, docke
 		return
 	}
 
-	if ports, ok := stat.NetworkSettings.Ports[container.UploadDaemonPort]; ok && len(ports) > 0 {
+	if ports, ok := stat.NetworkSettings.Ports[(nat.Port)(strconv.Itoa(container.UploadDaemonInternalPort)+"/tcp")]; ok && len(ports) > 0 {
 		uploadPort, _ = strconv.Atoi(ports[0].HostPort)
 	}
 
