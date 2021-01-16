@@ -37,6 +37,7 @@ func (r *TestClusterTopology) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 const (
 	ControlField      = "Control"
+	ConfigField       = "Config"
 	VersionField      = "Version"
 	GlobalField       = "Global"
 	TiDBField         = "TiDB"
@@ -123,6 +124,10 @@ func (r *TestClusterTopology) validateTiDBUpdate(tct *TestClusterTopology) error
 	}
 	if !checkUpgradePolicy(r.Spec.TiDBCluster) {
 		return fmt.Errorf("upgradePolicy must be `force` or empty")
+	}
+
+	if checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+		return fmt.Errorf("immutable field is changed")
 	}
 
 	if checkVersionDownloadURL(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
@@ -288,7 +293,8 @@ func checkVersionDownloadURL(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL
 }
 
-func checkComponentsModified(pre *TiDBCluster, cur *TiDBCluster) bool {
+// checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
+func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
 	checkComponents := []string{TiDBField, PDField, TiKVField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
@@ -301,27 +307,81 @@ func checkComponentsModified(pre *TiDBCluster, cur *TiDBCluster) bool {
 		for j := 0; j < preField.Len(); j++ {
 			for k := 0; k < curField.Len(); k++ {
 				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
-					if !reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
-						return false
+					preComponent := preField.Index(j).Interface()
+					curComponent := curField.Index(k).Interface()
+					switch {
+					case i == 0:
+						preTiDB := preComponent.(TiDBSpec)
+						curTiDB := curComponent.(TiDBSpec)
+						preTiDB.Config = ""
+						curTiDB.Config = ""
+						if !reflect.DeepEqual(preTiDB, curTiDB) {
+							return true
+						}
+					case i == 1:
+						prePD := preComponent.(PDSpec)
+						curPD := curComponent.(PDSpec)
+						prePD.Config = ""
+						curPD.Config = ""
+						if !reflect.DeepEqual(prePD, curPD) {
+							return true
+						}
+					case i == 2:
+						preTiKV := preComponent.(TiKVSpec)
+						curTiKV := curComponent.(TiKVSpec)
+						preTiKV.Config = ""
+						curTiKV.Config = ""
+						if !reflect.DeepEqual(preTiKV, curTiKV) {
+							return true
+						}
+					}
+				}
+			}
+
+		}
+	}
+	return false
+}
+
+func checkComponentsConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {
+	checkComponents := []string{TiDBField, PDField, TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preField := preVal.FieldByName(checkComponents[i])
+		curField := curVal.FieldByName(checkComponents[i])
+		if !preField.IsValid() || !curField.IsValid() {
+			continue
+		}
+		for j := 0; j < preField.Len(); j++ {
+			for k := 0; k < curField.Len(); k++ {
+				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+					if !reflect.DeepEqual(preField.Index(j).FieldByName(ConfigField).Interface(), curField.Index(k).FieldByName(ConfigField).Interface()) {
+						return true
 					}
 				}
 			}
 		}
 	}
-	return true
+	return false
 }
 
 func checkAtMostOneKindUpdation(pre *TiDBCluster, cur *TiDBCluster) bool {
 	updatedModules := 0
+	var modules []string
 	if checkScale(pre, cur) {
 		updatedModules++
+		modules = append(modules, "scale-in/out")
 	}
-	if checkServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) || checkComponentsModified(pre, cur){
+	if checkServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) || checkComponentsConfigModified(pre, cur) {
 		updatedModules++
+		modules = append(modules, "update")
 	}
 	if checkUpgrade(pre, cur) {
 		updatedModules++
+		modules = append(modules, "upgrade")
 	}
+	testclustertopologylog.Info("update modules", "modules", modules)
 	return updatedModules <= 1
 }
 

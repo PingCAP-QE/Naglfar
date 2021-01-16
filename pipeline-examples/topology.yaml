@@ -21,6 +21,7 @@ spec:
         schedule.leader-schedule-limit: 4
         schedule.region-schedule-limit: 2048
         schedule.replica-schedule-limit: 64
+        replication.location-labels: ["zone","dc","rack","host"]
     upgradePolicy: force
     version:
       version: nightly
@@ -32,6 +33,12 @@ spec:
         deployDir: /disk1/deploy/tikv-20160
         dataDir: /disk1/data/tikv-20160
         logDir: /disk1/deploy/tikv-20160/log
+        config: |-
+          server.labels:
+            zone: bj
+            dc: bja
+            rack: rack1
+            host: host2
     tidb:
       - host: n1
         deployDir: /disk1/deploy/tidb-4000

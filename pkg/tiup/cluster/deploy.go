@@ -22,132 +22,20 @@ import (
 	tiupSpec "github.com/pingcap/tiup/pkg/cluster/spec"
 )
 
-func unmarshalConfigToMap (data []byte, object *map[string]interface{}) error {
-	err := yaml.Unmarshal(data, object)
-	return err
-}
-
-func setTiKVConfig(spec *tiupSpec.Specification, tikvConfig string, index int) error {
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		tikvConfig,
-	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
+func generateConfig(configStr string) (map[string]interface{}, error) {
+	config := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(configStr), &config)
+	if err != nil {
+		return nil, err
 	}
-	spec.TiKVServers[index].Config = config
-	return nil
-}
-
-func setTiDBConfig(spec *tiupSpec.Specification, tidbConfig string, index int) error {
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		tidbConfig,
-	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.TiDBServers[index].Config = config
-	return nil
-}
-
-func setPDConfig(spec *tiupSpec.Specification, pdConfig string, index int) error {
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		pdConfig,
-	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.PDServers[index].Config = config
-	return nil
-}
-
-func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) error {
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		pumpConfig,
-	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.PumpServers[index].Config = config
-	return nil
-}
-
-func setTiFlashConfig(spec *tiupSpec.Specification, tiflashConfig string, index int) error {
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		tiflashConfig,
-	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.TiFlashServers[index].Config = config
-	return nil
-}
-
-func setTiFlashLearnerConfig(spec *tiupSpec.Specification, tiflashLearnerConfig string, index int) error {
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		tiflashLearnerConfig,
-	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.TiFlashServers[index].LearnerConfig = config
-	return nil
+	return config, nil
 }
 
 func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index int, clusterIPMaps ...map[string]string) error {
+	unmarshalDrainerConfigToMap := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
 	var (
 		config = make(map[string]interface{})
 	)
@@ -158,7 +46,7 @@ func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index 
 		&config,
 		drainerConfig,
 	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
+		err := unmarshalDrainerConfigToMap([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -177,6 +65,10 @@ func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index 
 }
 
 func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.ServerConfigs) error {
+	unmarshalServerConfigToMaps := func(data []byte, object *map[string]interface{}) error {
+		err := yaml.Unmarshal(data, object)
+		return err
+	}
 	var (
 		tidbConfigs = make(map[string]interface{})
 		tikvConfigs = make(map[string]interface{})
@@ -195,7 +87,7 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 		&pdConfigs,
 		serverConfigs.PD,
 	}} {
-		err := unmarshalConfigToMap([]byte(item.config), item.object)
+		err := unmarshalServerConfigToMaps([]byte(item.config), item.object)
 		if err != nil {
 			return err
 		}
@@ -211,14 +103,24 @@ func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerCon
 	return !reflect.DeepEqual(pre, cur)
 }
 func IsComponentsConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
-	if !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.PD, cur.PD) {
-		return true
-	}
-	if !reflect.DeepEqual(pre.TiKV, cur.TiKV) {
-		return true
+	checkComponents := []string{naglfarv1.TiDBField, naglfarv1.PDField, naglfarv1.TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preField := preVal.FieldByName(checkComponents[i])
+		curField := curVal.FieldByName(checkComponents[i])
+		if !preField.IsValid() || !curField.IsValid() {
+			continue
+		}
+		for j := 0; j < preField.Len(); j++ {
+			for k := 0; k < curField.Len(); k++ {
+				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+					if !reflect.DeepEqual(preField.Index(j).FieldByName(naglfarv1.ConfigField).Interface(), curField.Index(k).FieldByName(naglfarv1.ConfigField).Interface()) {
+						return true
+					}
+				}
+			}
+		}
 	}
 	return false
 }
@@ -278,10 +180,13 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
-		if err := setTiDBConfig(&spec, ctf.TiDBCluster.TiDB[index].Config, index); err != nil {
+		config, err := generateConfig(item.Config)
+		if err != nil {
 			err = fmt.Errorf("set TiDbConfigs failed: %v", err)
 			return spec, nil, err
 		}
+		spec.TiDBServers[index].Config = config
+
 	}
 	for index, item := range ctf.TiDBCluster.TiKV {
 		node, exist := resourceMaps[item.Host]
@@ -298,10 +203,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
-		if err := setTiKVConfig(&spec, ctf.TiDBCluster.TiKV[index].Config, index); err != nil {
+		config, err := generateConfig(item.Config)
+		if err != nil {
 			err = fmt.Errorf("set TiKVConfigs failed: %v", err)
 			return spec, nil, err
 		}
+		spec.TiKVServers[index].Config = config
 	}
 	for index, item := range ctf.TiDBCluster.PD {
 		node, exist := resourceMaps[item.Host]
@@ -318,10 +225,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
-		if err := setPDConfig(&spec, ctf.TiDBCluster.PD[index].Config, index); err != nil {
+		config, err := generateConfig(item.Config)
+		if err != nil {
 			err = fmt.Errorf("set PDConfigs failed: %v", err)
 			return spec, nil, err
 		}
+		spec.PDServers[index].Config = config
 	}
 	for index, item := range ctf.TiDBCluster.Pump {
 		node, exist := resourceMaps[item.Host]
@@ -335,10 +244,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			DeployDir: item.DeployDir,
 			DataDir:   item.DataDir,
 		})
-		if err := setPumpConfig(&spec, ctf.TiDBCluster.Pump[index].Config, index); err != nil {
+		config, err := generateConfig(item.Config)
+		if err != nil {
 			err = fmt.Errorf("set PumpConfigs failed: %v", err)
 			return spec, nil, err
 		}
+		spec.PumpServers[index].Config = config
 	}
 	for index, item := range ctf.TiDBCluster.Drainer {
 		node, exist := resourceMaps[item.Host]
@@ -420,14 +331,18 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:               item.LogDir,
 			ResourceControl:      meta.ResourceControl{},
 		})
-		if err := setTiFlashConfig(&spec, ctf.TiDBCluster.TiFlash[index].Config, index); err != nil {
+		config, err := generateConfig(item.Config)
+		if err != nil {
 			err = fmt.Errorf("set TiFlashConfigs failed: %v", err)
 			return spec, nil, err
 		}
-		if err := setTiFlashLearnerConfig(&spec, ctf.TiDBCluster.TiFlash[index].LearnerConfig, index); err != nil {
+		spec.TiFlashServers[index].Config = config
+		learnerConfig, err := generateConfig(item.LearnerConfig)
+		if err != nil {
 			err = fmt.Errorf("set TiFlashLearnerConfigs failed: %v", err)
 			return spec, nil, err
 		}
+		spec.TiFlashServers[index].LearnerConfig = learnerConfig
 	}
 
 	// set default values from tag
@@ -494,7 +409,7 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 		return err
 	}
 
-	roles := c.diffTiDBCluster(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
+	roles := c.diffTiDBClusterConfig(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
 
 	log.Info("RequestTopology is modified.", "changed roles", roles)
 
@@ -682,7 +597,7 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 	return nil
 }
 
-func (c *ClusterManager) diffTiDBCluster(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) []string {
+func (c *ClusterManager) diffTiDBClusterConfig(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) []string {
 	var roles []string
 	if !reflect.DeepEqual(pre.ServerConfigs.TiDB, cur.ServerConfigs.TiDB) || !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
 		roles = append(roles, "tidb")

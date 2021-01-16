@@ -55,7 +55,7 @@ type TiDBSpec struct {
 	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
-	Config string `json:"config,omitempty"`
+	Config string `json:"config,omitempty" yaml:"config,omitempty"`
 
 	// +optional
 	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
@@ -74,7 +74,7 @@ type PDSpec struct {
 	// +optional
 	PeerPort int `json:"peerPort,omitempty" yaml:"peer_port,omitempty"`
 	// +optional
-	Config string `json:"config,omitempty"`
+	Config string `json:"config,omitempty"  yaml:"config,omitempty"`
 
 	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
 	DataDir   string `json:"dataDir,omitempty" yaml:"data_dir,omitempty"`
@@ -91,7 +91,7 @@ type TiKVSpec struct {
 	// +optional
 	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
 	// +optional
-	Config string `json:"config,omitempty"`
+	Config string `json:"config,omitempty"  yaml:"config,omitempty"`
 
 	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
 	DataDir   string `json:"dataDir" yaml:"data_dir"`
