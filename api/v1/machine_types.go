@@ -31,13 +31,13 @@ import (
 
 const (
 	NVMEKind  DiskKind = "nvme"
-	OtherKind          = "other"
+	OtherKind DiskKind = "other"
 )
 
 const (
 	MachineShutdown MachineState = "shutdown"
-	MachineStarting              = "starting"
-	MachineReady                 = "ready"
+	MachineStarting MachineState = "starting"
+	MachineReady    MachineState = "ready"
 )
 
 // +kubebuilder:validation:Enum=nvme;other

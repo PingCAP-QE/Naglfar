@@ -91,7 +91,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	case naglfarv1.ClusterTopologyStatePending:
 		var rr naglfarv1.TestResourceRequest
 		// we should install a SUT on the resources what we have requested
-		if len(ct.Spec.ResourceRequest) != 0 {
+		if ct.Spec.ResourceRequest != "" {
 			if err := r.Get(ctx, types.NamespacedName{
 				Namespace: req.Namespace,
 				Name:      ct.Spec.ResourceRequest,
@@ -139,10 +139,11 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 				log.Error(err, "unable to update TestClusterTopology")
 				return ctrl.Result{}, err
 			}
-		} else {
-			// use the cluster created by tidb-operator
-			// TODO: wait for the cluster be ready
 		}
+		//else {
+		// use the cluster created by tidb-operator
+		// TODO: wait for the cluster be ready
+		//}
 	case naglfarv1.ClusterTopologyStateReady:
 		// first create
 		switch {
@@ -357,7 +358,7 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 	})
 
 	// if we cluster is installed on resource nodes
-	if len(ct.Spec.ResourceRequest) != 0 {
+	if ct.Spec.ResourceRequest != "" {
 		var rr naglfarv1.TestResourceRequest
 		if err := r.Get(ctx, types.NamespacedName{
 			Namespace: ct.Namespace,
@@ -379,9 +380,9 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 		switch {
 		case ct.Spec.TiDBCluster != nil:
 			if ct.Spec.TiDBCluster.HAProxy != nil {
-				for i:=0;i<len(resources);i++{
-					if strings.HasPrefix(resources[i].Status.Image,haproxy.BaseImageName){
-						machine,err := r.getHAProxyMachine(ctx,&resources[i].ObjectMeta)
+				for i := 0; i < len(resources); i++ {
+					if strings.HasPrefix(resources[i].Status.Image, haproxy.BaseImageName) {
+						machine, err := r.getHAProxyMachine(ctx, &resources[i].ObjectMeta)
 						if err != nil {
 							return err
 						}
@@ -765,15 +766,15 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 
 	if ct.Spec.TiDBCluster.HAProxy != nil {
 		var machine *naglfarv1.Machine
-		machine,err:=r.getHAProxyMachine(ctx,&haProxyResources[0].ObjectMeta)
-		if err!=nil {
-			return true,nil
+		machine, err := r.getHAProxyMachine(ctx, &haProxyResources[0].ObjectMeta)
+		if err != nil {
+			return true, nil
 		}
-		clusterIPMaps:=make(map[string]string)
+		clusterIPMaps := make(map[string]string)
 		for i := 0; i < len(tiupResources); i++ {
 			if tiupResources[i].Status.State != naglfarv1.ResourceReady {
-				return true,nil
-			}else{
+				return true, nil
+			} else {
 				clusterIPMaps[tiupResources[i].Name] = tiupResources[i].Status.ClusterIP
 			}
 		}
@@ -909,7 +910,7 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.DMCluster.Version)
 }
 
-func (r *TestClusterTopologyReconciler) getHAProxyMachine(ctx context.Context,key *v1.ObjectMeta) (*naglfarv1.Machine,error){
+func (r *TestClusterTopologyReconciler) getHAProxyMachine(ctx context.Context, key *v1.ObjectMeta) (*naglfarv1.Machine, error) {
 	var relation naglfarv1.Relationship
 	err := r.Get(ctx, relationshipName, &relation)
 	if apierrors.IsNotFound(err) {
@@ -921,7 +922,7 @@ func (r *TestClusterTopologyReconciler) getHAProxyMachine(ctx context.Context,ke
 	err = r.Get(ctx, machineRef.Namespaced(), &machine)
 	if apierrors.IsNotFound(err) {
 		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
-		return nil,err
+		return nil, err
 	}
-	return &machine,nil
+	return &machine, nil
 }
