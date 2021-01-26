@@ -11,8 +11,8 @@ import (
 
 const (
 	BaseImageName = "docker.io/library/haproxy:"
-	SourceMount   = "/var/naglfar/lib/haproxy.cfg"
-	TargetMount   = "/usr/local/etc/haproxy/haproxy.cfg"
+	SourceDir     = "/var/naglfar/lib/"
+	TargetDir     = "/usr/local/etc/haproxy/"
 	FileName      = "haproxy.cfg"
 )
 
@@ -77,4 +77,8 @@ func DeleteConfigFromMachine(machine string, name string) error {
 	}
 	defer resp.Body.Close()
 	return nil
+}
+
+func GenerateFilePrefix(ct *naglfarv1.TestClusterTopology) string {
+	return ct.Namespace + "_" + ct.Spec.ResourceRequest + "_"
 }

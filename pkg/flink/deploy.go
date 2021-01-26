@@ -2,8 +2,10 @@ package flink
 
 import (
 	"fmt"
-	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+
 	"github.com/creasty/defaults"
+
+	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 )
 
 const (

@@ -9,13 +9,13 @@ import (
 	"github.com/bramvdbogaerde/go-scp/auth"
 	"github.com/creasty/defaults"
 	"github.com/go-logr/logr"
+	tiupSpec "github.com/pingcap/tiup/components/dm/spec"
 	"github.com/pingcap/tiup/pkg/meta"
 	"gopkg.in/yaml.v2"
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	sshUtil "github.com/PingCAP-QE/Naglfar/pkg/ssh"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
-	tiupSpec "github.com/pingcap/tiup/components/dm/spec"
 )
 
 func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.DMServerConfigs) error {

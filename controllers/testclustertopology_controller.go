@@ -18,12 +18,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -381,12 +379,12 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 		case ct.Spec.TiDBCluster != nil:
 			if ct.Spec.TiDBCluster.HAProxy != nil {
 				for i := 0; i < len(resources); i++ {
-					if strings.HasPrefix(resources[i].Status.Image, haproxy.BaseImageName) {
-						machine, err := r.getHAProxyMachine(ctx, &resources[i].ObjectMeta)
+					if resources[i].Name == ct.Spec.TiDBCluster.HAProxy.Host {
+						machine, err := r.getResourceMachine(ctx, resources[i])
 						if err != nil {
 							return err
 						}
-						err = haproxy.DeleteConfigFromMachine(machine.Spec.Host, haproxy.FileName)
+						err = haproxy.DeleteConfigFromMachine(machine.Spec.Host, haproxy.GenerateFilePrefix(ct)+haproxy.FileName)
 						if err != nil {
 							return err
 						}
@@ -766,7 +764,7 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 
 	if ct.Spec.TiDBCluster.HAProxy != nil {
 		var machine *naglfarv1.Machine
-		machine, err := r.getHAProxyMachine(ctx, &haProxyResources[0].ObjectMeta)
+		machine, err := r.getResourceMachine(ctx, haProxyResources[0])
 		if err != nil {
 			return true, nil
 		}
@@ -782,7 +780,7 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 		if requeue {
 			return true, nil
 		}
-		err = haproxy.WriteConfigToMachine(machine.Spec.Host, haproxy.FileName, config)
+		err = haproxy.WriteConfigToMachine(machine.Spec.Host, haproxy.GenerateFilePrefix(ct)+haproxy.FileName, config)
 		if err != nil {
 			return true, err
 		}
@@ -797,9 +795,12 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 					resource.Status.Image = haproxy.BaseImageName + ct.Spec.TiDBCluster.HAProxy.Version
 					resource.Status.ExposedPorts = []string{strconv.Itoa(ct.Spec.TiDBCluster.HAProxy.Port) + "/tcp"}
 					var mounts []naglfarv1.TestResourceMount
-					resource.Status.Binds = []string{haproxy.SourceMount + ":" + haproxy.TargetMount}
+					fileName := haproxy.GenerateFilePrefix(ct) + haproxy.FileName
+					sourceMount := haproxy.SourceDir + fileName
+					targetMount := haproxy.TargetDir + fileName
+					resource.Status.Binds = []string{sourceMount + ":" + targetMount}
 					resource.Status.Mounts = mounts
-					resource.Status.Command = []string{"haproxy", "-f", "/usr/local/etc/haproxy/haproxy.cfg"}
+					resource.Status.Command = []string{"haproxy", "-f", "/usr/local/etc/haproxy/" + fileName}
 					err := r.Status().Update(ctx, resource)
 					if err != nil {
 						return false, err
@@ -910,7 +911,8 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.DMCluster.Version)
 }
 
-func (r *TestClusterTopologyReconciler) getHAProxyMachine(ctx context.Context, key *v1.ObjectMeta) (*naglfarv1.Machine, error) {
+func (r *TestClusterTopologyReconciler) getResourceMachine(ctx context.Context, resource *naglfarv1.TestResource) (*naglfarv1.Machine, error) {
+	key := &resource.ObjectMeta
 	var relation naglfarv1.Relationship
 	err := r.Get(ctx, relationshipName, &relation)
 	if apierrors.IsNotFound(err) {
