@@ -1,10 +1,9 @@
 package main
 
-import "net/http"
-
 import (
 	"io"
 	"log"
+	"net/http"
 	"os"
 )
 
@@ -27,8 +26,18 @@ func upload(w http.ResponseWriter, r *http.Request) {
 	log.Println("upload successfully", fileName)
 }
 
+func delete(w http.ResponseWriter, r *http.Request) {
+	fileName := r.Header.Get("fileName")
+	err := os.Remove(BaseDir + fileName)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println("delete successfully", fileName)
+}
+
 func main() {
 	http.HandleFunc("/upload", upload)
+	http.HandleFunc("/delete", delete)
 	err := os.MkdirAll(BaseDir, os.ModePerm)
 	if err != nil {
 		log.Println(err)

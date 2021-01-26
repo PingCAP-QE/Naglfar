@@ -17,5 +17,4 @@ RUN cp /build/upload .
 
 EXPOSE 6666
 
-# 启动容器时运行的命令
 CMD ["/dist/upload"]

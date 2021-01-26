@@ -110,6 +110,7 @@ spec:
               - ready
               type: string
             uploadPort:
+              description: 'Port for uploading files: 31234'
               type: integer
           type: object
       type: object

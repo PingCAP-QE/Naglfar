@@ -1,11 +1,12 @@
 package haproxy
 
 import (
-	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
-	"github.com/PingCAP-QE/Naglfar/pkg/container"
 	"net/http"
 	"strconv"
 	"strings"
+
+	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
+	"github.com/PingCAP-QE/Naglfar/pkg/container"
 )
 
 const (
@@ -52,6 +53,20 @@ func GenerateHAProxyConfig(tct *naglfarv1.TiDBCluster, clusterIPMaps map[string]
 
 func WriteConfigToMachine(machine string, name string, config string) error {
 	req, err := http.NewRequest("POST", "http://"+machine+":"+strconv.Itoa(container.UploadDaemonExternalPort)+"/upload", strings.NewReader(config))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("fileName", name)
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func DeleteConfigFromMachine(machine string, name string) error {
+	req, err := http.NewRequest("POST", "http://"+machine+":"+strconv.Itoa(container.UploadDaemonExternalPort)+"/delete", nil)
 	if err != nil {
 		return err
 	}

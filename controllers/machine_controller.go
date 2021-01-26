@@ -319,34 +319,22 @@ func (r *MachineReconciler) createUploadDaemon(machine *naglfarv1.Machine, docke
 		return
 	}
 
-	if stat.Config == nil || stat.Config.Labels == nil {
+	if stat.Config == nil || stat.HostConfig == nil {
 		err = fmt.Errorf("invalid occupy container: %s", stat.Name)
 	}
 
-	uid, ok := stat.Config.Labels[container.UploadLabel]
-	if !ok {
-		err = fmt.Errorf("container %s has no label `%s`", stat.Name, container.UploadLabel)
-		return
-	}
-
-	if uid != string(machine.UID) {
-		err = fmt.Errorf("machine(%s) occupied by other naglfar system: UID(%s)", machine.Name, machine.UID)
-		return
-	}
-
-	if ports, ok := stat.NetworkSettings.Ports[(nat.Port)(strconv.Itoa(container.UploadDaemonInternalPort)+"/tcp")]; ok && len(ports) > 0 {
-		uploadPort, _ = strconv.Atoi(ports[0].HostPort)
+	port := strconv.Itoa(container.UploadDaemonExternalPort) + "/tcp"
+	if ports, ok := stat.NetworkSettings.Ports[nat.Port(port)]; ok && len(ports) > 0 {
+		uploadPort, err = strconv.Atoi(ports[0].HostPort)
+		if err != nil {
+			return
+		}
 	}
 
 	return
 }
 
 func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
-	if err := dockerClient.PullImageByPolicy(container.MachineStatImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
-		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineStatImage))
-		return err
-	}
-
 	info, err := dockerClient.ContainerInspect(r.Ctx, container.ChaosDaemon)
 
 	if err != nil {
@@ -367,11 +355,6 @@ func (r *MachineReconciler) Unlock(machine *naglfarv1.Machine, dockerClient *doc
 }
 
 func (r *MachineReconciler) deleteUploadDaemon(machine *naglfarv1.Machine, dockerClient *dockerutil.Client) error {
-	if err := dockerClient.PullImageByPolicy(container.MachineStatImage, naglfarv1.PullPolicyIfNotPresent); err != nil {
-		r.Log.Error(err, fmt.Sprintf("pulling image %s failed", container.MachineStatImage))
-		return err
-	}
-
 	info, err := dockerClient.ContainerInspect(r.Ctx, container.UploadDaemon)
 
 	if err != nil {
@@ -383,7 +366,7 @@ func (r *MachineReconciler) deleteUploadDaemon(machine *naglfarv1.Machine, docke
 		return nil
 	}
 
-	if info.Config == nil || info.Config.Labels == nil || info.Config.Labels[container.UploadLabel] != string(machine.UID) {
+	if info.Config == nil || info.HostConfig == nil {
 		// upload daemon released
 		return nil
 	}

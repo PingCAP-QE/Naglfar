@@ -124,6 +124,7 @@ type MachineStatus struct {
 	// +optional
 	Info *MachineInfo `json:"info,omitempty"`
 
+	// Port for uploading files: 31234
 	// +optional
 	UploadPort int `json:"uploadPort,omitempty"`
 }

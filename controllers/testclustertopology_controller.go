@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -252,7 +254,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	}
 
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources)
 	if requeue {
 		return true, err
 	}
@@ -337,7 +339,7 @@ func (r *TestClusterTopologyReconciler) scaleOutTiDBCluster(ctx context.Context,
 		log.Error(err, "unable to list child resources")
 	}
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources)
 	if requeue {
 		return true, err
 	}
@@ -353,6 +355,7 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 		Namespace: ct.Namespace,
 		Name:      ct.Name,
 	})
+
 	// if we cluster is installed on resource nodes
 	if len(ct.Spec.ResourceRequest) != 0 {
 		var rr naglfarv1.TestResourceRequest
@@ -375,6 +378,20 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 		}
 		switch {
 		case ct.Spec.TiDBCluster != nil:
+			if ct.Spec.TiDBCluster.HAProxy != nil {
+				for i:=0;i<len(resources);i++{
+					if strings.HasPrefix(resources[i].Status.Image,haproxy.BaseImageName){
+						machine,err := r.getHAProxyMachine(ctx,&resources[i].ObjectMeta)
+						if err != nil {
+							return err
+						}
+						err = haproxy.DeleteConfigFromMachine(machine.Spec.Host, haproxy.FileName)
+						if err != nil {
+							return err
+						}
+					}
+				}
+			}
 			tiupCtl, err := cluster.MakeClusterManager(r.Log, ct.Spec.DeepCopy(), resources)
 			if err != nil {
 				return err
@@ -658,12 +675,12 @@ func filterClusterResources(ct *naglfarv1.TestClusterTopology, resourceList nagl
 	return result
 }
 
-func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource, clusterIPMaps map[string]string) (bool, error) {
+func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
 	var requeue bool
 	var err error
 	switch {
 	case ct.Spec.TiDBCluster != nil:
-		requeue, err = r.initTiDBResources(ctx, ct, resources, clusterIPMaps)
+		requeue, err = r.initTiDBResources(ctx, ct, resources)
 	case ct.Spec.DMCluster != nil:
 		requeue, err = r.initDMResources(ctx, ct, resources)
 	case ct.Spec.FlinkCluster != nil:
@@ -703,7 +720,7 @@ func (r *TestClusterTopologyReconciler) initDMResources(ctx context.Context, ct 
 	return requeue, nil
 }
 
-func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource, clusterIPMaps map[string]string) (bool, error) {
+func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
 	var requeue bool
 	var haProxyResources []*naglfarv1.TestResource
 	var tiupResources []*naglfarv1.TestResource
@@ -715,8 +732,7 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 				tiupResources = append(tiupResources, resources[i])
 			}
 		}
-	}
-	if len(tiupResources) == 0 {
+	} else {
 		tiupResources = resources
 	}
 
@@ -748,18 +764,18 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 	}
 
 	if ct.Spec.TiDBCluster.HAProxy != nil {
-		var relation naglfarv1.Relationship
-		err = r.Get(ctx, relationshipName, &relation)
-		if apierrors.IsNotFound(err) {
-			r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
-			err = nil
+		var machine *naglfarv1.Machine
+		machine,err:=r.getHAProxyMachine(ctx,&haProxyResources[0].ObjectMeta)
+		if err!=nil {
+			return true,nil
 		}
-		machineRef := relation.Status.ResourceToMachine[ref.CreateRef(&haProxyResources[0].ObjectMeta).Key()]
-		var machine naglfarv1.Machine
-		err = r.Get(ctx, machineRef.Namespaced(), &machine)
-		if apierrors.IsNotFound(err) {
-			r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
-			return true, nil
+		clusterIPMaps:=make(map[string]string)
+		for i := 0; i < len(tiupResources); i++ {
+			if tiupResources[i].Status.State != naglfarv1.ResourceReady {
+				return true,nil
+			}else{
+				clusterIPMaps[tiupResources[i].Name] = tiupResources[i].Status.ClusterIP
+			}
 		}
 		requeue, config := haproxy.GenerateHAProxyConfig(ct.Spec.TiDBCluster, clusterIPMaps)
 		if requeue {
@@ -863,7 +879,7 @@ func (r *TestClusterTopologyReconciler) installFlinkCluster(ctx context.Context,
 	}
 	resources = filterClusterResources(ct, resourceList)
 
-	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources)
 	if requeue {
 		return true, err
 	}
@@ -882,7 +898,7 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 	}
 
 	resources = filterClusterResources(ct, resourceList)
-	requeue, err = r.initResource(ctx, ct, resources, hostname2ClusterIP(resourceList))
+	requeue, err = r.initResource(ctx, ct, resources)
 	if requeue {
 		return true, err
 	}
@@ -891,4 +907,21 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 		return false, err
 	}
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.DMCluster.Version)
+}
+
+func (r *TestClusterTopologyReconciler) getHAProxyMachine(ctx context.Context,key *v1.ObjectMeta) (*naglfarv1.Machine,error){
+	var relation naglfarv1.Relationship
+	err := r.Get(ctx, relationshipName, &relation)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		err = nil
+	}
+	machineRef := relation.Status.ResourceToMachine[ref.CreateRef(key).Key()]
+	var machine naglfarv1.Machine
+	err = r.Get(ctx, machineRef.Namespaced(), &machine)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		return nil,err
+	}
+	return &machine,nil
 }

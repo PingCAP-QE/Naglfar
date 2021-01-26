@@ -7,8 +7,7 @@ set -e
 # set -x
 # set -v
 
-# Create mount
-#mkdir -p /var/naglfar/lib
+
 # General OS props
 ARCHITECTURE=$(uname -m)
 
