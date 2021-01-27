@@ -131,7 +131,6 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	}
 
 	machine.Status.State = naglfarv1.MachineReady
-	machine.Status.UploadPort = container.UploadDaemonExternalPort
 
 	if err = r.Status().Update(r.Ctx, machine); err != nil {
 		log.Error(err, "unable to update Machine")
@@ -140,7 +139,7 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 }
 
 func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1.Machine) (ctrl.Result, error) {
-	if machine.Status.UploadPort != 0 {
+	if machine.Status.UploadPort == 0 {
 		dockerClient, err := dockerutil.MakeClient(r.Ctx, machine)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -151,6 +150,11 @@ func (r *MachineReconciler) reconcileRunning(log logr.Logger, machine *naglfarv1
 			r.Eventer.Event(machine, "Warning", "upload-daemon", err.Error())
 			return ctrl.Result{}, err
 		}
+		err = r.Status().Update(r.Ctx, machine)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 	relation, err := r.getRelationship()
 	if err != nil {
@@ -323,14 +327,19 @@ func (r *MachineReconciler) createUploadDaemon(machine *naglfarv1.Machine, docke
 		err = fmt.Errorf("invalid occupy container: %s", stat.Name)
 	}
 
-	port := strconv.Itoa(container.UploadDaemonExternalPort) + "/tcp"
+	port := strconv.Itoa(container.UploadDaemonInternalPort) + "/tcp"
 	if ports, ok := stat.NetworkSettings.Ports[nat.Port(port)]; ok && len(ports) > 0 {
 		uploadPort, err = strconv.Atoi(ports[0].HostPort)
 		if err != nil {
 			return
 		}
 	}
-
+	if err != nil {
+		return 0, err
+	}
+	if uploadPort == 0 {
+		panic("there's a bug, uploadPort should be zero")
+	}
 	return
 }
 

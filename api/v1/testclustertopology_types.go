@@ -230,10 +230,11 @@ type TiDBCluster struct {
 func (c *TiDBCluster) AllHosts() map[string]struct{} {
 	components := []string{TiDBField, TiKVField, PDField, MonitorField, GrafanaField, CDCField, TiFlashField}
 	result := map[string]struct{}{
-		c.Control:      {},
-		c.HAProxy.Host: {},
+		c.Control: {},
 	}
-
+	if c.HAProxy != nil {
+		result[c.HAProxy.Host] = struct{}{}
+	}
 	val := reflect.ValueOf(*c)
 	for i := 0; i < val.Type().NumField(); i++ {
 		if checkIn(components, val.Type().Field(i).Name) {
