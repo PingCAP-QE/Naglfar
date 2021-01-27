@@ -131,7 +131,6 @@ func (r *MachineReconciler) reconcileStarting(log logr.Logger, machine *naglfarv
 	}
 
 	machine.Status.State = naglfarv1.MachineReady
-	machine.Status.UploadPort = container.UploadDaemonExternalPort
 
 	if err = r.Status().Update(r.Ctx, machine); err != nil {
 		log.Error(err, "unable to update Machine")
