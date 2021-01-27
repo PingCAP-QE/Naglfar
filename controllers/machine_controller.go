@@ -338,7 +338,7 @@ func (r *MachineReconciler) createUploadDaemon(machine *naglfarv1.Machine, docke
 		return 0, err
 	}
 	if uploadPort == 0 {
-		panic(fmt.Sprintf("there's a bug, uploadPort should be zero"))
+		panic("there's a bug, uploadPort should be zero")
 	}
 	return
 }
