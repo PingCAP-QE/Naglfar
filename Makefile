@@ -14,6 +14,9 @@ endif
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 PACKR=$(GOBIN)/packr
 
+PACKAGES := go list ./...| grep -vE 'vendor' | grep 'github.com/PingCAP-QE/Naglfar/'
+PACKAGE_DIRECTORIES := $(PACKAGES) | sed 's|github.com/PingCAP-QE/Naglfar/||'
+
 all: manager kubectl-naglfar
 
 # Run tests
@@ -76,6 +79,16 @@ mod:
 generate: manifests
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
+# Build daemon image
+docker-build-daemon:
+	cp ./cmd/daemon/deploy.go ./docker/daemon/deploy.go
+	docker build ./docker/daemon -t pingcapqe/upload-daemon
+	rm ./docker/daemon/deploy.go
+
+# Push daemon image
+docker-push-daemon:
+	docker push pingcapqe/upload-daemon
+
 # Build the docker image
 docker-build: manifests generate
 	DOCKER_BUILDKIT=1 docker build . -t ${IMG}
@@ -83,6 +96,15 @@ docker-build: manifests generate
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+groupimports: install-goimports
+	goimports -w -l -local github.com/PingCAP-QE/Naglfar $$($(PACKAGE_DIRECTORIES))
+
+install-goimports:
+ifeq (,$(shell which goimports))
+	@echo "installing goimports"
+	go get golang.org/x/tools/cmd/goimports
+endif
 
 log:
 	kubectl logs -f deployment/naglfar-controller-manager -n naglfar-system -c manager

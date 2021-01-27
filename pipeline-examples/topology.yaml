@@ -25,6 +25,20 @@ spec:
     version:
       version: nightly
     control: n1
+    haProxy:
+      host: n5
+      port: 9999
+      version: latest
+      config: |-
+        global
+          daemon
+          maxconn 256
+
+        defaults
+          mode tcp
+          timeout connect 5000ms
+          timeout client 6000000ms
+          timeout server 6000000ms
     tikv:
       - host: n1
         port: 20160
@@ -67,4 +81,3 @@ spec:
           logger.level: info
         learnerConfig: |-
           log-level: info
-      - host: n4
