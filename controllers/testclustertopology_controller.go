@@ -520,6 +520,12 @@ func buildTiDBClusterInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*n
 	for idx, item := range spec.Monitors {
 		envs = append(envs, fmt.Sprintf("prometheus%d=%s:%d", idx, item.Host, item.Port))
 	}
+	// set haproxy env
+	for _, item := range resources {
+		if item.Name == t.Spec.TiDBCluster.HAProxy.Host {
+			envs = append(envs, fmt.Sprintf("tidb=%s:%d", item.Status.ClusterIP, t.Spec.TiDBCluster.HAProxy.Port))
+		}
+	}
 	return
 }
 
