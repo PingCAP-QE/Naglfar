@@ -184,6 +184,9 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 			if !preField.IsValid() || !curField.IsValid() {
 				continue
 			}
+			if curField.IsZero() && preField.IsZero() {
+				continue
+			}
 			var isExist bool
 			for j := 0; j < preField.Len(); j++ {
 				for k := 0; k < curField.Len(); k++ {
@@ -197,7 +200,6 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 				return true
 			}
 		}
-
 	}
 	return false
 }
