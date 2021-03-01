@@ -288,6 +288,22 @@ spec:
                                   - host
                                   type: object
                                 type: array
+                              haProxy:
+                                properties:
+                                  config:
+                                    type: string
+                                  host:
+                                    type: string
+                                  port:
+                                    type: integer
+                                  version:
+                                    type: string
+                                required:
+                                - config
+                                - host
+                                - port
+                                - version
+                                type: object
                               monitor:
                                 items:
                                   properties:
@@ -537,6 +553,22 @@ spec:
                                   - host
                                   type: object
                                 type: array
+                              haProxy:
+                                properties:
+                                  config:
+                                    type: string
+                                  host:
+                                    type: string
+                                  port:
+                                    type: integer
+                                  version:
+                                    type: string
+                                required:
+                                - config
+                                - host
+                                - port
+                                - version
+                                type: object
                               monitor:
                                 items:
                                   properties:

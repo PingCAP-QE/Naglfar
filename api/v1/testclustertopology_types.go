@@ -200,6 +200,9 @@ type TiDBCluster struct {
 	// Control machine host
 	Control string `json:"control"`
 
+	// +optional
+	HAProxy *HAProxy `json:"haProxy,omitempty"`
+
 	// TiDB machine hosts
 	// +optional
 	TiDB []TiDBSpec `json:"tidb,omitempty"`
@@ -236,7 +239,9 @@ func (c *TiDBCluster) AllHosts() map[string]struct{} {
 	result := map[string]struct{}{
 		c.Control: {},
 	}
-
+	if c.HAProxy != nil {
+		result[c.HAProxy.Host] = struct{}{}
+	}
 	val := reflect.ValueOf(*c)
 	for i := 0; i < val.Type().NumField(); i++ {
 		if checkIn(components, val.Type().Field(i).Name) {
@@ -376,6 +381,20 @@ func (c *DMCluster) AllHosts() map[string]struct{} {
 				result[field.Index(j).FieldByName("Host").String()] = struct{}{}
 			}
 		}
+	}
+	return result
+}
+
+type HAProxy struct {
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+	Version string `json:"version"`
+	Config  string `json:"config"`
+}
+
+func (c *HAProxy) AllHosts() map[string]struct{} {
+	result := map[string]struct{}{
+		c.Host: {},
 	}
 	return result
 }

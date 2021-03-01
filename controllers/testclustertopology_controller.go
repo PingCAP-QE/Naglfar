@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -29,6 +30,8 @@ import (
 
 	naglfarv1 "github.com/PingCAP-QE/Naglfar/api/v1"
 	"github.com/PingCAP-QE/Naglfar/pkg/flink"
+	"github.com/PingCAP-QE/Naglfar/pkg/haproxy"
+	"github.com/PingCAP-QE/Naglfar/pkg/ref"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup/cluster"
 	dm "github.com/PingCAP-QE/Naglfar/pkg/tiup/dm"
@@ -86,7 +89,7 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	case naglfarv1.ClusterTopologyStatePending:
 		var rr naglfarv1.TestResourceRequest
 		// we should install a SUT on the resources what we have requested
-		if len(ct.Spec.ResourceRequest) != 0 {
+		if ct.Spec.ResourceRequest != "" {
 			if err := r.Get(ctx, types.NamespacedName{
 				Namespace: req.Namespace,
 				Name:      ct.Spec.ResourceRequest,
@@ -134,10 +137,11 @@ func (r *TestClusterTopologyReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 				log.Error(err, "unable to update TestClusterTopology")
 				return ctrl.Result{}, err
 			}
-		} else {
-			// use the cluster created by tidb-operator
-			// TODO: wait for the cluster be ready
 		}
+		//else {
+		// use the cluster created by tidb-operator
+		// TODO: wait for the cluster be ready
+		//}
 	case naglfarv1.ClusterTopologyStateReady:
 		// first create
 		switch {
@@ -350,8 +354,9 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 		Namespace: ct.Namespace,
 		Name:      ct.Name,
 	})
+
 	// if we cluster is installed on resource nodes
-	if len(ct.Spec.ResourceRequest) != 0 {
+	if ct.Spec.ResourceRequest != "" {
 		var rr naglfarv1.TestResourceRequest
 		if err := r.Get(ctx, types.NamespacedName{
 			Namespace: ct.Namespace,
@@ -372,6 +377,20 @@ func (r *TestClusterTopologyReconciler) deleteTopology(ctx context.Context, ct *
 		}
 		switch {
 		case ct.Spec.TiDBCluster != nil:
+			if ct.Spec.TiDBCluster.HAProxy != nil {
+				for i := 0; i < len(resources); i++ {
+					if resources[i].Name == ct.Spec.TiDBCluster.HAProxy.Host {
+						machine, err := r.getResourceMachine(ctx, resources[i])
+						if err != nil {
+							return err
+						}
+						err = haproxy.DeleteConfigFromMachine(machine.Spec.Host, haproxy.GenerateFilePrefix(ct)+haproxy.FileName)
+						if err != nil {
+							return err
+						}
+					}
+				}
+			}
 			tiupCtl, err := cluster.MakeClusterManager(r.Log, ct.Spec.DeepCopy(), resources)
 			if err != nil {
 				return err
@@ -500,6 +519,14 @@ func buildTiDBClusterInjectEnvs(t *naglfarv1.TestClusterTopology, resources []*n
 	}
 	for idx, item := range spec.Monitors {
 		envs = append(envs, fmt.Sprintf("prometheus%d=%s:%d", idx, item.Host, item.Port))
+	}
+	// set haproxy env
+	if t.Spec.TiDBCluster.HAProxy != nil {
+		for _, item := range resources {
+			if item.Name == t.Spec.TiDBCluster.HAProxy.Host {
+				envs = append(envs, fmt.Sprintf("tidb=%s:%d", item.Status.ClusterIP, t.Spec.TiDBCluster.HAProxy.Port))
+			}
+		}
 	}
 	return
 }
@@ -659,15 +686,17 @@ func (r *TestClusterTopologyReconciler) initResource(ctx context.Context, ct *na
 	var requeue bool
 	var err error
 	switch {
-	case ct.Spec.TiDBCluster != nil, ct.Spec.DMCluster != nil:
-		requeue, err = r.initTiUPResources(ctx, ct, resources)
+	case ct.Spec.TiDBCluster != nil:
+		requeue, err = r.initTiDBResources(ctx, ct, resources)
+	case ct.Spec.DMCluster != nil:
+		requeue, err = r.initDMResources(ctx, ct, resources)
 	case ct.Spec.FlinkCluster != nil:
 		requeue, err = r.initFlinkResources(ctx, ct, resources)
 	}
 	return requeue, err
 }
 
-func (r *TestClusterTopologyReconciler) initTiUPResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
+func (r *TestClusterTopologyReconciler) initDMResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
 	var requeue bool
 	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
 	if err != nil {
@@ -695,6 +724,106 @@ func (r *TestClusterTopologyReconciler) initTiUPResources(ctx context.Context, c
 			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
 		}
 	}
+	return requeue, nil
+}
+
+func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, ct *naglfarv1.TestClusterTopology, resources []*naglfarv1.TestResource) (bool, error) {
+	var requeue bool
+	var haProxyResources []*naglfarv1.TestResource
+	var tiupResources []*naglfarv1.TestResource
+	if ct.Spec.TiDBCluster.HAProxy != nil {
+		for i := 0; i < len(resources); i++ {
+			if resources[i].Name == ct.Spec.TiDBCluster.HAProxy.Host {
+				haProxyResources = append(haProxyResources, resources[i])
+			} else {
+				tiupResources = append(tiupResources, resources[i])
+			}
+		}
+	} else {
+		tiupResources = resources
+	}
+
+	exposedPortIndexer, err := indexResourceExposedPorts(ct.Spec.DeepCopy(), resources)
+	if err != nil {
+		return requeue, fmt.Errorf("index exposed ports failed: %v", err)
+	}
+	for _, resource := range tiupResources {
+		switch resource.Status.State {
+		case naglfarv1.ResourceUninitialized:
+			requeue = true
+			if resource.Status.Image == "" {
+				resource.Status.Image = tiup.ContainerImage
+				resource.Status.CapAdd = []string{"SYS_ADMIN"}
+				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
+				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
+				err := r.Status().Update(ctx, resource)
+				if err != nil {
+					return false, err
+				}
+			}
+		case naglfarv1.ResourceReady:
+			if resource.Status.Image != tiup.ContainerImage {
+				return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
+			}
+		case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+			return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
+		}
+	}
+
+	if ct.Spec.TiDBCluster.HAProxy != nil {
+		var machine *naglfarv1.Machine
+		machine, err := r.getResourceMachine(ctx, haProxyResources[0])
+		if err != nil {
+			return true, nil
+		}
+		clusterIPMaps := make(map[string]string)
+		for i := 0; i < len(tiupResources); i++ {
+			if tiupResources[i].Status.State != naglfarv1.ResourceReady {
+				return true, nil
+			} else {
+				clusterIPMaps[tiupResources[i].Name] = tiupResources[i].Status.ClusterIP
+			}
+		}
+		requeue, config := haproxy.GenerateHAProxyConfig(ct.Spec.TiDBCluster, clusterIPMaps)
+		if requeue {
+			return true, nil
+		}
+		err = haproxy.WriteConfigToMachine(machine.Spec.Host, haproxy.GenerateFilePrefix(ct)+haproxy.FileName, config)
+		if err != nil {
+			return true, err
+		}
+		for _, resource := range haProxyResources {
+			if resource.Name != ct.Spec.TiDBCluster.HAProxy.Host {
+				continue
+			}
+			switch resource.Status.State {
+			case naglfarv1.ResourceUninitialized:
+				requeue = true
+				if resource.Status.Image == "" {
+					resource.Status.Image = haproxy.BaseImageName + ct.Spec.TiDBCluster.HAProxy.Version
+					resource.Status.ExposedPorts = []string{strconv.Itoa(ct.Spec.TiDBCluster.HAProxy.Port) + "/tcp"}
+					var mounts []naglfarv1.TestResourceMount
+					fileName := haproxy.GenerateFilePrefix(ct) + haproxy.FileName
+					sourceMount := haproxy.SourceDir + fileName
+					targetMount := haproxy.TargetDir + fileName
+					resource.Status.Binds = []string{sourceMount + ":" + targetMount}
+					resource.Status.Mounts = mounts
+					resource.Status.Command = []string{"haproxy", "-f", "/usr/local/etc/haproxy/" + fileName}
+					err := r.Status().Update(ctx, resource)
+					if err != nil {
+						return false, err
+					}
+				}
+			case naglfarv1.ResourceReady:
+				if resource.Status.Image != haproxy.BaseImageName {
+					return false, fmt.Errorf("resource node %s uses an incorrect image: %s", resource.Name, resource.Status.Image)
+				}
+			case naglfarv1.ResourcePending, naglfarv1.ResourceFinish, naglfarv1.ResourceDestroy:
+				return false, fmt.Errorf("resource node %s is in the `%s` state", resource.Name, naglfarv1.ResourceFinish)
+			}
+		}
+	}
+
 	return requeue, nil
 }
 
@@ -788,4 +917,22 @@ func (r *TestClusterTopologyReconciler) installDMCluster(ctx context.Context, ct
 		return false, err
 	}
 	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.DMCluster.Version)
+}
+
+func (r *TestClusterTopologyReconciler) getResourceMachine(ctx context.Context, resource *naglfarv1.TestResource) (*naglfarv1.Machine, error) {
+	key := &resource.ObjectMeta
+	var relation naglfarv1.Relationship
+	err := r.Get(ctx, relationshipName, &relation)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		err = nil
+	}
+	machineRef := relation.Status.ResourceToMachine[ref.CreateRef(key).Key()]
+	var machine naglfarv1.Machine
+	err = r.Get(ctx, machineRef.Namespaced(), &machine)
+	if apierrors.IsNotFound(err) {
+		r.Log.Error(err, fmt.Sprintf("relationship(%s) not found", relationshipName))
+		return nil, err
+	}
+	return &machine, nil
 }
