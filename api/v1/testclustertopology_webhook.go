@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/r3labs/diff"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -126,7 +127,11 @@ func (r *TestClusterTopology) validateTiDBUpdate(tct *TestClusterTopology) error
 		return fmt.Errorf("upgradePolicy must be `force` or empty")
 	}
 
-	if checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
+	isChanged, err := checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster)
+	if err != nil {
+		return fmt.Errorf("naglfar check error")
+	}
+	if isChanged {
 		return fmt.Errorf("immutable field is changed")
 	}
 
@@ -297,53 +302,49 @@ func checkVersionDownloadURL(pre *TiDBCluster, cur *TiDBCluster) bool {
 }
 
 // checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
-func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) (bool, error) {
 	checkComponents := []string{TiDBField, PDField, TiKVField}
-	preVal := reflect.ValueOf(*pre)
-	curVal := reflect.ValueOf(*cur)
+	preTiDBCluster := reflect.ValueOf(*pre)
+	curTiDBCluster := reflect.ValueOf(*cur)
 	for i := 0; i < len(checkComponents); i++ {
-		preField := preVal.FieldByName(checkComponents[i])
-		curField := curVal.FieldByName(checkComponents[i])
-		if !preField.IsValid() || !curField.IsValid() {
+		preComponents := preTiDBCluster.FieldByName(checkComponents[i])
+		curComponents := curTiDBCluster.FieldByName(checkComponents[i])
+		if !preComponents.IsValid() || !curComponents.IsValid() {
 			continue
 		}
-		for j := 0; j < preField.Len(); j++ {
-			for k := 0; k < curField.Len(); k++ {
-				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
-					preComponent := preField.Index(j).Interface()
-					curComponent := curField.Index(k).Interface()
-					switch {
-					case i == 0:
-						preTiDB := preComponent.(TiDBSpec)
-						curTiDB := curComponent.(TiDBSpec)
-						preTiDB.Config = ""
-						curTiDB.Config = ""
-						if !reflect.DeepEqual(preTiDB, curTiDB) {
-							return true
-						}
-					case i == 1:
-						prePD := preComponent.(PDSpec)
-						curPD := curComponent.(PDSpec)
-						prePD.Config = ""
-						curPD.Config = ""
-						if !reflect.DeepEqual(prePD, curPD) {
-							return true
-						}
-					case i == 2:
-						preTiKV := preComponent.(TiKVSpec)
-						curTiKV := curComponent.(TiKVSpec)
-						preTiKV.Config = ""
-						curTiKV.Config = ""
-						if !reflect.DeepEqual(preTiKV, curTiKV) {
-							return true
+		for j := 0; j < preComponents.Len(); j++ {
+			for k := 0; k < curComponents.Len(); k++ {
+				if preComponents.Index(j).FieldByName("Host").String() == curComponents.Index(k).FieldByName("Host").String() {
+					preComponent := preComponents.Index(j).Interface()
+					curComponent := curComponents.Index(k).Interface()
+
+					differ, err := diff.NewDiffer(
+						diff.TagName("Naglfar"),
+					)
+					if err != nil {
+						return false, err
+					}
+					changelog, err := differ.Diff(preComponent, curComponent)
+					if err != nil {
+						return false, err
+					}
+					// config is allowed to be updated
+					var result []diff.Change
+					for i := 0; i < len(changelog); i++ {
+						if changelog[i].Path[0] != ConfigField {
+							result = append(result, changelog[i])
 						}
 					}
+					if len(result) != 0 {
+						return true, nil
+					}
+
 				}
 			}
 
 		}
 	}
-	return false
+	return false, nil
 }
 
 func checkComponentsConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {

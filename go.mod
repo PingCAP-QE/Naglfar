@@ -18,6 +18,7 @@ require (
 	github.com/onsi/gomega v1.8.1
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pingcap/tiup v1.3.1
+	github.com/r3labs/diff v0.0.0-20200627101315-aecd9dd05dd2
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/zap v1.16.0
