@@ -626,7 +626,7 @@ func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, c
 			return false, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 	}
-	if cluster.IsServerConfigModified(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs) || cluster.IsComponentsConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
+	if cluster.IsConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
 		// update serverConfig
 		requeue, err := r.updateClusterConfig(ctx, ct, rr)
 		if err != nil {

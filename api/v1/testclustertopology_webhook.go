@@ -116,30 +116,26 @@ func (r *TestClusterTopology) validateTiDBUpdate(tct *TestClusterTopology) error
 		return nil
 	}
 
-	if checkUnsupportedComponentsChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("update unsupport components")
+	if err := checkUnsupportedComponentsChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
 	}
 
-	if !checkAtMostOneKindUpdation(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("only one of [upgrade, modify serverConfigs, scale-in/out] can be executed at a time")
+	if err := checkAtMostOneKindUpdation(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
 	}
-	if !checkUpgradePolicy(r.Spec.TiDBCluster) {
-		return fmt.Errorf("upgradePolicy must be `force` or empty")
-	}
-
-	isChanged, err := checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster)
-	if err != nil {
-		return fmt.Errorf("naglfar check error")
-	}
-	if isChanged {
-		return fmt.Errorf("immutable field is changed")
+	if err := checkUpgradePolicy(r.Spec.TiDBCluster); err != nil {
+		return err
 	}
 
-	if checkVersionDownloadURL(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("don't support update downLoadURL")
+	if err := checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
 	}
-	if checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("cluster can't scale-in/out at the same time")
+
+	if err := checkVersionDownloadURLModified(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
+	}
+	if err := checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
 	}
 
 	result := getEmptyRequiredFields(r.Spec.TiDBCluster)
@@ -163,21 +159,22 @@ func (r *TestClusterTopology) ValidateDelete() error {
 	return nil
 }
 
-func checkServerConfigModified(pre *ServerConfigs, cur *ServerConfigs) bool {
+func IsServerConfigModified(pre *ServerConfigs, cur *ServerConfigs) bool {
 	return !reflect.DeepEqual(pre, cur)
 }
 
-func checkScale(pre *TiDBCluster, cur *TiDBCluster) bool {
+func IsScale(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return len(pre.TiDB) != len(cur.TiDB) || len(pre.PD) != len(cur.PD) || len(pre.TiKV) != len(cur.TiKV)
 }
 
 // checkSimultaneousScaleOutAndScaleIn check if tidb cluster scale-out and scale-out at the same time
-func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) error {
 	// TODO check
 	scaleIn := len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
 	scaleOut := len(pre.TiDB) < len(cur.TiDB) || len(pre.PD) < len(cur.PD) || len(pre.TiKV) < len(cur.TiKV)
+	err := fmt.Errorf("cluster can't scale-in/out at the same time")
 	if scaleIn && scaleOut {
-		return true
+		return err
 	}
 	if !scaleIn && !scaleOut {
 		// update some host, like tikv(n1,n2,n3)--->tikv(n1,n2,n4)
@@ -203,11 +200,11 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 				}
 			}
 			if !isExist {
-				return true
+				return err
 			}
 		}
 	}
-	return false
+	return nil
 }
 
 // getEmptyRequiredFields return which required fields are empty
@@ -247,7 +244,7 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 }
 
 // checkUnsupportedComponentsChanged return if unsupported components' fields are changed
-func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 	unsupportedComponents := []string{GlobalField, DrainerField, PumpField, MonitorField, ControlField, GrafanaField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
@@ -258,10 +255,10 @@ func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool 
 			continue
 		}
 		if !reflect.DeepEqual(preField.Interface(), curField.Interface()) {
-			return true
+			return fmt.Errorf("update unsupport components")
 		}
 	}
-	return false
+	return nil
 }
 
 // checkIn return if str in lists
@@ -293,16 +290,19 @@ func countClusterNum(tct *TestClusterTopology) int {
 	return clusterNum
 }
 
-func checkUpgrade(pre *TiDBCluster, cur *TiDBCluster) bool {
+func IsUpgrade(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return pre.Version.Version != cur.Version.Version
 }
 
-func checkVersionDownloadURL(pre *TiDBCluster, cur *TiDBCluster) bool {
-	return pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL
+func checkVersionDownloadURLModified(pre *TiDBCluster, cur *TiDBCluster) error {
+	if pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL {
+		return fmt.Errorf("don't support update downLoadURL")
+	}
+	return nil
 }
 
 // checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
-func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) (bool, error) {
+func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 	checkComponents := []string{TiDBField, PDField, TiKVField}
 	preTiDBCluster := reflect.ValueOf(*pre)
 	curTiDBCluster := reflect.ValueOf(*cur)
@@ -319,14 +319,14 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) (bool, error
 					curComponent := curComponents.Index(k).Interface()
 
 					differ, err := diff.NewDiffer(
-						diff.TagName("Naglfar"),
+						diff.TagName("{ Project: Naglfar }"),
 					)
 					if err != nil {
-						return false, err
+						return err
 					}
 					changelog, err := differ.Diff(preComponent, curComponent)
 					if err != nil {
-						return false, err
+						return err
 					}
 					// config is allowed to be updated
 					var result []diff.Change
@@ -336,7 +336,7 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) (bool, error
 						}
 					}
 					if len(result) != 0 {
-						return true, nil
+						return fmt.Errorf("immutable field is changed %v", changelog)
 					}
 
 				}
@@ -344,10 +344,10 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) (bool, error
 
 		}
 	}
-	return false, nil
+	return nil
 }
 
-func checkComponentsConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {
+func IsComponentsConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {
 	checkComponents := []string{TiDBField, PDField, TiKVField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
@@ -370,25 +370,31 @@ func checkComponentsConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return false
 }
 
-func checkAtMostOneKindUpdation(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkAtMostOneKindUpdation(pre *TiDBCluster, cur *TiDBCluster) error {
 	updatedModules := 0
 	var modules []string
-	if checkScale(pre, cur) {
+	if IsScale(pre, cur) {
 		updatedModules++
 		modules = append(modules, "scale-in/out")
 	}
-	if checkServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) || checkComponentsConfigModified(pre, cur) {
+	if IsServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) || IsComponentsConfigModified(pre, cur) {
 		updatedModules++
-		modules = append(modules, "update")
+		modules = append(modules, "server/component config update")
 	}
-	if checkUpgrade(pre, cur) {
+	if IsUpgrade(pre, cur) {
 		updatedModules++
 		modules = append(modules, "upgrade")
 	}
 	testclustertopologylog.Info("update modules", "modules", modules)
-	return updatedModules <= 1
+	if updatedModules > 1 {
+		return fmt.Errorf("only one of [upgrade, modify serverConfigs, scale-in/out] can be executed at a time")
+	}
+	return nil
 }
 
-func checkUpgradePolicy(cur *TiDBCluster) bool {
-	return cur.UpgradePolicy == "force" || cur.UpgradePolicy == ""
+func checkUpgradePolicy(cur *TiDBCluster) error {
+	if !(cur.UpgradePolicy == "force" || cur.UpgradePolicy == "") {
+		return fmt.Errorf("upgradePolicy must be `force` or empty")
+	}
+	return nil
 }

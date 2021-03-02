@@ -99,10 +99,11 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 func IsUpgraded(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 	return pre.Version.Version != cur.Version.Version
 }
-func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) bool {
-	return !reflect.DeepEqual(pre, cur)
-}
-func IsComponentsConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
+
+func IsConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
+	if !reflect.DeepEqual(pre.ServerConfigs, cur.ServerConfigs) {
+		return true
+	}
 	checkComponents := []string{naglfarv1.TiDBField, naglfarv1.PDField, naglfarv1.TiKVField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
