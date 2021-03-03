@@ -318,13 +318,7 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 					preComponent := preComponents.Index(j).Interface()
 					curComponent := curComponents.Index(k).Interface()
 
-					differ, err := diff.NewDiffer(
-						diff.TagName("{ Project: Naglfar }"),
-					)
-					if err != nil {
-						return err
-					}
-					changelog, err := differ.Diff(preComponent, curComponent)
+					changelog, err := diff.Diff(preComponent, curComponent)
 					if err != nil {
 						return err
 					}
@@ -338,10 +332,8 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 					if len(result) != 0 {
 						return fmt.Errorf("immutable field is changed %v", changelog)
 					}
-
 				}
 			}
-
 		}
 	}
 	return nil
