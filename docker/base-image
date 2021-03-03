@@ -19,6 +19,9 @@ RUN yum update -y && \
       -i /etc/ssh/sshd_config && \
     systemctl enable sshd.service
 
+RUN yum install -y centos-release-scl-rh
+RUN yum install -y devtoolset-8-build devtoolset-8-gdb
+
 WORKDIR /root
 
 # Set ssh authorized_keys
@@ -39,8 +42,8 @@ RUN rm -rf /usr/lib/systemd/system/getty@.service
 
 # Install tiup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
-RUN echo 'export PATH=/root/.tiup/bin:$PATH' >> /root/.bashrc
 
 EXPOSE 22
+ENV PATH="/root/.tiup/bin:/opt/rh/devtoolset-8/root/usr/bin:${PATH}"
 VOLUME [ "/sys/fs/cgroup" ]
 CMD ["/usr/sbin/init"]
