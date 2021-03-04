@@ -1666,6 +1666,11 @@ func (in *TiDBCluster) DeepCopyInto(out *TiDBCluster) {
 		*out = make([]GrafanaSpec, len(*in))
 		copy(*out, *in)
 	}
+	if in.AlertManager != nil {
+		in, out := &in.AlertManager, &out.AlertManager
+		*out = make([]AlertManagerSpec, len(*in))
+		copy(*out, *in)
+	}
 	if in.CDC != nil {
 		in, out := &in.CDC, &out.CDC
 		*out = make([]CDCSpec, len(*in))

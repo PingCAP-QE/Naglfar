@@ -298,6 +298,20 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			ResourceControl: meta.ResourceControl{},
 		})
 	}
+	for _, item := range ctf.TiDBCluster.AlertManager {
+		node, exist := resourceMaps[item.Host]
+		if !exist {
+			return spec, nil, fmt.Errorf("alert_manager node not found: `%s`", item.Host)
+		}
+		spec.Alertmanagers = append(spec.Alertmanagers, tiupSpec.AlertmanagerSpec{
+			Host:            hostName(item.Host, node.ClusterIP),
+			SSHPort:         22,
+			WebPort:         item.WebPort,
+			ClusterPort:     item.ClusterPort,
+			DeployDir:       item.DeployDir,
+			ResourceControl: meta.ResourceControl{},
+		})
+	}
 	for _, item := range ctf.TiDBCluster.CDC {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
