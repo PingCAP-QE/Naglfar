@@ -329,6 +329,8 @@ spec:
                                   properties:
                                     clientPort:
                                       type: integer
+                                    config:
+                                      type: string
                                     dataDir:
                                       type: string
                                     deployDir:
@@ -377,6 +379,8 @@ spec:
                                 description: TiDB machine hosts
                                 items:
                                   properties:
+                                    config:
+                                      type: string
                                     deployDir:
                                       type: string
                                     host:
@@ -429,6 +433,8 @@ spec:
                                 description: TiKV machine hosts
                                 items:
                                   properties:
+                                    config:
+                                      type: string
                                     dataDir:
                                       type: string
                                     deployDir:
@@ -588,6 +594,8 @@ spec:
                                   properties:
                                     clientPort:
                                       type: integer
+                                    config:
+                                      type: string
                                     dataDir:
                                       type: string
                                     deployDir:
@@ -636,6 +644,8 @@ spec:
                                 description: TiDB machine hosts
                                 items:
                                   properties:
+                                    config:
+                                      type: string
                                     deployDir:
                                       type: string
                                     host:
@@ -688,6 +698,8 @@ spec:
                                 description: TiKV machine hosts
                                 items:
                                   properties:
+                                    config:
+                                      type: string
                                     dataDir:
                                       type: string
                                     deployDir:

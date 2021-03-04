@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/r3labs/diff"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,6 +38,7 @@ func (r *TestClusterTopology) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 const (
 	ControlField      = "Control"
+	ConfigField       = "Config"
 	VersionField      = "Version"
 	GlobalField       = "Global"
 	TiDBField         = "TiDB"
@@ -114,26 +116,26 @@ func (r *TestClusterTopology) validateTiDBUpdate(tct *TestClusterTopology) error
 		return nil
 	}
 
-	if checkUnsupportedComponentsChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("update unsupport components")
+	if err := checkUnsupportedComponentsChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
 	}
 
-	if !checkAtMostOneKindUpdation(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("only one of [upgrade, modify serverConfigs, scale-in/out] can be executed at a time")
+	if err := checkAtMostOneKindUpdation(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
 	}
-	if !checkUpgradePolicy(r.Spec.TiDBCluster) {
-		return fmt.Errorf("upgradePolicy must be `force` or empty")
-	}
-
-	if checkVersionDownloadURL(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("don't support update downLoadURL")
-	}
-	if checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("cluster can't scale-in/out at the same time")
+	if err := checkUpgradePolicy(r.Spec.TiDBCluster); err != nil {
+		return err
 	}
 
-	if checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster) {
-		return fmt.Errorf("immutable field is changed")
+	if err := checkImmutableFieldChanged(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
+	}
+
+	if err := checkVersionDownloadURLModified(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
+	}
+	if err := checkSimultaneousScaleOutAndScaleIn(tct.Status.PreTiDBCluster, r.Spec.TiDBCluster); err != nil {
+		return err
 	}
 
 	result := getEmptyRequiredFields(r.Spec.TiDBCluster)
@@ -157,21 +159,22 @@ func (r *TestClusterTopology) ValidateDelete() error {
 	return nil
 }
 
-func checkServerConfigModified(pre *ServerConfigs, cur *ServerConfigs) bool {
+func IsServerConfigModified(pre *ServerConfigs, cur *ServerConfigs) bool {
 	return !reflect.DeepEqual(pre, cur)
 }
 
-func checkScale(pre *TiDBCluster, cur *TiDBCluster) bool {
+func IsScale(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return len(pre.TiDB) != len(cur.TiDB) || len(pre.PD) != len(cur.PD) || len(pre.TiKV) != len(cur.TiKV)
 }
 
 // checkSimultaneousScaleOutAndScaleIn check if tidb cluster scale-out and scale-out at the same time
-func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) error {
 	// TODO check
 	scaleIn := len(pre.TiDB) > len(cur.TiDB) || len(pre.PD) > len(cur.PD) || len(pre.TiKV) > len(cur.TiKV)
 	scaleOut := len(pre.TiDB) < len(cur.TiDB) || len(pre.PD) < len(cur.PD) || len(pre.TiKV) < len(cur.TiKV)
+	err := fmt.Errorf("cluster can't scale-in/out at the same time")
 	if scaleIn && scaleOut {
-		return true
+		return err
 	}
 	if !scaleIn && !scaleOut {
 		// update some host, like tikv(n1,n2,n3)--->tikv(n1,n2,n4)
@@ -197,36 +200,11 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) boo
 				}
 			}
 			if !isExist {
-				return true
+				return err
 			}
 		}
 	}
-	return false
-}
-
-// checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
-func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
-	checkComponents := []string{TiDBField, PDField, TiKVField}
-	preVal := reflect.ValueOf(*pre)
-	curVal := reflect.ValueOf(*cur)
-	for i := 0; i < len(checkComponents); i++ {
-		preField := preVal.FieldByName(checkComponents[i])
-		curField := curVal.FieldByName(checkComponents[i])
-		if !preField.IsValid() || !curField.IsValid() {
-			continue
-		}
-		for j := 0; j < preField.Len(); j++ {
-			for k := 0; k < curField.Len(); k++ {
-				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
-					if !reflect.DeepEqual(preField.Index(j).Interface(), curField.Index(k).Interface()) {
-						return true
-					}
-				}
-			}
-
-		}
-	}
-	return false
+	return nil
 }
 
 // getEmptyRequiredFields return which required fields are empty
@@ -266,7 +244,7 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 }
 
 // checkUnsupportedComponentsChanged return if unsupported components' fields are changed
-func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool {
+func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 	unsupportedComponents := []string{GlobalField, DrainerField, PumpField, MonitorField, ControlField, GrafanaField}
 	preVal := reflect.ValueOf(*pre)
 	curVal := reflect.ValueOf(*cur)
@@ -277,10 +255,10 @@ func checkUnsupportedComponentsChanged(pre *TiDBCluster, cur *TiDBCluster) bool 
 			continue
 		}
 		if !reflect.DeepEqual(preField.Interface(), curField.Interface()) {
-			return true
+			return fmt.Errorf("update unsupport components")
 		}
 	}
-	return false
+	return nil
 }
 
 // checkIn return if str in lists
@@ -312,28 +290,103 @@ func countClusterNum(tct *TestClusterTopology) int {
 	return clusterNum
 }
 
-func checkUpgrade(pre *TiDBCluster, cur *TiDBCluster) bool {
+func IsUpgrade(pre *TiDBCluster, cur *TiDBCluster) bool {
 	return pre.Version.Version != cur.Version.Version
 }
 
-func checkVersionDownloadURL(pre *TiDBCluster, cur *TiDBCluster) bool {
-	return pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL
+func checkVersionDownloadURLModified(pre *TiDBCluster, cur *TiDBCluster) error {
+	if pre.Version.PDDownloadURL != cur.Version.PDDownloadURL || pre.Version.TiDBDownloadURL != cur.Version.TiDBDownloadURL || pre.Version.TiKVDownloadURL != cur.Version.TiKVDownloadURL {
+		return fmt.Errorf("don't support update downLoadURL")
+	}
+	return nil
 }
 
-func checkAtMostOneKindUpdation(pre *TiDBCluster, cur *TiDBCluster) bool {
+// checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
+func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
+	checkComponents := []string{TiDBField, PDField, TiKVField}
+	preTiDBCluster := reflect.ValueOf(*pre)
+	curTiDBCluster := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preComponents := preTiDBCluster.FieldByName(checkComponents[i])
+		curComponents := curTiDBCluster.FieldByName(checkComponents[i])
+		if !preComponents.IsValid() || !curComponents.IsValid() {
+			continue
+		}
+		for j := 0; j < preComponents.Len(); j++ {
+			for k := 0; k < curComponents.Len(); k++ {
+				if preComponents.Index(j).FieldByName("Host").String() == curComponents.Index(k).FieldByName("Host").String() {
+					preComponent := preComponents.Index(j).Interface()
+					curComponent := curComponents.Index(k).Interface()
+
+					changelog, err := diff.Diff(preComponent, curComponent)
+					if err != nil {
+						return err
+					}
+					// config is allowed to be updated
+					var result []diff.Change
+					for i := 0; i < len(changelog); i++ {
+						if changelog[i].Path[0] != ConfigField {
+							result = append(result, changelog[i])
+						}
+					}
+					if len(result) != 0 {
+						return fmt.Errorf("immutable field is changed %v", changelog)
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func IsComponentsConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {
+	checkComponents := []string{TiDBField, PDField, TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preField := preVal.FieldByName(checkComponents[i])
+		curField := curVal.FieldByName(checkComponents[i])
+		if !preField.IsValid() || !curField.IsValid() {
+			continue
+		}
+		for j := 0; j < preField.Len(); j++ {
+			for k := 0; k < curField.Len(); k++ {
+				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+					if !reflect.DeepEqual(preField.Index(j).FieldByName(ConfigField).Interface(), curField.Index(k).FieldByName(ConfigField).Interface()) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func checkAtMostOneKindUpdation(pre *TiDBCluster, cur *TiDBCluster) error {
 	updatedModules := 0
-	if checkScale(pre, cur) {
+	var modules []string
+	if IsScale(pre, cur) {
 		updatedModules++
+		modules = append(modules, "scale-in/out")
 	}
-	if checkServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) {
+	if IsServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) || IsComponentsConfigModified(pre, cur) {
 		updatedModules++
+		modules = append(modules, "server/component config update")
 	}
-	if checkUpgrade(pre, cur) {
+	if IsUpgrade(pre, cur) {
 		updatedModules++
+		modules = append(modules, "upgrade")
 	}
-	return updatedModules <= 1
+	testclustertopologylog.Info("update modules", "modules", modules)
+	if updatedModules > 1 {
+		return fmt.Errorf("only one of [upgrade, modify serverConfigs, scale-in/out] can be executed at a time")
+	}
+	return nil
 }
 
-func checkUpgradePolicy(cur *TiDBCluster) bool {
-	return cur.UpgradePolicy == "force" || cur.UpgradePolicy == ""
+func checkUpgradePolicy(cur *TiDBCluster) error {
+	if !(cur.UpgradePolicy == "force" || cur.UpgradePolicy == "") {
+		return fmt.Errorf("upgradePolicy must be `force` or empty")
+	}
+	return nil
 }

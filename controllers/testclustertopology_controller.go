@@ -286,7 +286,7 @@ func (r *TestClusterTopologyReconciler) upgradeTiDBCluster(ctx context.Context, 
 	return false, tiupCtl.UpgradeCluster(log, ct.Name, ct, hostname2ClusterIP(resourceList))
 }
 
-func (r *TestClusterTopologyReconciler) updateServerConfigs(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
+func (r *TestClusterTopologyReconciler) updateClusterConfig(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
 	log := r.Log.WithValues("updateServerConfigs", types.NamespacedName{
 		Namespace: ct.Namespace,
 		Name:      ct.Name,
@@ -626,11 +626,11 @@ func (r *TestClusterTopologyReconciler) updateTiDBCluster(ctx context.Context, c
 			return false, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 	}
-	if cluster.IsServerConfigModified(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs) {
+	if cluster.IsConfigModified(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster) {
 		// update serverConfig
-		requeue, err := r.updateServerConfigs(ctx, ct, rr)
+		requeue, err := r.updateClusterConfig(ctx, ct, rr)
 		if err != nil {
-			r.Recorder.Event(ct, "Warning", "Update serverConfigs", err.Error())
+			r.Recorder.Event(ct, "Warning", "Update cluster", err.Error())
 			return false, ctrl.Result{}, err
 		}
 		if requeue {

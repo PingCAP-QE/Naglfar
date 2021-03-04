@@ -22,76 +22,13 @@ import (
 	"github.com/PingCAP-QE/Naglfar/pkg/tiup"
 )
 
-func setPumpConfig(spec *tiupSpec.Specification, pumpConfig string, index int) error {
-	unmarshalPumpConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
+func generateConfig(configStr string) (map[string]interface{}, error) {
+	config := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(configStr), &config)
+	if err != nil {
+		return nil, err
 	}
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		pumpConfig,
-	}} {
-		err := unmarshalPumpConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.PumpServers[index].Config = config
-	return nil
-}
-
-func setTiFlashConfig(spec *tiupSpec.Specification, tiflashConfig string, index int) error {
-	unmarshalTiFlashConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		tiflashConfig,
-	}} {
-		err := unmarshalTiFlashConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.TiFlashServers[index].Config = config
-	return nil
-}
-
-func setTiFlashLearnerConfig(spec *tiupSpec.Specification, tiflashLearnerConfig string, index int) error {
-	unmarshalTiFlashLearnerConfigToMap := func(data []byte, object *map[string]interface{}) error {
-		err := yaml.Unmarshal(data, object)
-		return err
-	}
-	var (
-		config = make(map[string]interface{})
-	)
-	for _, item := range []struct {
-		object *map[string]interface{}
-		config string
-	}{{
-		&config,
-		tiflashLearnerConfig,
-	}} {
-		err := unmarshalTiFlashLearnerConfigToMap([]byte(item.config), item.object)
-		if err != nil {
-			return err
-		}
-	}
-	spec.TiFlashServers[index].LearnerConfig = config
-	return nil
+	return config, nil
 }
 
 func setDrainerConfig(spec *tiupSpec.Specification, drainerConfig string, index int, clusterIPMaps ...map[string]string) error {
@@ -162,8 +99,31 @@ func setServerConfigs(spec *tiupSpec.Specification, serverConfigs naglfarv1.Serv
 func IsUpgraded(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
 	return pre.Version.Version != cur.Version.Version
 }
-func IsServerConfigModified(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) bool {
-	return !reflect.DeepEqual(pre, cur)
+
+func IsConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
+	if !reflect.DeepEqual(pre.ServerConfigs, cur.ServerConfigs) {
+		return true
+	}
+	checkComponents := []string{naglfarv1.TiDBField, naglfarv1.PDField, naglfarv1.TiKVField}
+	preVal := reflect.ValueOf(*pre)
+	curVal := reflect.ValueOf(*cur)
+	for i := 0; i < len(checkComponents); i++ {
+		preField := preVal.FieldByName(checkComponents[i])
+		curField := curVal.FieldByName(checkComponents[i])
+		if !preField.IsValid() || !curField.IsValid() {
+			continue
+		}
+		for j := 0; j < preField.Len(); j++ {
+			for k := 0; k < curField.Len(); k++ {
+				if preField.Index(j).FieldByName("Host").String() == curField.Index(k).FieldByName("Host").String() {
+					if !reflect.DeepEqual(preField.Index(j).FieldByName(naglfarv1.ConfigField).Interface(), curField.Index(k).FieldByName(naglfarv1.ConfigField).Interface()) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 func IsClusterConfigModified(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) bool {
@@ -207,7 +167,7 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 	if !exist {
 		return spec, nil, fmt.Errorf("control node not found: `%s`", ctf.TiDBCluster.Control)
 	}
-	for _, item := range ctf.TiDBCluster.TiDB {
+	for index, item := range ctf.TiDBCluster.TiDB {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("tidb node not found: `%s`", item.Host)
@@ -221,8 +181,15 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
+		config, err := generateConfig(item.Config)
+		if err != nil {
+			err = fmt.Errorf("set TiDbConfigs failed: %v", err)
+			return spec, nil, err
+		}
+		spec.TiDBServers[index].Config = config
+
 	}
-	for _, item := range ctf.TiDBCluster.TiKV {
+	for index, item := range ctf.TiDBCluster.TiKV {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("tikv node not found: `%s`", item.Host)
@@ -237,8 +204,14 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
+		config, err := generateConfig(item.Config)
+		if err != nil {
+			err = fmt.Errorf("set TiKVConfigs failed: %v", err)
+			return spec, nil, err
+		}
+		spec.TiKVServers[index].Config = config
 	}
-	for _, item := range ctf.TiDBCluster.PD {
+	for index, item := range ctf.TiDBCluster.PD {
 		node, exist := resourceMaps[item.Host]
 		if !exist {
 			return spec, nil, fmt.Errorf("pd node not found: `%s`", item.Host)
@@ -253,6 +226,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:          item.LogDir,
 			ResourceControl: meta.ResourceControl{},
 		})
+		config, err := generateConfig(item.Config)
+		if err != nil {
+			err = fmt.Errorf("set PDConfigs failed: %v", err)
+			return spec, nil, err
+		}
+		spec.PDServers[index].Config = config
 	}
 	for index, item := range ctf.TiDBCluster.Pump {
 		node, exist := resourceMaps[item.Host]
@@ -266,10 +245,12 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			DeployDir: item.DeployDir,
 			DataDir:   item.DataDir,
 		})
-		if err := setPumpConfig(&spec, ctf.TiDBCluster.Pump[index].Config, index); err != nil {
+		config, err := generateConfig(item.Config)
+		if err != nil {
 			err = fmt.Errorf("set PumpConfigs failed: %v", err)
 			return spec, nil, err
 		}
+		spec.PumpServers[index].Config = config
 	}
 	for index, item := range ctf.TiDBCluster.Drainer {
 		node, exist := resourceMaps[item.Host]
@@ -351,14 +332,18 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			LogDir:               item.LogDir,
 			ResourceControl:      meta.ResourceControl{},
 		})
-		if err := setTiFlashConfig(&spec, ctf.TiDBCluster.TiFlash[index].Config, index); err != nil {
+		config, err := generateConfig(item.Config)
+		if err != nil {
 			err = fmt.Errorf("set TiFlashConfigs failed: %v", err)
 			return spec, nil, err
 		}
-		if err := setTiFlashLearnerConfig(&spec, ctf.TiDBCluster.TiFlash[index].LearnerConfig, index); err != nil {
+		spec.TiFlashServers[index].Config = config
+		learnerConfig, err := generateConfig(item.LearnerConfig)
+		if err != nil {
 			err = fmt.Errorf("set TiFlashLearnerConfigs failed: %v", err)
 			return spec, nil, err
 		}
+		spec.TiFlashServers[index].LearnerConfig = learnerConfig
 	}
 
 	// set default values from tag
@@ -425,7 +410,7 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 		return err
 	}
 
-	roles := c.diffServerConfigs(ct.Status.PreTiDBCluster.ServerConfigs, ct.Spec.TiDBCluster.ServerConfigs)
+	roles := c.diffTiDBClusterConfig(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
 
 	log.Info("RequestTopology is modified.", "changed roles", roles)
 
@@ -613,15 +598,15 @@ func (c *ClusterManager) UninstallCluster(clusterName string) error {
 	return nil
 }
 
-func (c *ClusterManager) diffServerConfigs(pre naglfarv1.ServerConfigs, cur naglfarv1.ServerConfigs) []string {
+func (c *ClusterManager) diffTiDBClusterConfig(pre *naglfarv1.TiDBCluster, cur *naglfarv1.TiDBCluster) []string {
 	var roles []string
-	if !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
+	if !reflect.DeepEqual(pre.ServerConfigs.TiDB, cur.ServerConfigs.TiDB) || !reflect.DeepEqual(pre.TiDB, cur.TiDB) {
 		roles = append(roles, "tidb")
 	}
-	if !reflect.DeepEqual(pre.PD, cur.PD) {
+	if !reflect.DeepEqual(pre.ServerConfigs.PD, cur.ServerConfigs.PD) || !reflect.DeepEqual(pre.PD, cur.PD) {
 		roles = append(roles, "pd")
 	}
-	if !reflect.DeepEqual(pre.TiKV, cur.TiKV) {
+	if !reflect.DeepEqual(pre.ServerConfigs.TiKV, cur.ServerConfigs.TiKV) || !reflect.DeepEqual(pre.TiKV, cur.TiKV) {
 		roles = append(roles, "tikv")
 	}
 	return roles
