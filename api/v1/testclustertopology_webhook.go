@@ -327,9 +327,7 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 					// config is allowed to be updated
 					var result []diff.Change
 					for i := 0; i < len(changelog); i++ {
-						if changelog[i].Path[0] != ConfigField {
-							result = append(result, changelog[i])
-						}
+						result = append(result, changelog[i])
 					}
 					if len(result) != 0 {
 						return fmt.Errorf("immutable field %s is changed %v", checkComponents[i], changelog)
@@ -341,6 +339,8 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 	return nil
 }
 
+// IsComponentsConfigModified checks whether a component config is changed
+// it's unused since we forbid to update a component config currently.
 func IsComponentsConfigModified(pre *TiDBCluster, cur *TiDBCluster) bool {
 	checkComponents := []string{TiDBField, PDField, TiKVField}
 	preVal := reflect.ValueOf(*pre)
@@ -371,7 +371,7 @@ func checkAtMostOneKindUpdation(pre *TiDBCluster, cur *TiDBCluster) error {
 		updatedModules++
 		modules = append(modules, "scale-in/out")
 	}
-	if IsServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) || IsComponentsConfigModified(pre, cur) {
+	if IsServerConfigModified(&pre.ServerConfigs, &cur.ServerConfigs) {
 		updatedModules++
 		modules = append(modules, "server/component config update")
 	}
