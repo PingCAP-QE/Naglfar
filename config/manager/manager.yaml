@@ -27,8 +27,8 @@ spec:
         - /manager
         args:
         - --enable-leader-election
-        image: hub.pingcap.net/mahjonp/naglfar:237515
-        imagePullPolicy: Always
+        image: naglfar:latest
+        imagePullPolicy: IfNotPresent
         name: manager
         resources:
           requests:
