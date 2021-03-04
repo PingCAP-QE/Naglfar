@@ -1,32 +1,49 @@
-# Use phusion/baseimage as base image. To make your builds reproducible, make
-# sure you lock down to a specific version, not to `latest`!
-# See https://github.com/phusion/baseimage-docker/blob/master/Changelog.md for
-# a list of version numbers.
-FROM phusion/baseimage:18.04-1.0.0
+FROM centos:7
 
-RUN apt-get update && \
-    apt-get -qy install systemd sudo iputils-ping iproute2 mysql-client vim tzdata
+ENV container docker
+RUN (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+rm -f /lib/systemd/system/multi-user.target.wants/*;\
+rm -f /etc/systemd/system/*.wants/*;\
+rm -f /lib/systemd/system/local-fs.target.wants/*; \
+rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+rm -f /lib/systemd/system/basic.target.wants/*;\
+rm -f /lib/systemd/system/anaconda.target.wants/*;
+
+RUN yum update -y && \
+    yum install -y sudo mysql vim iproute tzdata \
+        gdb perf \
+        openssh openssh-server openssh-clients && \
+    debuginfo-install -y glibc libgcc && \
+    sed -e 's/#PermitRootLogin yes/PermitRootLogin yes/g' \
+      -i /etc/ssh/sshd_config && \
+    systemctl enable sshd.service
+
+RUN yum install -y centos-release-scl-rh
+RUN yum install -y devtoolset-8-build devtoolset-8-gdb
+
+WORKDIR /root
+
+# Set ssh authorized_keys
+RUN mkdir -p /root/.ssh && echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDVmzBG5v7cO9IScGLIzlhGlHNFhXzy87VfaPzru7qnIIdQ1e9FEKvtqEws8hVixnCUdviwX5lvcMk4Ef4Tbrmj3dyF0zFtYbjiTSyl/XQlF68DQlc2sTAdHy96wJHvh7ky511tKJzzyWwSqeef4WjeVK28TqcGnq1up0S7saFO0dJh6OfDAg2cDmhyweR3VgT0vZJyrDV7hte95MBCdK+Gp7fdCyEZcWm3S1DBFaeBqHzzt/Y/njAVKbYL9TIVPum8iMg0rMiLi9ShfP+dT5Xud5Oa3dcN2OWhiDfJw5pfhFJWd44cJ/uGRwQpvNs/PNKsYABhgLlTMUH4iawhu1Xb' >> ~/.ssh/authorized_keys
+
+# Install insecure key
+COPY insecure_key /root/insecure_key
+RUN chmod 600 /root/insecure_key
 
 # Set TimeZone
 ENV TZ Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Clean up APT when done.
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Enable ssh
-RUN rm -f /etc/service/sshd/down
-RUN /etc/my_init.d/00_regen_ssh_host_keys.sh
-# Install insecure key
-RUN /usr/sbin/enable_insecure_key
-COPY insecure_key /root/insecure_key
-RUN chmod 600 /root/insecure_key
-
-# see https://github.com/moby/moby/issues/4040#issuecomment-339022455
-RUN cp /bin/true /sbin/agetty
+# See https://github.com/moby/moby/issues/4040#issuecomment-339022455
+RUN sudo cp /bin/true /sbin/agetty
 RUN rm -rf /lib/systemd/system/getty@.service
+RUN rm -rf /usr/lib/systemd/system/getty@.service
 
 # Install tiup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
 
-CMD ["/bin/systemd"]
+EXPOSE 22
+ENV PATH="/root/.tiup/bin:/opt/rh/devtoolset-8/root/usr/bin:${PATH}"
+VOLUME [ "/sys/fs/cgroup" ]
+CMD ["/usr/sbin/init"]
