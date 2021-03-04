@@ -228,7 +228,7 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 		}
 		for i := 0; i < components.Len(); i++ {
 			for j := 0; j < len(val); j++ {
-				if components.Index(i).FieldByName(val[j]).String() == "" && cur.Global == nil {
+				if components.Index(i).FieldByName(val[j]).String() == "" {
 					tmp := strings.ToLower(key) + "[" + strconv.Itoa(i) + "]"
 					tips = append(tips, strings.Join([]string{prefix, tmp, val[j]}, "."))
 					continue
