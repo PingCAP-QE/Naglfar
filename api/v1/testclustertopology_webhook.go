@@ -210,7 +210,7 @@ func checkSimultaneousScaleOutAndScaleIn(pre *TiDBCluster, cur *TiDBCluster) err
 // getEmptyRequiredFields return which required fields are empty
 func getEmptyRequiredFields(cur *TiDBCluster) []string {
 	var tips []string
-	if cur.Global != nil && cur.Global.DeployDir != "" && cur.Global.DataDir != "" {
+	if cur.Global != nil {
 		return tips
 	}
 	curVal := reflect.ValueOf(*cur)
@@ -228,14 +228,10 @@ func getEmptyRequiredFields(cur *TiDBCluster) []string {
 		}
 		for i := 0; i < components.Len(); i++ {
 			for j := 0; j < len(val); j++ {
-				if components.Index(i).FieldByName(val[j]).String() == "" && curVal.FieldByName("Global").IsNil() {
+				if components.Index(i).FieldByName(val[j]).String() == "" && cur.Global == nil {
 					tmp := strings.ToLower(key) + "[" + strconv.Itoa(i) + "]"
 					tips = append(tips, strings.Join([]string{prefix, tmp, val[j]}, "."))
 					continue
-				}
-				if components.Index(i).FieldByName(val[j]).String() == "" && curVal.FieldByName("Global").FieldByName(val[j]).String() == "" {
-					tmp := strings.ToLower(key) + "[" + strconv.Itoa(i) + "]"
-					tips = append(tips, strings.Join([]string{prefix, tmp, val[j]}, "."))
 				}
 			}
 		}
@@ -303,6 +299,10 @@ func checkVersionDownloadURLModified(pre *TiDBCluster, cur *TiDBCluster) error {
 
 // checkImmutableFieldChanged check if immutable fields are changed, like spec.tidbCluster.tidb[i].dataDir
 func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
+	type ServerEntry interface {
+		EntryID() string
+	}
+
 	checkComponents := []string{TiDBField, PDField, TiKVField}
 	preTiDBCluster := reflect.ValueOf(*pre)
 	curTiDBCluster := reflect.ValueOf(*cur)
@@ -314,10 +314,12 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 		}
 		for j := 0; j < preComponents.Len(); j++ {
 			for k := 0; k < curComponents.Len(); k++ {
-				if preComponents.Index(j).FieldByName("Host").String() == curComponents.Index(k).FieldByName("Host").String() {
-					preComponent := preComponents.Index(j).Interface()
-					curComponent := curComponents.Index(k).Interface()
+				preComponent := preComponents.Index(j).Interface()
+				curComponent := curComponents.Index(k).Interface()
+				preEntryID := preComponent.(ServerEntry).EntryID()
+				curEntryID := curComponent.(ServerEntry).EntryID()
 
+				if preEntryID == curEntryID {
 					changelog, err := diff.Diff(preComponent, curComponent)
 					if err != nil {
 						return err
@@ -330,7 +332,7 @@ func checkImmutableFieldChanged(pre *TiDBCluster, cur *TiDBCluster) error {
 						}
 					}
 					if len(result) != 0 {
-						return fmt.Errorf("immutable field is changed %v", changelog)
+						return fmt.Errorf("immutable field %s is changed %v", checkComponents[i], changelog)
 					}
 				}
 			}

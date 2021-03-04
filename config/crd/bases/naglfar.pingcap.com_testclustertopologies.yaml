@@ -65,8 +65,6 @@ spec:
                       webPort:
                         type: integer
                     required:
-                    - dataDir
-                    - deployDir
                     - host
                     type: object
                   type: array
@@ -76,8 +74,10 @@ spec:
                 global:
                   properties:
                     dataDir:
+                      minLength: 1
                       type: string
                     deployDir:
+                      minLength: 1
                       type: string
                   required:
                   - dataDir
@@ -207,6 +207,25 @@ spec:
               type: string
             tidbCluster:
               properties:
+                alertmanager_servers:
+                  items:
+                    properties:
+                      clusterPort:
+                        type: integer
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      webPort:
+                        type: integer
+                    required:
+                    - host
+                    type: object
+                  type: array
                 cdc:
                   items:
                     properties:
@@ -253,8 +272,10 @@ spec:
                 global:
                   properties:
                     dataDir:
+                      minLength: 1
                       type: string
                     deployDir:
+                      minLength: 1
                       type: string
                   required:
                   - dataDir
@@ -328,7 +349,6 @@ spec:
                       peerPort:
                         type: integer
                     required:
-                    - deployDir
                     - host
                     type: object
                   type: array
@@ -348,7 +368,6 @@ spec:
                       sshPort:
                         type: integer
                     required:
-                    - dataDir
                     - host
                     type: object
                   type: array
@@ -378,7 +397,6 @@ spec:
                       statusPort:
                         type: integer
                     required:
-                    - deployDir
                     - host
                     type: object
                   type: array
@@ -434,8 +452,6 @@ spec:
                       statusPort:
                         type: integer
                     required:
-                    - dataDir
-                    - deployDir
                     - host
                     type: object
                   type: array
@@ -470,6 +486,25 @@ spec:
                 to see if the TestClusterTopology has been changed and what has been
                 changed
               properties:
+                alertmanager_servers:
+                  items:
+                    properties:
+                      clusterPort:
+                        type: integer
+                      dataDir:
+                        type: string
+                      deployDir:
+                        type: string
+                      host:
+                        type: string
+                      logDir:
+                        type: string
+                      webPort:
+                        type: integer
+                    required:
+                    - host
+                    type: object
+                  type: array
                 cdc:
                   items:
                     properties:
@@ -516,8 +551,10 @@ spec:
                 global:
                   properties:
                     dataDir:
+                      minLength: 1
                       type: string
                     deployDir:
+                      minLength: 1
                       type: string
                   required:
                   - dataDir
@@ -591,7 +628,6 @@ spec:
                       peerPort:
                         type: integer
                     required:
-                    - deployDir
                     - host
                     type: object
                   type: array
@@ -611,7 +647,6 @@ spec:
                       sshPort:
                         type: integer
                     required:
-                    - dataDir
                     - host
                     type: object
                   type: array
@@ -641,7 +676,6 @@ spec:
                       statusPort:
                         type: integer
                     required:
-                    - deployDir
                     - host
                     type: object
                   type: array
@@ -697,8 +731,6 @@ spec:
                       statusPort:
                         type: integer
                     required:
-                    - dataDir
-                    - deployDir
                     - host
                     type: object
                   type: array

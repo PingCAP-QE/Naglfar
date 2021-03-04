@@ -15,6 +15,7 @@
 package v1
 
 import (
+	"fmt"
 	"reflect"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,10 +61,15 @@ type TiDBSpec struct {
 	// +optional
 	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
 
-	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
+	// +optional
+	DeployDir string `json:"deployDir,omitempty" yaml:"deploy_dir"`
 
 	// +optional
 	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
+}
+
+func (t TiDBSpec) EntryID() string {
+	return fmt.Sprintf("%s:%d", t.Host, t.Port)
 }
 
 type PDSpec struct {
@@ -75,12 +81,16 @@ type PDSpec struct {
 	PeerPort int `json:"peerPort,omitempty" yaml:"peer_port,omitempty"`
 	// +optional
 	Config string `json:"config,omitempty"  yaml:"config,omitempty"`
-
-	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
-	DataDir   string `json:"dataDir,omitempty" yaml:"data_dir,omitempty"`
-
+	// +optional
+	DeployDir string `json:"deployDir,omitempty" yaml:"deploy_dir"`
+	// +optional
+	DataDir string `json:"dataDir,omitempty" yaml:"data_dir,omitempty"`
 	// +optional
 	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
+}
+
+func (t PDSpec) EntryID() string {
+	return fmt.Sprintf("%s-%d", t.Host, t.ClientPort)
 }
 
 type TiKVSpec struct {
@@ -91,13 +101,19 @@ type TiKVSpec struct {
 	// +optional
 	StatusPort int `json:"statusPort,omitempty" yaml:"status_port,omitempty"`
 	// +optional
-	Config string `json:"config,omitempty"  yaml:"config,omitempty"`
+	Config string `json:"config,omitempty" yaml:"config,omitempty"`
 
-	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
-	DataDir   string `json:"dataDir" yaml:"data_dir"`
+	// +optional
+	DeployDir string `json:"deployDir,omitempty" yaml:"deploy_dir,omitempty"`
+	// +optional
+	DataDir string `json:"dataDir,omitempty" yaml:"data_dir,omitempty"`
 
 	// +optional
 	LogDir string `json:"logDir,omitempty" yaml:"log_dir,omitempty"`
+}
+
+func (t TiKVSpec) EntryID() string {
+	return fmt.Sprintf("%s-%d", t.Host, t.Port)
 }
 
 type PumpSpec struct {
@@ -106,9 +122,12 @@ type PumpSpec struct {
 	// +optional
 	Port int `json:"port,omitempty"`
 	// +optional
-	DeployDir string `json:"deployDir"`
-	DataDir   string `json:"dataDir"`
-	Config    string `json:"config,omitempty"`
+	DeployDir string `json:"deployDir,omitempty" yaml:"deploy_dir,omitempty"`
+	// +optional
+	DataDir string `json:"dataDir,omitempty" yaml:"data_dir,omitempty"`
+
+	// +optional
+	Config string `json:"config,omitempty"`
 }
 
 type DrainerSpec struct {
@@ -170,8 +189,11 @@ type GrafanaSpec struct {
 }
 
 type Global struct {
+	// +kubebuilder:validation:MinLength=1
 	DeployDir string `json:"deployDir" yaml:"deploy_dir"`
-	DataDir   string `json:"dataDir" yaml:"data_dir"`
+
+	// +kubebuilder:validation:MinLength=1
+	DataDir string `json:"dataDir" yaml:"data_dir"`
 }
 
 type CDCSpec struct {
@@ -226,6 +248,9 @@ type TiDBCluster struct {
 
 	// +optional
 	Grafana []GrafanaSpec `json:"grafana,omitempty"`
+
+	// +optional
+	AlertManager []AlertManagerSpec `json:"alertmanager_servers,omitempty"`
 
 	// +optional
 	CDC []CDCSpec `json:"cdc,omitempty"`
@@ -295,15 +320,14 @@ type DMServerConfigs struct {
 
 type AlertManagerSpec struct {
 	Host string `json:"host"`
-
 	// +optional
 	WebPort int `json:"webPort,omitempty"`
 	// +optional
 	ClusterPort int `json:"clusterPort,omitempty"`
-
-	DeployDir string `json:"deployDir"`
-	DataDir   string `json:"dataDir"`
-
+	// +optional
+	DeployDir string `json:"deployDir,omitempty"`
+	// +optional
+	DataDir string `json:"dataDir,omitempty"`
 	// +optional
 	LogDir string `json:"logDir,omitempty"`
 }
