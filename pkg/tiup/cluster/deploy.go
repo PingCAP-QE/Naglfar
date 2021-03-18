@@ -361,7 +361,9 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 	}
 
 	// set default values from tag
-	defaults.Set(&spec)
+	if err := defaults.Set(&spec); err != nil {
+		panic(err)
+	}
 	return
 }
 
@@ -678,15 +680,15 @@ func (c *ClusterManager) deployCluster(log logr.Logger, clusterName string, vers
 	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster deploy -y %s %s /root/topology.yaml -i %s", clusterName, version, tiup.InsecureKeyPath)
 	stdStr, errStr, err := client.RunCommand(cmd)
 	if err != nil {
+		if strings.Contains(errStr, "specify another cluster name") {
+			return tiup.ErrClusterDuplicated{ClusterName: clusterName}
+		}
 		log.Error(err, "run command on remote failed",
 			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
 			"command", cmd,
 			"stdout", stdStr,
 			"stderr", errStr)
-		if strings.Contains(errStr, "specify another cluster name") {
-			return tiup.ErrClusterDuplicated{ClusterName: clusterName}
-		}
-		return fmt.Errorf("deploy cluster failed(%s): %s", err, errStr)
+		return fmt.Errorf("deploy cluster failed(%s): %s\n\n%s", err, stdStr, errStr)
 	}
 	return nil
 }
