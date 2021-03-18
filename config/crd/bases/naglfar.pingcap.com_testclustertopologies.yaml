@@ -468,6 +468,7 @@ spec:
                     tikvDownloadURL:
                       type: string
                     version:
+                      minLength: 1
                       type: string
                   required:
                   - version
@@ -747,6 +748,7 @@ spec:
                     tikvDownloadURL:
                       type: string
                     version:
+                      minLength: 1
                       type: string
                   required:
                   - version

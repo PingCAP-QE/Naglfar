@@ -32,6 +32,7 @@ const (
 
 // TODO: add a deploy version spec: clusterName, base version, component versions(for PR and self build version) etc.
 type TiDBClusterVersion struct {
+	// +kubebuilder:validation:MinLength=1
 	Version string `json:"version"`
 	// +optional
 	TiDBDownloadURL string `json:"tidbDownloadURL,omitempty"`
