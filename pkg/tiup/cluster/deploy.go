@@ -361,7 +361,9 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 	}
 
 	// set default values from tag
-	defaults.Set(&spec)
+	if err := defaults.Set(&spec); err != nil {
+		panic(err)
+	}
 	return
 }
 
