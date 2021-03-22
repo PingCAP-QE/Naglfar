@@ -211,6 +211,9 @@ type CDCSpec struct {
 
 type TiDBCluster struct {
 	// +optional
+	TiUPMirror string `json:"tiupMirror,omitempty"`
+
+	// +optional
 	UpgradePolicy string `json:"upgradePolicy,omitempty"`
 
 	Version TiDBClusterVersion `json:"version"`

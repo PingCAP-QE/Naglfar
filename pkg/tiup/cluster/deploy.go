@@ -388,13 +388,18 @@ func MakeClusterManager(log logr.Logger, ctf *naglfarv1.TestClusterTopologySpec,
 	}, nil
 }
 
-func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, version naglfarv1.TiDBClusterVersion) error {
+func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, version naglfarv1.TiDBClusterVersion, tiupMirror string) error {
 	outfile, err := yaml.Marshal(c.spec)
 	if err != nil {
 		return err
 	}
 	if err := c.writeTopologyFileOnControl(outfile); err != nil {
 		return err
+	}
+	if strings.TrimSpace(tiupMirror) != "" {
+		if err := c.setTiUPMirror(log, tiupMirror); err != nil {
+			return err
+		}
 	}
 	if err := c.deployCluster(log, clusterName, version.Version); tiup.IgnoreClusterDuplicated(err) != nil {
 		return err
@@ -667,6 +672,25 @@ func (c *ClusterManager) writeTemporaryTopologyMetaOnControl(out []byte, cluster
 
 	if err := client.Copy(bytes.NewReader(out), "/tmp/meta.yaml", "0655", int64(len(out))); err != nil {
 		return fmt.Errorf("error while copying file: %s", err)
+	}
+	return nil
+}
+
+func (c *ClusterManager) setTiUPMirror(log logr.Logger, tiupMirror string) error {
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup mirror set %s", tiupMirror)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return fmt.Errorf("deploy cluster failed(%s): %s\n\n%s", err, stdStr, errStr)
 	}
 	return nil
 }
