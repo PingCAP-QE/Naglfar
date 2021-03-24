@@ -455,6 +455,8 @@ spec:
                     - host
                     type: object
                   type: array
+                tiupMirror:
+                  type: string
                 upgradePolicy:
                   type: string
                 version:
@@ -735,6 +737,8 @@ spec:
                     - host
                     type: object
                   type: array
+                tiupMirror:
+                  type: string
                 upgradePolicy:
                   type: string
                 version:

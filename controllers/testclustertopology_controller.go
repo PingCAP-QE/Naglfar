@@ -261,7 +261,7 @@ func (r *TestClusterTopologyReconciler) installTiDBCluster(ctx context.Context, 
 	if err != nil {
 		return false, err
 	}
-	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version)
+	return false, tiupCtl.InstallCluster(log, ct.Name, ct.Spec.TiDBCluster.Version, ct.Spec.TiDBCluster.TiUPMirror)
 }
 
 func (r *TestClusterTopologyReconciler) upgradeTiDBCluster(ctx context.Context, ct *naglfarv1.TestClusterTopology, rr *naglfarv1.TestResourceRequest) (requeue bool, err error) {
