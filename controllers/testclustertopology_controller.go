@@ -753,7 +753,7 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 			requeue = true
 			if resource.Status.Image == "" {
 				resource.Status.Image = tiup.ContainerImage
-				resource.Status.CapAdd = []string{"SYS_ADMIN", "SYS_PTRACE"}
+				resource.Status.CapAdd = []string{"SYS_ADMIN", "SYS_PTRACE", "NET_ADMIN"}
 				resource.Status.Binds = append(resource.Status.Binds, "/sys/fs/cgroup:/sys/fs/cgroup:ro")
 				resource.Status.ExposedPorts = exposedPortIndexer[resource.Name]
 				err := r.Status().Update(ctx, resource)

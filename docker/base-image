@@ -14,6 +14,7 @@ RUN yum update -y && \
     yum install -y sudo mysql vim iproute tzdata \
         gdb perf \
         openssh openssh-server openssh-clients && \
+    yum install -y iptables ipset iproute2 && \
     debuginfo-install -y glibc libgcc && \
     sed -e 's/#PermitRootLogin yes/PermitRootLogin yes/g' \
       -i /etc/ssh/sshd_config && \
