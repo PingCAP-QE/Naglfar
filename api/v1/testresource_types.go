@@ -259,10 +259,17 @@ func (r *TestResource) ContainerConfig(binding *ResourceBinding) (*container.Con
 	for _, item := range r.Status.ExposedPorts {
 		exposedPorts[nat.Port(item)] = struct{}{}
 	}
+	var entrypoint []string
+	var cmd []string
+	if len(r.Status.Command) != 0 {
+		entrypoint = r.Status.Command[:1]
+		cmd = r.Status.Command[1:]
+	}
 	config := &container.Config{
 		Hostname:     r.Status.HostName,
 		Image:        r.Status.Image,
-		Cmd:          r.Status.Command,
+		Entrypoint:   entrypoint,
+		Cmd:          cmd,
 		Env:          r.Status.Envs,
 		ExposedPorts: exposedPorts,
 	}

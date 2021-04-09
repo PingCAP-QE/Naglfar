@@ -478,6 +478,8 @@ spec:
                                   base version, component versions(for PR and self
                                   build version) etc.'
                                 properties:
+                                  patchPolicy:
+                                    type: string
                                   pdDownloadURL:
                                     type: string
                                   tidbDownloadURL:
@@ -762,6 +764,8 @@ spec:
                                   base version, component versions(for PR and self
                                   build version) etc.'
                                 properties:
+                                  patchPolicy:
+                                    type: string
                                   pdDownloadURL:
                                     type: string
                                   tidbDownloadURL:

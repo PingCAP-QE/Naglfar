@@ -24,10 +24,14 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type PatchPolicy string
+
 const (
 	ClusterTopologyStatePending  ClusterTopologyState = "pending"
 	ClusterTopologyStateReady    ClusterTopologyState = "ready"
 	ClusterTopologyStateUpdating ClusterTopologyState = "updating"
+	PatchPolicyReplace                                = PatchPolicy("Replace")
+	PatchPolicyPatch                                  = PatchPolicy("Patch")
 )
 
 // TODO: add a deploy version spec: clusterName, base version, component versions(for PR and self build version) etc.
@@ -40,6 +44,8 @@ type TiDBClusterVersion struct {
 	TiKVDownloadURL string `json:"tikvDownloadURL,omitempty"`
 	// +optional
 	PDDownloadURL string `json:"pdDownloadURL,omitempty"`
+	// +optional
+	PatchPolicy PatchPolicy `json:"patchPolicy,omitempty"`
 }
 
 type ServerConfigs struct {
