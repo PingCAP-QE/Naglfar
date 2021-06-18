@@ -419,6 +419,12 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 }
 
 func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology) error {
+	roles := c.diffTiDBClusterConfig(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
+	if len(roles) == 0 {
+		return nil
+	}
+
+	log.Info("RequestTopology is modified.", "changed roles", roles)
 	type Meta struct {
 		User        string `json:"user,omitempty"`
 		TiDBVersion string `yaml:"tidb_version" json:"tidb_version,omitempty"`
@@ -436,10 +442,6 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 		return err
 	}
 
-	roles := c.diffTiDBClusterConfig(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
-
-	log.Info("RequestTopology is modified.", "changed roles", roles)
-
 	if err := c.reloadCluster(clusterName, []string{}, roles); err != nil {
 		return err
 	}
@@ -447,6 +449,14 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 }
 
 func (c *ClusterManager) UpgradeCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
+	currentVersion, err := c.GetClusterVersion(log, clusterName, ct)
+	if err != nil {
+		return err
+	}
+	if currentVersion == ct.Spec.TiDBCluster.Version.Version {
+		log.Info("cluster is already updated", "cluster_name", clusterName, "version", ct.Spec.TiDBCluster.Version.Version)
+		return nil
+	}
 	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
@@ -470,6 +480,27 @@ func (c *ClusterManager) UpgradeCluster(log logr.Logger, clusterName string, ct 
 		return fmt.Errorf("upgrade cluster failed(%s): %s", err, errStr)
 	}
 	return nil
+}
+
+func (c *ClusterManager) GetClusterVersion(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology) (string, error) {
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster display %s | grep 'Cluster version' | awk -F ':' '{print $2}'", clusterName)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return "", fmt.Errorf("get cluster version failed(%s): %s", err, errStr)
+	}
+	log.Info("cluster version inspect", "version", strings.TrimSpace(stdStr))
+	return strings.TrimSpace(stdStr), nil
 }
 
 func (c *ClusterManager) ScaleInCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
@@ -753,7 +784,7 @@ func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles
 		roleStr += " -R " + roles[i]
 	}
 	moveCmd := fmt.Sprintf("mv /tmp/meta.yaml /root/.tiup/storage/cluster/clusters/" + clusterName + "/meta.yaml")
-	reloadCmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload %s %s --ignore-config-check", clusterName, roleStr)
+	reloadCmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload -y %s %s --ignore-config-check", clusterName, roleStr)
 	combineCmd := moveCmd + ";" + reloadCmd
 	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`, combineCmd)
 	stdStr, errStr, err := client.RunCommand(cmd)
