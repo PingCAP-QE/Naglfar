@@ -340,7 +340,7 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			FlashServicePort:     item.ServicePort,
 			FlashProxyPort:       item.ProxyPort,
 			FlashProxyStatusPort: item.ProxyStatusPort,
-			StatusPort:           item.ProxyStatusPort,
+			StatusPort:           item.MetricsPort,
 			DeployDir:            item.DeployDir,
 			DataDir:              item.DataDir,
 			LogDir:               item.LogDir,
@@ -404,16 +404,27 @@ func (c *ClusterManager) InstallCluster(log logr.Logger, clusterName string, ver
 	if err := c.deployCluster(log, clusterName, version.Version); tiup.IgnoreClusterDuplicated(err) != nil {
 		return err
 	}
+	if c.shouldPatch(version) && version.PatchPolicy == naglfarv1.PatchPolicyReplace {
+		if err := c.replace(clusterName, version); err != nil {
+			return err
+		}
+	}
 	if err := c.startCluster(clusterName); err != nil {
 		return err
 	}
-	if c.shouldPatch(version) {
+	if c.shouldPatch(version) && (version.PatchPolicy == naglfarv1.PatchPolicyPatch || version.PatchPolicy == "") {
 		return c.patch(clusterName, version)
 	}
 	return nil
 }
 
 func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology) error {
+	roles := c.diffTiDBClusterConfig(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
+	if len(roles) == 0 {
+		return nil
+	}
+
+	log.Info("RequestTopology is modified.", "changed roles", roles)
 	type Meta struct {
 		User        string `json:"user,omitempty"`
 		TiDBVersion string `yaml:"tidb_version" json:"tidb_version,omitempty"`
@@ -431,10 +442,6 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 		return err
 	}
 
-	roles := c.diffTiDBClusterConfig(ct.Status.PreTiDBCluster, ct.Spec.TiDBCluster)
-
-	log.Info("RequestTopology is modified.", "changed roles", roles)
-
 	if err := c.reloadCluster(clusterName, []string{}, roles); err != nil {
 		return err
 	}
@@ -442,6 +449,14 @@ func (c *ClusterManager) UpdateCluster(log logr.Logger, clusterName string, ct *
 }
 
 func (c *ClusterManager) UpgradeCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
+	currentVersion, err := c.GetClusterVersion(log, clusterName, ct)
+	if err != nil {
+		return err
+	}
+	if currentVersion == ct.Spec.TiDBCluster.Version.Version {
+		log.Info("cluster is already updated", "cluster_name", clusterName, "version", ct.Spec.TiDBCluster.Version.Version)
+		return nil
+	}
 	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
 	if err != nil {
 		return err
@@ -465,6 +480,27 @@ func (c *ClusterManager) UpgradeCluster(log logr.Logger, clusterName string, ct 
 		return fmt.Errorf("upgrade cluster failed(%s): %s", err, errStr)
 	}
 	return nil
+}
+
+func (c *ClusterManager) GetClusterVersion(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology) (string, error) {
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	cmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster display %s | grep 'Cluster version' | awk -F ':' '{print $2}'", clusterName)
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return "", fmt.Errorf("get cluster version failed(%s): %s", err, errStr)
+	}
+	log.Info("cluster version inspect", "version", strings.TrimSpace(stdStr))
+	return strings.TrimSpace(stdStr), nil
 }
 
 func (c *ClusterManager) ScaleInCluster(log logr.Logger, clusterName string, ct *naglfarv1.TestClusterTopology, clusterIPMaps map[string]string) error {
@@ -748,7 +784,7 @@ func (c *ClusterManager) reloadCluster(clusterName string, nodes []string, roles
 		roleStr += " -R " + roles[i]
 	}
 	moveCmd := fmt.Sprintf("mv /tmp/meta.yaml /root/.tiup/storage/cluster/clusters/" + clusterName + "/meta.yaml")
-	reloadCmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload %s %s --ignore-config-check", clusterName, roleStr)
+	reloadCmd := fmt.Sprintf("/root/.tiup/bin/tiup cluster reload -y %s %s --ignore-config-check", clusterName, roleStr)
 	combineCmd := moveCmd + ";" + reloadCmd
 	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`, combineCmd)
 	stdStr, errStr, err := client.RunCommand(cmd)
@@ -823,6 +859,105 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 			"stdout", stdStr,
 			"stderr", errStr)
 		return fmt.Errorf("patch cluster failed(%s): %s", err, errStr)
+	}
+	return nil
+}
+
+func (c *ClusterManager) replace(clusterName string, version naglfarv1.TiDBClusterVersion) error {
+	type component struct {
+		componentName string
+		downloadURL   string
+	}
+	client, err := sshUtil.NewSSHClient("root", tiup.InsecureKeyPath, c.control.HostIP, c.control.SSHPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	commands := []string{"set -ex", "rm -rf components && mkdir components"}
+	var patchComponents []component
+	var patchComponentNames []string
+	if version.TiDBDownloadURL != "" {
+		patchComponents = append(patchComponents, component{
+			componentName: "tidb-server",
+			downloadURL:   version.TiDBDownloadURL,
+		})
+		patchComponentNames = append(patchComponentNames, "tidb-server")
+	}
+	if version.TiKVDownloadURL != "" {
+		patchComponents = append(patchComponents, component{
+			componentName: "tikv-server",
+			downloadURL:   version.TiKVDownloadURL,
+		})
+		patchComponentNames = append(patchComponentNames, "tikv-server")
+	}
+	if version.PDDownloadURL != "" {
+		patchComponents = append(patchComponents, component{
+			componentName: "pd-server",
+			downloadURL:   version.PDDownloadURL,
+		})
+		patchComponentNames = append(patchComponentNames, "pd-server")
+	}
+	for _, component := range patchComponents {
+		downloadURL := component.downloadURL
+		u, err := url.Parse(downloadURL)
+		if err != nil {
+			return err
+		}
+		commands = append(commands, fmt.Sprintf(`curl -O %s`, downloadURL), c.GenUnzipCommand(path.Base(u.Path), "components"), fmt.Sprintf("rm -rf components/%s", component.componentName), fmt.Sprintf("mv components/bin/%s components/%s", component.componentName, component.componentName))
+	}
+	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`, strings.Join(commands, "\n"))
+	stdStr, errStr, err := client.RunCommand(cmd)
+	if err != nil {
+		c.log.Error(err, "run command on remote failed",
+			"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+			"command", cmd,
+			"stdout", stdStr,
+			"stderr", errStr)
+		return fmt.Errorf("patch cluster failed(%s): %s", err, errStr)
+	}
+	for _, component := range patchComponentNames {
+		component = strings.Split(component, "-server")[0]
+		switch component {
+		case "tidb":
+			for _, tidbServer := range c.spec.TiDBServers {
+				cmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i %s components/%s-server root@%s:%s/bin/%s-server", tiup.InsecureKeyPath, component, tidbServer.Host, tidbServer.DeployDir, component)
+				stdStr, errStr, err := client.RunCommand(cmd)
+				if err != nil {
+					c.log.Error(err, "run command on remote failed",
+						"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+						"command", cmd,
+						"stdout", stdStr,
+						"stderr", errStr)
+					return fmt.Errorf("patch cluster failed(%s): %s", err, errStr)
+				}
+			}
+		case "tikv":
+			for _, tikvServer := range c.spec.TiKVServers {
+				cmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i %s components/%s-server root@%s:%s/%s-server ", tiup.InsecureKeyPath, component, tikvServer.Host, tikvServer.DeployDir, component)
+				stdStr, errStr, err := client.RunCommand(cmd)
+				if err != nil {
+					c.log.Error(err, "run command on remote failed",
+						"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+						"command", cmd,
+						"stdout", stdStr,
+						"stderr", errStr)
+					return fmt.Errorf("patch cluster failed(%s): %s", err, errStr)
+				}
+			}
+		case "pd":
+			for _, pdServer := range c.spec.PDServers {
+				cmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i %s components/%s-server root@%s:%s/%s-server", tiup.InsecureKeyPath, component, pdServer.Host, pdServer.DeployDir, component)
+				stdStr, errStr, err := client.RunCommand(cmd)
+				if err != nil {
+					c.log.Error(err, "run command on remote failed",
+						"host", fmt.Sprintf("%s@%s:%d", "root", c.control.HostIP, c.control.SSHPort),
+						"command", cmd,
+						"stdout", stdStr,
+						"stderr", errStr)
+					return fmt.Errorf("patch cluster failed(%s): %s", err, errStr)
+				}
+			}
+		}
 	}
 	return nil
 }

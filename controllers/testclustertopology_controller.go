@@ -808,7 +808,7 @@ func (r *TestClusterTopologyReconciler) initTiDBResources(ctx context.Context, c
 					targetMount := haproxy.TargetDir + fileName
 					resource.Status.Binds = []string{sourceMount + ":" + targetMount}
 					resource.Status.Mounts = mounts
-					resource.Status.Command = []string{"haproxy", "-f", "/usr/local/etc/haproxy/" + fileName}
+					resource.Status.Command = []string{"haproxy", "-W", "-db", "-f", "/usr/local/etc/haproxy/" + fileName}
 					err := r.Status().Update(ctx, resource)
 					if err != nil {
 						return false, err

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	BaseImageName = "docker.io/library/haproxy:"
+	BaseImageName = "hub.pingcap.net/qa/haproxy:"
 	SourceDir     = "/var/naglfar/lib/"
 	TargetDir     = "/usr/local/etc/haproxy/"
 	FileName      = "haproxy.cfg"
@@ -25,7 +25,7 @@ func generateFrontend(port int) string {
 func generateBackend(tidbs []string) string {
 	backend := "\nbackend tidbs\n"
 	for i := 0; i < len(tidbs); i++ {
-		backend += "\tserver tidb" + strconv.Itoa(i) + " " + tidbs[i] + " maxconn 64" + "\n"
+		backend += "\tserver tidb" + strconv.Itoa(i) + " " + tidbs[i] + " maxconn 1000" + "\n"
 	}
 	return backend
 }

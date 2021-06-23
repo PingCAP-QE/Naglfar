@@ -10,18 +10,20 @@ rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
 rm -f /lib/systemd/system/basic.target.wants/*;\
 rm -f /lib/systemd/system/anaconda.target.wants/*;
 
+RUN echo "timeout=30000" >> /etc/yum.conf
+
 RUN yum update -y && \
-    yum install -y sudo mysql vim iproute tzdata \
-        gdb perf \
-        openssh openssh-server openssh-clients && \
-    yum install -y iptables ipset iproute2 && \
-    debuginfo-install -y glibc libgcc && \
+    yum install -y sudo mysql vim iproute tzdata
+RUN yum install -y openssh openssh-server openssh-clients && \
     sed -e 's/#PermitRootLogin yes/PermitRootLogin yes/g' \
       -i /etc/ssh/sshd_config && \
     systemctl enable sshd.service
 
+RUN yum install -y gdb && \
+    debuginfo-install -y glibc libgcc
 RUN yum install -y centos-release-scl-rh
 RUN yum install -y devtoolset-8-build devtoolset-8-gdb
+RUN yum install -y iptables ipset iproute2
 
 WORKDIR /root
 
