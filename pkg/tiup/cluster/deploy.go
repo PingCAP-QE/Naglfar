@@ -340,7 +340,7 @@ func BuildSpecification(ctf *naglfarv1.TestClusterTopologySpec, trs []*naglfarv1
 			FlashServicePort:     item.ServicePort,
 			FlashProxyPort:       item.ProxyPort,
 			FlashProxyStatusPort: item.ProxyStatusPort,
-			StatusPort:           item.ProxyStatusPort,
+			StatusPort:           item.MetricsPort,
 			DeployDir:            item.DeployDir,
 			DataDir:              item.DataDir,
 			LogDir:               item.LogDir,
