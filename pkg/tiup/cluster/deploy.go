@@ -847,7 +847,7 @@ func (c *ClusterManager) patch(clusterName string, version naglfarv1.TiDBCluster
 	}
 	commands = append(commands, "cd components && tar zcf patch.tar.gz "+strings.Join(patchComponentNames, " "))
 	for _, component := range patchComponentNames {
-		commands = append(commands, fmt.Sprintf("/root/.tiup/bin/tiup cluster patch %s patch.tar.gz -R %s",
+		commands = append(commands, fmt.Sprintf("/root/.tiup/bin/tiup cluster patch %s patch.tar.gz -R %s -y",
 			clusterName, strings.Split(component, "-server")[0]))
 	}
 	cmd := fmt.Sprintf(`flock -n /tmp/naglfar.tiup.lock -c "%s"`, strings.Join(commands, "\n"))
