@@ -23,7 +23,7 @@ import (
 )
 
 const UploadDaemon = "upload-daemon"
-const UploadDaemonImage = "docker.io/pingcapqe/upload-daemon:latest"
+const UploadDaemonImage = "hub.pingcap.net/mahjonp/upload-daemon:latest"
 const UploadPath = "/var/naglfar/lib"
 const UploadDaemonInternalPort = 6666
 const UploadDaemonExternalPort = 31234
